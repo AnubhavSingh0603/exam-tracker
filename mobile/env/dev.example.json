@@ -1,0 +1,8 @@
+{
+  "APP_ENV": "dev",
+  "API_BASE_URL_DEV": "http://192.168.1.20:8000",
+  "API_KEY": "same-value-as-backend-API_KEY",
+  "USER_ID": "",
+  "GOOGLE_SERVER_CLIENT_ID": "",
+  "TIME_ZONE": "Asia/Kolkata"
+}

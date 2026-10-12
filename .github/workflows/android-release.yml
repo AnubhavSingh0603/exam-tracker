@@ -1,0 +1,172 @@
+# Builds signed APKs and publishes a GitHub Release when a tag like v0.4.1 is pushed.
+#
+#   1. Bump `version:` in mobile/pubspec.yaml, e.g. 0.4.1+5 (the +N MUST increase every release)
+#   2. git tag -a v0.4.1 -m "What changed, in plain words"   (becomes the in-app release notes)
+#   3. git push origin v0.4.1
+#
+# Required repository secrets:
+#   ANDROID_KEYSTORE_BASE64   base64 of upload-keystore.jks   (base64 -w0 upload-keystore.jks)
+#   ANDROID_KEYSTORE_PASSWORD, ANDROID_KEY_PASSWORD, ANDROID_KEY_ALIAS
+# Repository variables (Settings → Secrets and variables → Actions → Variables):
+#   APP_API_BASE_URL             e.g. https://tracker.example.com
+#   GOOGLE_SERVER_CLIENT_ID      Web OAuth client ID (enables Google sign-in in the app)
+#   MIN_SUPPORTED_VERSION_CODE   optional; force-update anything older (default 1)
+#
+# Deliberately NOT embedded: API_KEY / USER_ID. Anything compiled into a public APK can be
+# extracted, and that key unlocks admin endpoints. Release builds use Google sign-in
+# (APP_ENV=prod also makes the app ignore any API_KEY that slips in).
+
+name: Android release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: android-release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: mobile
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # annotated tag message -> release notes
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Generate Android scaffolding (if not committed)
+        run: |
+          if [ ! -f android/gradlew ]; then
+            flutter create --platforms=android --org com.examtracker --project-name exam_tracker .
+          fi
+
+      - name: Check tag matches pubspec version
+        run: |
+          tag="${GITHUB_REF_NAME#v}"
+          ver="$(grep -E '^version:' pubspec.yaml | awk '{print $2}')"
+          name="${ver%%+*}"; build="${ver##*+}"
+          if [ "$name" != "$tag" ]; then echo "::error::Tag v$tag does not match pubspec version $ver"; exit 1; fi
+          echo "VERSION_NAME=$name" >> "$GITHUB_ENV"
+          echo "BUILD_NUMBER=$build" >> "$GITHUB_ENV"
+
+      - name: Install signing key
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          STORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+        run: |
+          [ -n "$KEYSTORE_BASE64" ] || { echo "::error::ANDROID_KEYSTORE_BASE64 secret is missing"; exit 1; }
+          echo "$KEYSTORE_BASE64" | base64 -d > android/app/upload-keystore.jks
+          {
+            echo "storePassword=$STORE_PASSWORD"
+            echo "keyPassword=$KEY_PASSWORD"
+            echo "keyAlias=$KEY_ALIAS"
+            echo "storeFile=upload-keystore.jks"
+          } > android/key.properties
+
+      - name: Write build config
+        env:
+          API_BASE_URL: ${{ vars.APP_API_BASE_URL }}
+          GOOGLE_SERVER_CLIENT_ID: ${{ vars.GOOGLE_SERVER_CLIENT_ID }}
+        run: |
+          python3 - <<'PY'
+          import json, os
+          repo = os.environ["GITHUB_REPOSITORY"]
+          json.dump({
+              "APP_ENV": "prod",
+              "API_BASE_URL_PROD": os.environ.get("API_BASE_URL", ""),
+              "GOOGLE_SERVER_CLIENT_ID": os.environ.get("GOOGLE_SERVER_CLIENT_ID", ""),
+              "RELEASE_MANIFEST_URL": f"https://github.com/{repo}/releases/latest/download/latest.json",
+              "RELEASES_PAGE_URL": f"https://github.com/{repo}/releases/latest",
+          }, open("env.json", "w"))
+          PY
+
+      - run: flutter pub get
+      - run: flutter test
+
+      - name: Build direct APKs (split per ABI + universal) and the store APK
+        run: |
+          set -euo pipefail
+          out=build/app/outputs/flutter-apk
+          mkdir -p dist
+          flutter build apk --release --flavor direct --split-per-abi --dart-define-from-file=env.json
+          for abi in armeabi-v7a arm64-v8a x86_64; do
+            cp "$(ls $out/*"$abi"*direct*release.apk | head -n1)" "dist/exam-tracker-$VERSION_NAME-$abi.apk"
+          done
+          rm -rf "$out"
+          flutter build apk --release --flavor direct --dart-define-from-file=env.json
+          cp "$(ls $out/*direct*release.apk | head -n1)" "dist/exam-tracker-$VERSION_NAME-universal.apk"
+          rm -rf "$out"
+          flutter build apk --release --flavor store --dart-define-from-file=env.json
+          mkdir -p store
+          cp "$(ls $out/*store*release.apk | head -n1)" "store/exam-tracker-$VERSION_NAME-store.apk"
+
+      - name: Create latest.json and checksums
+        env:
+          MIN_SUPPORTED: ${{ vars.MIN_SUPPORTED_VERSION_CODE }}
+        run: |
+          python3 - <<'PY'
+          import datetime, hashlib, json, os, subprocess
+          tag, repo = os.environ["GITHUB_REF_NAME"], os.environ["GITHUB_REPOSITORY"]
+          version = os.environ["VERSION_NAME"]
+          notes = subprocess.run(["git", "tag", "-l", "--format=%(contents:subject)%0a%0a%(contents:body)", tag],
+                                 capture_output=True, text=True).stdout.strip()
+          apks, sums = {}, []
+          for abi in ["universal", "armeabi-v7a", "arm64-v8a", "x86_64"]:
+              name = f"exam-tracker-{version}-{abi}.apk"
+              data = open(f"dist/{name}", "rb").read()
+              digest = hashlib.sha256(data).hexdigest()
+              sums.append(f"{digest}  {name}")
+              apks[abi] = {"url": f"https://github.com/{repo}/releases/download/{tag}/{name}",
+                           "sha256": digest, "size_bytes": len(data)}
+          manifest = {
+              "version_code": int(os.environ["BUILD_NUMBER"]),
+              "version_name": version,
+              "min_supported_version_code": int(os.environ.get("MIN_SUPPORTED") or 1),
+              "release_notes": notes or f"Version {version}",
+              "published_at": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+              "apks": apks,
+          }
+          json.dump(manifest, open("dist/latest.json", "w"), indent=2)
+          open("dist/SHA256SUMS", "w").write("\n".join(sums) + "\n")
+          open("release-notes.md", "w").write(
+              (notes or f"Version {version}") +
+              "\n\n**Which file?** Most phones: `arm64-v8a`. Not sure: `universal` (works everywhere).\n"
+              "Verify downloads against `SHA256SUMS`.\n")
+          PY
+
+      - name: Publish GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" dist/*.apk dist/latest.json dist/SHA256SUMS \
+            --title "v$VERSION_NAME" --notes-file release-notes.md --verify-tag
+
+      # The store build is NOT attached to the public release (it has no updater and
+      # would confuse people). Download it from the run's artifacts for store uploads.
+      - uses: actions/upload-artifact@v4
+        with:
+          name: store-apk-${{ env.VERSION_NAME }}
+          path: mobile/store/*.apk
+          retention-days: 30
+
+      - name: Remove signing material
+        if: always()
+        run: rm -f android/app/upload-keystore.jks android/key.properties

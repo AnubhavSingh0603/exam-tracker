@@ -1,0 +1,2 @@
+# Optional JS-rendering fallback (adds ~400 MB to the image). See Dockerfile INSTALL_PLAYWRIGHT.
+playwright>=1.48,<2.0

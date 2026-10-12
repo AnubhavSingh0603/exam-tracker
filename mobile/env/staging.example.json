@@ -1,0 +1,7 @@
+{
+  "APP_ENV": "staging",
+  "API_BASE_URL_STAGING": "https://staging.tracker.example.com",
+  "GOOGLE_SERVER_CLIENT_ID": "1234567890-web.apps.googleusercontent.com",
+  "RELEASE_MANIFEST_URL": "",
+  "TIME_ZONE": "Asia/Kolkata"
+}

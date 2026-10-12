@@ -1,0 +1,96 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <uses-permission android:name="android.permission.INTERNET" />
+
+    <!-- device_calendar: runtime-requested on first "Sync to Calendar" -->
+    <uses-permission android:name="android.permission.READ_CALENDAR" />
+    <uses-permission android:name="android.permission.WRITE_CALENDAR" />
+
+    <!-- Android 13+: requested once on the dashboard (permission_handler) for FCM
+         deadline / admit-card pings. Below 13 it's granted at install. -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
+    <!-- In-app updater (direct flavour). Removed again in src/store/AndroidManifest.xml. -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+    <!-- Listed in ota_update's setup docs; only meaningful on Android 9 and older, where
+         the plugin's legacy download path may touch shared storage. -->
+    <uses-permission
+        android:name="android.permission.WRITE_EXTERNAL_STORAGE"
+        android:maxSdkVersion="28" />
+
+    <!--
+      Deliberately NOT declared: SCHEDULE_EXACT_ALARM / USE_EXACT_ALARM.
+      The app never calls AlarmManager. Reminders are native calendar reminders
+      (CalendarContract, fired by the Calendar app) and pushes come from FCM.
+      With no alarm to schedule there is nothing to "fall back" from, and an unused
+      exact-alarm permission is denied by default on Android 14+ and is a common
+      store-review rejection reason. Add it only alongside code that schedules alarms.
+    -->
+
+    <!--
+      allowBackup=false: Keystore keys that protect vault passwords and the refresh
+      token are not backed up, so restored encrypted values would be unreadable.
+      networkSecurityConfig: HTTPS-only in release; debug builds swap in a config that
+      allows plain HTTP to your laptop (src/debug/res/xml/network_security_config.xml).
+    -->
+    <application
+        android:label="Exam Tracker"
+        android:name="${applicationName}"
+        android:icon="@mipmap/ic_launcher"
+        android:allowBackup="false"
+        android:fullBackupContent="false"
+        android:networkSecurityConfig="@xml/network_security_config">
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:launchMode="singleTop"
+            android:taskAffinity=""
+            android:theme="@style/LaunchTheme"
+            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|locale|layoutDirection|fontScale|screenLayout|density|uiMode"
+            android:hardwareAccelerated="true"
+            android:windowSoftInputMode="adjustResize">
+            <meta-data
+                android:name="io.flutter.embedding.android.NormalTheme"
+                android:resource="@style/NormalTheme" />
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <!-- ota_update hands the downloaded APK to the package installer through this
+             provider. Without it the install step fails (FileUriExposedException /
+             "no provider for authority"). Authority and class follow ota_update's docs. -->
+        <provider
+            android:name="sk.fourq.otaupdate.OtaUpdateFileProvider"
+            android:authorities="${applicationId}.ota_update_provider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
+
+        <meta-data android:name="flutterEmbedding" android:value="2" />
+        <!-- Channel FCM uses when a message names none; matches FCM_ANDROID_CHANNEL_ID on the server. -->
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_channel_id"
+            android:value="urgent_deadlines" />
+    </application>
+
+    <!-- Android 11+ package visibility for url_launcher (portal links) -->
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:scheme="https" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:scheme="http" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.PROCESS_TEXT" />
+            <data android:mimeType="text/plain" />
+        </intent>
+    </queries>
+</manifest>

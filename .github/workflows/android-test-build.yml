@@ -1,0 +1,127 @@
+# Test APK for your own phone, with no release keystore needed.
+#
+# Runs on every push to main that touches mobile/, or manually (Actions tab → "Android test
+# build" → Run workflow). Produces a debug-signed APK as a workflow artifact, optionally also
+# published as a GitHub *pre-release* so you can download it straight from the phone.
+#
+# Note: Android never installs truly unsigned APKs. Debug builds are signed with a debug key,
+# which is exactly what we want here.
+#
+# Optional repository secret:
+#   DEBUG_KEYSTORE_BASE64   base64 of a debug.keystore you keep (see mobile/TESTING.md).
+#     Without it, each run gets a fresh random debug key, so (1) a new test APK can't install
+#     over the previous one ("App not installed": uninstall first) and (2) Google sign-in
+#     fails, because Google checks the signing key's SHA-1.
+# Repository variables:
+#   APP_API_BASE_URL_STAGING (or APP_API_BASE_URL)  backend the test build talks to
+#   GOOGLE_SERVER_CLIENT_ID                         Web OAuth client ID
+#
+# No API key is embedded: artifacts and pre-releases on a public repo are downloadable by anyone.
+
+name: Android test build
+
+on:
+  workflow_dispatch:
+    inputs:
+      prerelease:
+        description: "Also publish as a GitHub pre-release (download from the phone)"
+        type: boolean
+        default: false
+      abi:
+        description: "CPU architecture (arm64 fits almost every phone from 2017+)"
+        type: choice
+        options: [android-arm64, android-arm, android-x64, all]
+        default: android-arm64
+  push:
+    branches: [main]
+    paths: ["mobile/**", ".github/workflows/android-test-build.yml"]
+
+permissions:
+  contents: write  # only used for the optional pre-release
+
+concurrency:
+  group: android-test-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  debug-apk:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: mobile
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Generate Android scaffolding (if not committed)
+        run: |
+          if [ ! -f android/gradlew ]; then
+            flutter create --platforms=android --org com.examtracker --project-name exam_tracker .
+          fi
+
+      - name: Use a stable debug key (optional)
+        env:
+          DEBUG_KEYSTORE_BASE64: ${{ secrets.DEBUG_KEYSTORE_BASE64 }}
+        run: |
+          if [ -n "$DEBUG_KEYSTORE_BASE64" ]; then
+            mkdir -p ~/.android
+            echo "$DEBUG_KEYSTORE_BASE64" | base64 -d > ~/.android/debug.keystore
+            echo "Using the stable debug keystore from secrets."
+          else
+            echo "::warning::No DEBUG_KEYSTORE_BASE64 secret: random debug key. Uninstall the previous test build first; Google sign-in won't work."
+          fi
+
+      - name: Write build config
+        env:
+          API_BASE_URL: ${{ vars.APP_API_BASE_URL_STAGING || vars.APP_API_BASE_URL }}
+          GOOGLE_SERVER_CLIENT_ID: ${{ vars.GOOGLE_SERVER_CLIENT_ID }}
+        run: |
+          python3 - <<'PY'
+          import json, os
+          json.dump({
+              "APP_ENV": "staging",
+              "API_BASE_URL_STAGING": os.environ.get("API_BASE_URL", ""),
+              "GOOGLE_SERVER_CLIENT_ID": os.environ.get("GOOGLE_SERVER_CLIENT_ID", ""),
+          }, open("env/ci-test.json", "w"))
+          PY
+
+      - run: flutter pub get
+      - run: flutter test
+
+      - name: Build debug APK
+        run: |
+          set -euo pipefail
+          abi="${{ inputs.abi || 'android-arm64' }}"
+          platform_args=()
+          [ "$abi" != "all" ] && platform_args=(--target-platform "$abi")
+          flutter build apk --debug --flavor direct "${platform_args[@]}" --dart-define-from-file=env/ci-test.json
+          short="${GITHUB_SHA::7}"
+          mkdir -p dist
+          cp "$(ls build/app/outputs/flutter-apk/*direct-debug.apk | head -n1)" "dist/exam-tracker-test-$short-$abi.apk"
+          echo "APK_NAME=exam-tracker-test-$short-$abi.apk" >> "$GITHUB_ENV"
+          ls -lh dist
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.APK_NAME }}
+          path: mobile/dist/*.apk
+          retention-days: 14
+
+      - name: Publish pre-release (optional)
+        if: ${{ inputs.prerelease }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag="test-${GITHUB_RUN_NUMBER}"
+          gh release create "$tag" dist/*.apk --prerelease --target "$GITHUB_SHA" \
+            --title "Test build #${GITHUB_RUN_NUMBER} (${GITHUB_SHA::7})" \
+            --notes "Debug build for personal testing. Not for distribution. Uninstall store/release versions first."

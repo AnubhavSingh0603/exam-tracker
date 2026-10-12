@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- DEBUG BUILDS ONLY (src/debug overrides src/main). Lets `flutter run` and CI test APKs
+     reach a backend on plain HTTP:
+       * 10.0.2.2       = your computer, seen from the Android emulator
+       * localhost      = `adb reverse tcp:8000 tcp:8000` on a USB-connected phone
+       * *.local / *.test / *.lan = mDNS or dev hostnames
+     Android can't wildcard IP ranges, so a raw LAN address (http://192.168.x.y:8000)
+     only works because the base config below allows cleartext. That's acceptable in a
+     debug build and impossible in a release build, which uses src/main's strict file. -->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="true">
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </base-config>
+
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="false">10.0.2.2</domain>
+        <domain includeSubdomains="false">localhost</domain>
+        <domain includeSubdomains="false">127.0.0.1</domain>
+        <domain includeSubdomains="true">local</domain>
+        <domain includeSubdomains="true">test</domain>
+        <domain includeSubdomains="true">lan</domain>
+    </domain-config>
+
+    <!-- Lets you inspect HTTPS traffic with mitmproxy/Charles (user-installed CA) while debugging. -->
+    <debug-overrides>
+        <trust-anchors>
+            <certificates src="user" />
+        </trust-anchors>
+    </debug-overrides>
+</network-security-config>

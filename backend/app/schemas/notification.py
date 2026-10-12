@@ -1,0 +1,44 @@
+"""Validated, strongly-typed notification ready to persist."""
+
+from datetime import date
+
+from pydantic import AwareDatetime, BaseModel, Field, NonNegativeInt
+
+
+class ParsedVacancy(BaseModel):
+    ur: NonNegativeInt = 0
+    sc: NonNegativeInt = 0
+    st: NonNegativeInt = 0
+    obc: NonNegativeInt = 0
+    ews: NonNegativeInt = 0
+    total: NonNegativeInt = 0
+    pwbd: NonNegativeInt | None = None
+    ex_serviceman: NonNegativeInt | None = None
+
+
+class ParsedPost(BaseModel):
+    post_code: str | None = Field(None, max_length=60)
+    post_name: str = Field(min_length=1, max_length=300)
+    min_age: int | None = Field(None, ge=14, le=70)
+    base_max_age: int | None = Field(None, ge=14, le=70)
+    age_as_on: date | None = None
+    eligible_streams: list[str] = Field(default_factory=list)
+    qualification_text: str | None = None
+    age_relaxation_overrides: dict[str, int] = Field(default_factory=dict)
+    vacancy: ParsedVacancy
+
+
+class ParsedNotification(BaseModel):
+    organization: str = Field(min_length=1, max_length=200)
+    exam_name: str = Field(min_length=1, max_length=300)
+    advertisement_no: str | None = Field(None, max_length=120)
+    portal_url: str | None = Field(None, max_length=1000)
+    application_start: AwareDatetime | None = None
+    application_deadline: AwareDatetime | None = None
+    exam_date: date | None = None
+    posts: list[ParsedPost] = Field(min_length=1)
+    review_notes: list[str] = Field(default_factory=list)
+
+    @property
+    def needs_review(self) -> bool:
+        return bool(self.review_notes)

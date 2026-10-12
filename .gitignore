@@ -1,0 +1,9 @@
+# Secrets and build outputs
+backend/.env
+backend/secrets/
+backend/certbot/
+backend/releases/
+backend/downloads/
+mobile/android/key.properties
+mobile/android/app/*.jks
+*.jks
