@@ -15,6 +15,7 @@ abstract final class AppPalette {
   static const honey = Color(0xFFE2B874); // impending, 3–14 days
   static const terracotta = Color(0xFFE07A7A); // immediate, < 72 hrs
   static const periwinkle = Color(0xFF7A9EC7); // informational
+  static const lavender = Color(0xFFB39DDB); // answer key stage (muted, not neon)
 }
 
 abstract final class AppRadii {

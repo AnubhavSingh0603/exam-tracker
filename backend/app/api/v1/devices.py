@@ -1,12 +1,9 @@
-import uuid
-
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, status
 from pydantic import BaseModel, Field
 from sqlalchemy import delete, select
 
 from app.api.deps import CurrentUser, SessionDep
-from app.domain.enums import ApplicationStatus
-from app.models import DeviceToken, PostDetail, UserApplication
+from app.models import DeviceToken
 
 router = APIRouter(tags=["devices"])
 
@@ -53,43 +50,3 @@ async def unregister_device(body: DeviceTokenRef, user: CurrentUser, session: Se
         delete(DeviceToken).where(DeviceToken.token == body.token, DeviceToken.user_id == user.id)
     )
     await session.commit()
-
-
-# --- Application status: lets the server stop pinging about jobs you applied to ---
-
-
-class ApplicationIn(BaseModel):
-    status: ApplicationStatus
-
-
-@router.put("/applications/{post_detail_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def upsert_application(
-    post_detail_id: uuid.UUID, body: ApplicationIn, user: CurrentUser, session: SessionDep
-) -> None:
-    if user.profile_id is None:
-        raise HTTPException(status.HTTP_409_CONFLICT, "Create your profile first")
-    if await session.get(PostDetail, post_detail_id) is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Unknown post")
-    app = await session.scalar(
-        select(UserApplication).where(
-            UserApplication.user_id == user.profile_id, UserApplication.post_detail_id == post_detail_id
-        )
-    )
-    if app is None:
-        session.add(
-            UserApplication(user_id=user.profile_id, post_detail_id=post_detail_id, status=body.status)
-        )
-    else:
-        app.status = body.status
-    await session.commit()
-
-
-@router.delete("/applications/{post_detail_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_application(post_detail_id: uuid.UUID, user: CurrentUser, session: SessionDep) -> None:
-    if user.profile_id is not None:
-        await session.execute(
-            delete(UserApplication).where(
-                UserApplication.user_id == user.profile_id, UserApplication.post_detail_id == post_detail_id
-            )
-        )
-        await session.commit()

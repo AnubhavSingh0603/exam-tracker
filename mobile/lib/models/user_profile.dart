@@ -1,5 +1,7 @@
 import 'package:flutter/foundation.dart';
 
+import '../domain/qualification_taxonomy.dart';
+
 /// Wire values match the backend's `Category` enum.
 enum ReservationCategory {
   ur('UR', 'UR (General / Unreserved)'),
@@ -20,33 +22,9 @@ enum ReservationCategory {
   }
 }
 
-/// Labels the backend's stream matcher understands (see backend/app/services/streams.py):
-/// "B.Tech ECE" matches "B.E. (Electronics & Communication)", "General Graduate" matches
-/// "Any Graduate", and so on.
-const kStreamPresets = <String>[
-  'B.Tech ECE',
-  'B.Tech EE',
-  'B.Tech EEE',
-  'B.Tech CSE',
-  'B.Tech IT',
-  'B.Tech Mechanical',
-  'B.Tech Civil',
-  'B.Tech Chemical',
-  'B.Tech Instrumentation',
-  'M.Tech',
-  'Diploma Civil',
-  'Diploma Mechanical',
-  'Diploma Electrical',
-  'Diploma Electronics',
-  'B.Sc',
-  'B.Com',
-  'BCA',
-  'MBA',
-  'General Graduate',
-];
-
 const kMinApplicantAge = 15;
 const kMaxApplicantAge = 65;
+const kMaxExperienceYears = 20.0;
 
 int ageOn(DateTime dob, DateTime today) {
   var years = today.year - dob.year;
@@ -58,9 +36,33 @@ int ageOn(DateTime dob, DateTime today) {
 String? validateDob(DateTime? dob, DateTime today) {
   if (dob == null) return 'Pick your date of birth.';
   final age = ageOn(dob, today);
-  if (age < kMinApplicantAge) return 'That makes you $age. Applicants are usually at least $kMinApplicantAge.';
+  if (age < kMinApplicantAge) {
+    return 'That makes you $age. Applicants are usually at least $kMinApplicantAge.';
+  }
   if (age > kMaxApplicantAge) return 'That makes you $age. Please double-check the year.';
   return null;
+}
+
+DegreeOption? degreeByCode(String? code) {
+  for (final d in kDegrees) {
+    if (d.code == code) return d;
+  }
+  return null;
+}
+
+QualificationLevel? levelByCode(String? code) {
+  for (final l in kQualificationLevels) {
+    if (l.code == code) return l;
+  }
+  return null;
+}
+
+/// "Fresher", "6 months", "2 years", "2.5 years".
+String experienceLabel(double years) {
+  if (years <= 0) return 'Fresher';
+  if (years < 1) return '${(years * 12).round()} months';
+  final y = years == years.roundToDouble() ? years.toInt().toString() : years.toStringAsFixed(1);
+  return '$y year${years == 1 ? '' : 's'}';
 }
 
 @immutable
@@ -69,7 +71,10 @@ class UserProfileData {
     required this.displayName,
     required this.dateOfBirth,
     required this.category,
-    required this.streams,
+    required this.qualificationTier,
+    required this.degreeTitle,
+    this.customQualificationText,
+    this.experienceYears = 0,
     this.isPwbd = false,
     this.isExServiceman = false,
     this.exServicemanServiceYears = 0,
@@ -78,12 +83,28 @@ class UserProfileData {
   final String displayName;
   final DateTime dateOfBirth;
   final ReservationCategory category;
-  final List<String> streams;
+
+  /// `QualificationLevel.code` (MATRIC … PHD).
+  final String qualificationTier;
+
+  /// `DegreeOption.code`, or [kOthersDegreeCode].
+  final String degreeTitle;
+  final String? customQualificationText;
+  final double experienceYears;
   final bool isPwbd;
   final bool isExServiceman;
   final int exServicemanServiceYears;
 
-  bool get isComplete => streams.isNotEmpty;
+  bool get isOthers => degreeTitle == kOthersDegreeCode;
+
+  /// Profiles saved before the degree picker existed have no degree: ask again.
+  bool get isComplete =>
+      levelByCode(qualificationTier) != null &&
+      (isOthers ? (customQualificationText?.trim().length ?? 0) >= 2 : degreeByCode(degreeTitle) != null);
+
+  /// "B.Tech / B.E." or the user's own text for Others.
+  String get qualificationLabel =>
+      isOthers ? (customQualificationText ?? 'Other') : (degreeByCode(degreeTitle)?.label ?? degreeTitle);
 
   static String _date(DateTime d) =>
       '${d.year.toString().padLeft(4, '0')}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
@@ -93,7 +114,10 @@ class UserProfileData {
         'display_name': displayName.trim().isEmpty ? 'Me' : displayName.trim(),
         'date_of_birth': _date(dateOfBirth),
         'category': category.wire,
-        'streams': streams,
+        'qualification_tier': qualificationTier,
+        'degree_title': degreeTitle,
+        'custom_qualification_text': isOthers ? customQualificationText?.trim() : null,
+        'experience_years': experienceYears,
         'is_pwbd': isPwbd,
         'is_ex_serviceman': isExServiceman,
         'ex_serviceman_service_years': isExServiceman ? exServicemanServiceYears : 0,
@@ -103,7 +127,10 @@ class UserProfileData {
         displayName: j['display_name'] as String? ?? '',
         dateOfBirth: DateTime.parse(j['date_of_birth'] as String),
         category: ReservationCategory.fromWire(j['category'] as String?) ?? ReservationCategory.ur,
-        streams: [for (final s in (j['streams'] as List<dynamic>? ?? const [])) s.toString()],
+        qualificationTier: j['qualification_tier'] as String? ?? '',
+        degreeTitle: j['degree_title'] as String? ?? '',
+        customQualificationText: j['custom_qualification_text'] as String?,
+        experienceYears: (j['experience_years'] as num?)?.toDouble() ?? 0,
         isPwbd: j['is_pwbd'] as bool? ?? false,
         isExServiceman: j['is_ex_serviceman'] as bool? ?? false,
         exServicemanServiceYears: (j['ex_serviceman_service_years'] as num?)?.toInt() ?? 0,

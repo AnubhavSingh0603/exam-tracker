@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:exam_tracker/models/tracked_application.dart';
 import 'package:exam_tracker/models/vault_entry.dart';
 import 'package:exam_tracker/services/database_service.dart';
@@ -74,5 +76,83 @@ void main() {
     await db.cacheFeed('{"v":1}', now);
     await db.cacheFeed('{"v":2}', now);
     expect((await db.readFeedCache())!.$1, '{"v":2}');
+  });
+  test('timeline and exam-watcher state are stored per application', () async {
+    await db.upsertApplication(app('a').copyWith());
+    await db.upsertApplication(TrackedApplication(
+      id: 'b',
+      examName: 'SSC CGL',
+      postName: 'Inspector',
+      status: ApplicationStatus.applied,
+      jobPostId: 'job-1',
+      createdAt: now,
+      updatedAt: now,
+    ));
+    await db.saveTimeline('job-1', '{"job_post_id":"job-1","exam_start":"2026-12-14"}');
+    await db.applyServerState(
+      'b',
+      serverId: 'srv-b',
+      serverStatus: 'admit_card_live',
+      updatesJson: '[{"milestone":"admit_card","title":"Admit Card","url":"https://x"}]',
+    );
+
+    final b = (await db.getApplication('b'))!;
+    expect(b.timeline?.examStart, DateTime(2026, 12, 14));
+    expect(b.effectiveExamAt, DateTime(2026, 12, 14));
+    expect(b.serverId, 'srv-b');
+    expect(b.displayStatus, TrackerStatus.admitCardLive);
+    expect(b.latestUpdate('admit_card')?.url, 'https://x');
+
+    // A local edit (upsert) must not wipe what the server sent.
+    await db.upsertApplication(b.copyWith(status: ApplicationStatus.examScheduled));
+    final again = (await db.getApplication('b'))!;
+    expect(again.serverStatus, TrackerStatus.admitCardLive);
+    expect(again.timeline, isNotNull);
+    expect((await db.getApplication('a'))!.timeline, isNull);
+  });
+
+  test('upgrading a v1 install keeps applications and vault entries', () async {
+    final dir = await Directory.systemTemp.createTemp('exam_tracker_db');
+    final path = '${dir.path}/v1.db';
+    final v1 = await databaseFactoryFfi.openDatabase(path,
+        options: OpenDatabaseOptions(
+          version: 1,
+          onCreate: (d, _) async {
+            await d.execute("""CREATE TABLE tracked_applications (
+          id TEXT PRIMARY KEY, exam_name TEXT NOT NULL, post_name TEXT NOT NULL, organization TEXT,
+          status TEXT NOT NULL CHECK (status IN ('applied','admit_card_live','exam_scheduled')),
+          deadline_timestamp INTEGER, exam_timestamp INTEGER, admit_card_url TEXT, portal_url TEXT,
+          category TEXT, total_seats INTEGER, ur_seats INTEGER, quota_seats INTEGER,
+          archived INTEGER NOT NULL DEFAULT 0, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL)""");
+            await d.execute("""CREATE TABLE credentials_vault (app_id TEXT PRIMARY KEY
+          REFERENCES tracked_applications(id) ON DELETE CASCADE, registration_id TEXT, roll_number TEXT,
+          notes TEXT, updated_at INTEGER NOT NULL)""");
+            await d.execute("""CREATE TABLE calendar_event_refs (app_id TEXT NOT NULL, kind TEXT NOT NULL,
+          calendar_id TEXT NOT NULL, android_calendar_event_id TEXT NOT NULL, synced_at INTEGER NOT NULL,
+          PRIMARY KEY (app_id, kind))""");
+            await d.execute(
+                'CREATE TABLE feed_cache (id INTEGER PRIMARY KEY, body TEXT NOT NULL, fetched_at INTEGER NOT NULL)');
+            await d.insert('tracked_applications', {
+              'id': 'old',
+              'exam_name': 'RRB NTPC',
+              'post_name': 'Clerk',
+              'status': 'applied',
+              'created_at': 1,
+              'updated_at': 1,
+            });
+            await d.insert('credentials_vault', {'app_id': 'old', 'roll_number': 'R-42', 'updated_at': 1});
+          },
+        ));
+    await v1.close();
+
+    final upgraded = await DatabaseService.open(factory: databaseFactoryFfi, path: path);
+    final old = (await upgraded.getApplication('old'))!;
+    expect(old.examName, 'RRB NTPC');
+    expect(old.serverStatus, isNull);
+    expect((await upgraded.getVault('old'))!.rollNumber, 'R-42');
+    await upgraded.applyServerState('old', serverId: 's', serverStatus: 'result_declared', updatesJson: '[]');
+    expect((await upgraded.getApplication('old'))!.displayStatus, TrackerStatus.resultDeclared);
+    await upgraded.close();
+    await dir.delete(recursive: true);
   });
 }

@@ -16,14 +16,15 @@ import '../providers/providers.dart';
 import '../services/auth_service.dart';
 import '../theme/app_theme.dart';
 import '../utils/system_actions.dart';
+import '../widgets/add_exam_sheet.dart';
 import '../widgets/application_tracker_sheet.dart';
-import '../widgets/feed_card.dart';
 import '../widgets/hero_card.dart';
 import '../widgets/tracked_application_card.dart';
+import 'feed_screen.dart';
 import 'profile_setup_screen.dart';
 
-/// Single bounded screen: hero → ≤5 new jobs → tracked applications.
-/// No infinite scroll, no tabs, no badges.
+/// Single bounded screen: hero → ≤5 new jobs (direct / 💡 suggested) → tracked
+/// applications. No infinite scroll, no navigation away from "today".
 class DashboardScreen extends ConsumerWidget {
   const DashboardScreen({super.key});
 
@@ -77,156 +78,96 @@ class DashboardScreen extends ConsumerWidget {
 
     // The hero already shows one feed item; don't repeat it below.
     final heroPostId = step?.feedItem?.bestPost.postDetailId;
-    final feed = [
-      for (final i in ref.watch(visibleFeedProvider))
-        if (i.bestPost.postDetailId != heroPostId) i,
-    ];
 
     final account = ref.watch(accountStatusProvider);
 
     return _AccountGate(
       child: Scaffold(
-      body: SafeArea(
-        child: RefreshIndicator(
-          onRefresh: () => ref.read(feedProvider.notifier).refresh(),
-          child: CustomScrollView(
-            physics: const AlwaysScrollableScrollPhysics(),
-            slivers: [
-              _pad(_Header(snapshot: snapshot, now: now, trailing: const _AccountButton()), top: 20),
-              _pad(
-                switch (step) {
-                  null when trackedAsync.isLoading => const _HeroPlaceholder(),
-                  null => const CalmEmptyHero(),
-                  final NextStep s => HeroCard(
-                      step: s,
-                      now: now,
-                      onPrimary: () => openExternal(context, s.actionUrl),
-                      onMarkApplied: s.kind == NextStepKind.apply
-                          ? () async {
-                              final app = await _markApplied(ref, s.feedItem!, category);
-                              if (context.mounted) await _afterApplied(context, ref, app);
-                            }
-                          : null,
-                    ),
-                },
-                top: 16,
-              ),
-              if (account != AccountStatus.offline) ...[
-                _pad(const _SectionTitle('New for you'), top: 28),
-                ...switch (account) {
-                  AccountStatus.signedOut => [_pad(const _SignInCard(), top: 12)],
-                  AccountStatus.needsProfile => [_pad(const _FinishProfileCard(), top: 12)],
-                  AccountStatus.loading when snapshot == null => [
-                      _pad(const Center(child: Padding(padding: EdgeInsets.all(16), child: CircularProgressIndicator())), top: 8),
-                    ],
-                  _ => _feedSection(context, ref, feedAsync, feed, snapshot, now, category),
-                },
-              ],
-              _pad(_SectionTitle('Tracking', count: active.length), top: 28),
-              if (trackedAsync.hasError)
-                _pad(const _MutedNote('Could not read local data. Restart the app.'), top: 8)
-              else if (active.isEmpty && !trackedAsync.isLoading)
-                _pad(const _MutedNote('Nothing tracked yet. Swipe a job right after you apply.'), top: 8)
-              else
-                SliverPadding(
-                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-                  sliver: SliverList.separated(
-                    itemCount: active.length,
-                    separatorBuilder: (_, __) => const SizedBox(height: 12),
-                    itemBuilder: (_, i) {
-                      final app = active[i];
-                      return Dismissible(
-                        key: ValueKey('tracked-${app.id}'),
-                        direction: DismissDirection.endToStart,
-                        background: const SizedBox.shrink(),
-                        secondaryBackground: const _SwipeBackground(
-                          color: AppPalette.textMuted,
-                          icon: Icons.archive_rounded,
-                          label: 'Archive',
-                          alignEnd: true,
-                        ),
-                        onDismissed: (_) => _archive(context, ref, app),
-                        child: TrackedApplicationCard(app: app, now: now),
-                      );
-                    },
-                  ),
+        body: SafeArea(
+          child: RefreshIndicator(
+            onRefresh: () => ref.read(feedProvider.notifier).refresh(),
+            child: CustomScrollView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              slivers: [
+                _pad(_Header(snapshot: snapshot, now: now, trailing: const _AccountButton()), top: 20),
+                _pad(
+                  switch (step) {
+                    null when trackedAsync.isLoading => const _HeroPlaceholder(),
+                    null => const CalmEmptyHero(),
+                    final NextStep s => HeroCard(
+                        step: s,
+                        now: now,
+                        onPrimary: () => openExternal(context, s.actionUrl),
+                        onMarkApplied: s.kind == NextStepKind.apply
+                            ? () async {
+                                final app = await _markApplied(ref, s.feedItem!, category);
+                                if (context.mounted) await _afterApplied(context, ref, app);
+                              }
+                            : null,
+                      ),
+                  },
+                  top: 16,
                 ),
-              const SliverToBoxAdapter(child: SizedBox(height: 48)),
-            ],
+                if (account != AccountStatus.offline) ...[
+                  _pad(const _SectionTitle('New for you'), top: 28),
+                  ...switch (account) {
+                    AccountStatus.signedOut => [_pad(const _SignInCard(), top: 12)],
+                    AccountStatus.needsProfile => [_pad(const _FinishProfileCard(), top: 12)],
+                    AccountStatus.loading when snapshot == null => [
+                        _pad(
+                            const Center(
+                                child:
+                                    Padding(padding: EdgeInsets.all(16), child: CircularProgressIndicator())),
+                            top: 8),
+                      ],
+                    _ => [
+                        SplitFeedSection(
+                          excludePostId: heroPostId,
+                          markApplied: (item) => _markApplied(ref, item, category),
+                          afterApplied: (app) => unawaited(_afterApplied(context, ref, app)),
+                        ),
+                      ],
+                  },
+                ],
+                _pad(
+                  _SectionTitle('Tracking', count: active.length, trailing: const AddExamButton()),
+                  top: 20,
+                ),
+                if (trackedAsync.hasError)
+                  _pad(const MutedNote('Could not read local data. Restart the app.'), top: 8)
+                else if (active.isEmpty && !trackedAsync.isLoading)
+                  _pad(const MutedNote('Nothing tracked yet. Swipe a job right after you apply.'), top: 8)
+                else
+                  SliverPadding(
+                    padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+                    sliver: SliverList.separated(
+                      itemCount: active.length,
+                      separatorBuilder: (_, __) => const SizedBox(height: 12),
+                      itemBuilder: (_, i) {
+                        final app = active[i];
+                        return Dismissible(
+                          key: ValueKey('tracked-${app.id}'),
+                          direction: DismissDirection.endToStart,
+                          background: const SizedBox.shrink(),
+                          secondaryBackground: const SwipeBackground(
+                            color: AppPalette.textMuted,
+                            icon: Icons.archive_rounded,
+                            label: 'Archive',
+                            alignEnd: true,
+                          ),
+                          onDismissed: (_) => _archive(context, ref, app),
+                          child: TrackedApplicationCard(app: app, now: now),
+                        );
+                      },
+                    ),
+                  ),
+                const SliverToBoxAdapter(child: SizedBox(height: 48)),
+              ],
+            ),
           ),
         ),
       ),
-      ),
     );
-  }
-
-  List<Widget> _feedSection(
-    BuildContext context,
-    WidgetRef ref,
-    AsyncValue<FeedSnapshot> feedAsync,
-    List<FeedItem> feed,
-    FeedSnapshot? snapshot,
-    DateTime now,
-    String? category,
-  ) {
-    if (snapshot == null) {
-      return [
-        _pad(
-          feedAsync.hasError
-              ? const _MutedNote('Can’t reach the server right now. Your tracked applications still work offline.')
-              : const Center(child: Padding(padding: EdgeInsets.all(16), child: CircularProgressIndicator())),
-          top: 8,
-        ),
-      ];
-    }
-    if (feed.isEmpty) {
-      return [_pad(const _MutedNote('No other new jobs. Nice and quiet.'), top: 8)];
-    }
-    final sage = context.urgencyColors.safe;
-    return [
-      SliverPadding(
-        padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-        sliver: SliverList.separated(
-          itemCount: feed.length,
-          separatorBuilder: (_, __) => const SizedBox(height: 12),
-          itemBuilder: (_, i) {
-            final item = feed[i];
-            TrackedApplication? applied;
-            return Dismissible(
-              key: ValueKey('feed-${item.bestPost.postDetailId}'),
-              direction: DismissDirection.startToEnd,
-              background: _SwipeBackground(color: sage, icon: Icons.check_circle_rounded, label: 'Applied'),
-              // Persist *before* the card animates away so it is already gone
-              // from the provider when Dismissible finishes.
-              confirmDismiss: (_) async {
-                try {
-                  applied = await _markApplied(ref, item, category);
-                  return true;
-                } catch (_) {
-                  if (context.mounted) showCalmSnack(context, 'Could not save. Try again.');
-                  return false;
-                }
-              },
-              onDismissed: (_) {
-                final app = applied;
-                if (app != null) unawaited(_afterApplied(context, ref, app));
-              },
-              child: FeedCard(
-                item: item,
-                now: now,
-                category: category,
-                onOpenPortal: () => openExternal(context, item.portalUrl),
-              ),
-            );
-          },
-        ),
-      ),
-      if (snapshot.hiddenCount > 0)
-        _pad(
-          _MutedNote('+${snapshot.hiddenCount} more waiting. Finish these first — they’ll appear here.'),
-          top: 12,
-        ),
-    ];
   }
 }
 
@@ -274,10 +215,11 @@ class _Header extends StatelessWidget {
 }
 
 class _SectionTitle extends StatelessWidget {
-  const _SectionTitle(this.title, {this.count});
+  const _SectionTitle(this.title, {this.count, this.trailing});
 
   final String title;
   final int? count;
+  final Widget? trailing;
 
   @override
   Widget build(BuildContext context) {
@@ -291,20 +233,11 @@ class _SectionTitle extends StatelessWidget {
             const SizedBox(width: 8),
             Text('$count', style: text.titleMedium?.copyWith(color: AppPalette.textMuted)),
           ],
+          if (trailing != null) ...[const Spacer(), trailing!],
         ],
       ),
     );
   }
-}
-
-class _MutedNote extends StatelessWidget {
-  const _MutedNote(this.message);
-
-  final String message;
-
-  @override
-  Widget build(BuildContext context) =>
-      Text(message, style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: AppPalette.textMuted));
 }
 
 class _HeroPlaceholder extends StatelessWidget {
@@ -319,37 +252,6 @@ class _HeroPlaceholder extends StatelessWidget {
         ),
       );
 }
-
-class _SwipeBackground extends StatelessWidget {
-  const _SwipeBackground({required this.color, required this.icon, required this.label, this.alignEnd = false});
-
-  final Color color;
-  final IconData icon;
-  final String label;
-  final bool alignEnd;
-
-  @override
-  Widget build(BuildContext context) {
-    final children = [
-      Icon(icon, color: color),
-      const SizedBox(width: 8),
-      Text(label, style: Theme.of(context).textTheme.labelLarge?.copyWith(color: color)),
-    ];
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 24),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.14),
-        borderRadius: BorderRadius.circular(AppRadii.card),
-      ),
-      alignment: alignEnd ? Alignment.centerRight : Alignment.centerLeft,
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: alignEnd ? children.reversed.toList() : children,
-      ),
-    );
-  }
-}
-
 
 // -----------------------------------------------------------------------------
 // Account: sign-in, profile prompt, notification permission
@@ -489,7 +391,8 @@ class _FinishProfileCard extends ConsumerWidget {
         icon: Icons.badge_outlined,
         title: 'One minute to finish your profile',
         body: 'Date of birth, category and degree are all we need to filter jobs and count your seats.',
-        action: FilledButton(onPressed: () => _openProfile(context, ref), child: const Text('Finish profile')),
+        action:
+            FilledButton(onPressed: () => _openProfile(context, ref), child: const Text('Finish profile')),
       );
 }
 

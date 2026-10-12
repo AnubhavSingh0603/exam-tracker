@@ -34,13 +34,15 @@ from tenacity import (
 
 from app.core.config import get_settings
 from app.domain.enums import RELAXATION_KEY_EXSM, RELAXATION_KEY_PWBD, Category
+from app.domain.qualifications import QualificationLevel
 from app.schemas.extraction import (
     ExtractedRelaxation,
     ExtractedVacancy,
     NotificationExtraction,
 )
-from app.schemas.notification import ParsedNotification, ParsedPost, ParsedVacancy
+from app.schemas.notification import ParsedNotification, ParsedPost, ParsedTimeline, ParsedVacancy
 from app.services.pdf_slicer import select_relevant_pages
+from app.services.streams import infer_requirement
 
 log = logging.getLogger(__name__)
 
@@ -68,6 +70,14 @@ Rules:
   For PwBD, give the relaxation for the UR PwBD candidate (usually 10).
 - `eligible_degrees`: one short entry per degree+branch, e.g.
   "B.E./B.Tech Electronics & Communication", "B.E./B.Tech Electrical", "Any Graduate".
+- `min_qualification_level`: the LOWEST level that qualifies (10th-pass posts are MATRIC,
+  "12th pass" INTERMEDIATE, "Diploma or B.E." DIPLOMA, "Any Graduate" UG, "Any PG" PG).
+- `open_to_any_graduate` / `open_to_any_post_graduate`: true only when the notification
+  accepts a degree in ANY discipline ("Graduation from a recognised university").
+- `min_experience_years`: post-qualification experience only; ignore "desirable" experience.
+- `eligibility_text`: the essential-qualification paragraph exactly as printed (English).
+- Schedule dates (fee, correction window, admit card, exam end, answer key, result):
+  only from an explicit schedule/important-dates table; "tentative" dates are fine.
 - Bilingual (Hindi/English) PDFs: use the English text.
 """
 
@@ -285,6 +295,29 @@ def _clean_url(raw: str | None, notes: list[str]) -> str | None:
     return url[:1000]
 
 
+_LEVEL_ALIASES = {"10TH": "MATRIC", "12TH": "INTERMEDIATE", "GRADUATE": "UG", "POSTGRADUATE": "PG"}
+
+
+def _level(raw: str | None, label: str, notes: list[str]) -> QualificationLevel | None:
+    if not raw:
+        return None
+    key = re.sub(r"[^A-Z0-9]", "", raw.upper())
+    try:
+        return QualificationLevel(_LEVEL_ALIASES.get(key, key))
+    except ValueError:
+        notes.append(f"{label}: unknown qualification level {raw!r} ignored")
+        return None
+
+
+def _experience(value: float | None, label: str, notes: list[str]) -> float:
+    if value is None or value <= 0:
+        return 0.0
+    if value > 40:
+        notes.append(f"{label}: implausible experience {value} yrs ignored")
+        return 0.0
+    return round(float(value), 2)
+
+
 def _dedupe(items: list[str]) -> list[str]:
     seen: set[str] = set()
     out: list[str] = []
@@ -322,6 +355,10 @@ def normalize_extraction(raw: NotificationExtraction, *, tz: ZoneInfo) -> Parsed
         if min_age is not None and max_age is not None and min_age > max_age:
             notes.append(f"{label}: min age {min_age} > max age {max_age}")
 
+        streams = _dedupe(p.eligible_degrees)
+        # The explicit fields win; the degree lines fill whatever the model left out.
+        inferred = infer_requirement(streams)
+        level = _level(p.min_qualification_level, label, notes) or inferred.min_level
         posts.append(
             ParsedPost(
                 post_code=(p.post_code or "").strip()[:60] or None,
@@ -329,15 +366,34 @@ def normalize_extraction(raw: NotificationExtraction, *, tz: ZoneInfo) -> Parsed
                 min_age=min_age,
                 base_max_age=max_age,
                 age_as_on=as_on,
-                eligible_streams=_dedupe(p.eligible_degrees),
+                eligible_streams=streams,
                 qualification_text=p.qualification_summary,
                 age_relaxation_overrides={**general_relax, **_relaxations(p.age_relaxations, notes)},
+                allowed_degrees=list(inferred.allowed_degrees),
+                raw_eligibility_text=(p.eligibility_text or "").strip()[:2000] or None,
+                min_qualification_level=level,
+                is_open_to_any_graduate=bool(p.open_to_any_graduate) or inferred.open_to_any_graduate,
+                is_open_to_any_post_graduate=bool(p.open_to_any_post_graduate)
+                or inferred.open_to_any_post_graduate,
+                min_experience_years=_experience(p.min_experience_years, label, notes),
                 vacancy=_vacancy(p.vacancies, label, notes),
             )
         )
 
     if not posts:
         raise ExtractionError("No posts found in the notification.")
+
+    exam_date = _parse_date(raw.exam_date, "exam date", notes)
+    timeline = ParsedTimeline(
+        fee_deadline=_parse_date(raw.fee_payment_last_date, "fee payment date", notes),
+        edit_window_start=_parse_date(raw.correction_window_start_date, "correction window start", notes),
+        edit_window_end=_parse_date(raw.correction_window_end_date, "correction window end", notes),
+        admit_card_release=_parse_date(raw.admit_card_release_date, "admit card date", notes),
+        exam_start=exam_date,
+        exam_end=_parse_date(raw.exam_end_date, "exam end date", notes),
+        answer_key_release=_parse_date(raw.answer_key_date, "answer key date", notes),
+        result_date=_parse_date(raw.result_date, "result date", notes),
+    )
 
     return ParsedNotification(
         organization=raw.organization.strip()[:200] or "Unknown organisation",
@@ -346,7 +402,8 @@ def normalize_extraction(raw: NotificationExtraction, *, tz: ZoneInfo) -> Parsed
         portal_url=_clean_url(raw.official_portal_url, notes),
         application_start=datetime.combine(start, time(0, 0), tzinfo=tz) if start else None,
         application_deadline=deadline,
-        exam_date=_parse_date(raw.exam_date, "exam date", notes),
+        exam_date=exam_date,
         posts=posts,
+        timeline=timeline,
         review_notes=notes,
     )

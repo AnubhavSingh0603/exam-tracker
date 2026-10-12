@@ -18,13 +18,18 @@ backend/
 │   ├── certs/extra_intermediates.pem   # CA intermediates some .gov.in servers forget to send
 │   ├── db/                         # DeclarativeBase, async engine/session
 │   ├── domain/enums.py             # Category, statuses, SourceKind, ItemKind… (no deps)
+│   ├── domain/qualifications.py    # tiers + degree list (source of the app's copy)
 │   ├── models/
-│   │   ├── user.py · job.py · application.py   # Phase 1
+│   │   ├── user.py · job.py        # profile, notifications, posts, seats
+│   │   ├── application.py          # UserApplication + ExamUpdateLog (exam watcher)
+│   │   ├── lifecycle.py            # ExamLifecycleTimeline (5 stages per notification)
 │   │   ├── auth.py                 # User (Google identity), RefreshToken
 │   │   └── source.py               # Source, DiscoveredItem (diff-engine state)
 │   ├── schemas/                    # Pydantic v2
 │   ├── services/
-│   │   ├── eligibility.py · streams.py · pdf_parser.py · ingestion.py · feed.py   # Phase 1
+│   │   ├── eligibility.py · streams.py · feed.py   # discovery: degree/age/seat/experience match
+│   │   ├── pdf_parser.py · ingestion.py            # Gemini PDF extraction
+│   │   ├── exam_watcher.py         # post-application: per-exam notice watcher + pushes
 │   │   ├── auth_service.py         # Google ID-token check, token rotation, reuse detection
 │   │   ├── http_fetcher.py         # SSRF guard, per-host throttle, robots.txt, size caps
 │   │   ├── js_renderer.py          # optional Playwright fallback
@@ -80,8 +85,9 @@ Presenting an already-used refresh token revokes that whole login (stolen-token 
 | `POST` | `/api/v1/auth/refresh` | — | `{refresh_token}` → new pair (old one stops working) |
 | `POST` | `/api/v1/auth/logout` | — | revokes that login's refresh tokens |
 | `GET` | `/api/v1/auth/me` | Bearer | |
-| `GET/PUT` | `/api/v1/users/me/profile` | Bearer | DOB, category, streams, PwBD/ESM |
-| `GET` | `/api/v1/jobs/feed` | Bearer, or API key + `user_id` | `{category, hero, up_next[], hidden_count}`, ≤ 5 items |
+| `GET/PUT` | `/api/v1/users/me/profile` | Bearer | DOB, category, `qualification_tier`, `degree_title` (or `OTHERS` + `custom_qualification_text`), `experience_years`, PwBD/ESM |
+| `GET` | `/api/v1/meta/qualifications` | — | tiers and degree codes for the profile picker |
+| `GET` | `/api/v1/jobs/feed` | Bearer, or API key + `user_id` | `{category, hero, up_next[], hidden_count, suggested[], suggested_hidden_count}`, ≤ 5 items each |
 | `POST` | `/api/v1/jobs/upload-notification` | API key | manual PDF ingestion |
 | `POST` | `/api/v1/sources/custom-url` | Bearer | `{url, name?}`; fetched once now and returns a preview |
 | `POST` | `/api/v1/sources/telegram` | Bearer | `{channel}`: `@name`, `name` or a t.me link |
@@ -89,7 +95,9 @@ Presenting an already-used refresh token revokes that whole login (stolen-token 
 | `DELETE` | `/api/v1/sources/{id}` | Bearer | only your own |
 | `GET` | `/api/v1/sources/alerts` | Bearer | admit card / exam date / postponed / corrigendum / date-extended updates |
 | `PUT/DELETE` | `/api/v1/devices` | Bearer | register/remove an FCM token (`kind`: `token` or `fid`) |
-| `PUT/DELETE` | `/api/v1/applications/{post_detail_id}` | Bearer | applied / admit card / exam status (stops deadline pings, enables admit-card pings) |
+| `GET` | `/api/v1/applications` | Bearer | tracked exams with watcher status, latest notices and 5-stage timeline |
+| `POST` | `/api/v1/applications` | Bearer | track an exam by name + portal link (not from the feed) |
+| `PUT/DELETE` | `/api/v1/applications/{post_detail_id}` | Bearer | applied from the feed (starts the exam watcher, stops deadline pings) |
 | `GET` | `/api/v1/app/version` | — | `?current_version_code=&abi=` → latest APK URL, SHA-256, `update_available`, `mandatory` |
 | `POST/GET` | `/api/v1/users`, `/api/v1/users/{id}` | API key | Phase 1 admin endpoints |
 

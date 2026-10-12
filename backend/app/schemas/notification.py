@@ -4,6 +4,8 @@ from datetime import date
 
 from pydantic import AwareDatetime, BaseModel, Field, NonNegativeInt
 
+from app.domain.qualifications import QualificationLevel
+
 
 class ParsedVacancy(BaseModel):
     ur: NonNegativeInt = 0
@@ -25,7 +27,26 @@ class ParsedPost(BaseModel):
     eligible_streams: list[str] = Field(default_factory=list)
     qualification_text: str | None = None
     age_relaxation_overrides: dict[str, int] = Field(default_factory=dict)
+    allowed_degrees: list[str] = Field(default_factory=list)  # degree codes
+    raw_eligibility_text: str | None = None
+    min_qualification_level: QualificationLevel | None = None
+    is_open_to_any_graduate: bool = False
+    is_open_to_any_post_graduate: bool = False
+    min_experience_years: float = Field(0.0, ge=0, le=40)
     vacancy: ParsedVacancy
+
+
+class ParsedTimeline(BaseModel):
+    """Tentative schedule printed in the notification (later stages come from alerts)."""
+
+    fee_deadline: date | None = None
+    edit_window_start: date | None = None
+    edit_window_end: date | None = None
+    admit_card_release: date | None = None
+    exam_start: date | None = None
+    exam_end: date | None = None
+    answer_key_release: date | None = None
+    result_date: date | None = None
 
 
 class ParsedNotification(BaseModel):
@@ -37,6 +58,7 @@ class ParsedNotification(BaseModel):
     application_deadline: AwareDatetime | None = None
     exam_date: date | None = None
     posts: list[ParsedPost] = Field(min_length=1)
+    timeline: ParsedTimeline = Field(default_factory=ParsedTimeline)
     review_notes: list[str] = Field(default_factory=list)
 
     @property

@@ -2,6 +2,20 @@ import 'package:flutter/foundation.dart';
 
 import '../domain/urgency.dart';
 
+/// Backend `MatchKind`: direct matches fill the main feed, suggestions their own tab.
+enum MatchKind {
+  direct,
+  suggested;
+
+  static MatchKind fromWire(Object? v) => v == 'suggested' ? suggested : direct;
+}
+
+/// Pastel badge text for a suggested post ("💡 Suggested: Experience Gap").
+String suggestionBadge(List<String> reasons) => switch (reasons.firstOrNull) {
+      'experience_gap' => '💡 Suggested: Experience Gap',
+      _ => '💡 Suggested',
+    };
+
 /// Mirrors backend `app/schemas/feed.py`. Unknown fields are ignored.
 @immutable
 class FeedPost {
@@ -14,6 +28,9 @@ class FeedPost {
     required this.eligibleViaRelaxation,
     required this.notes,
     this.postCode,
+    this.matchKind = MatchKind.direct,
+    this.matchReasonLabel,
+    this.suggestionReasons = const [],
   });
 
   final String postDetailId;
@@ -24,6 +41,11 @@ class FeedPost {
   final int totalReachableSeats;
   final bool eligibleViaRelaxation;
   final List<String> notes;
+  final MatchKind matchKind;
+
+  /// "Direct Degree Match", "Universal Graduate Post", "Custom Qualification Match"…
+  final String? matchReasonLabel;
+  final List<String> suggestionReasons;
 
   factory FeedPost.fromJson(Map<String, dynamic> j) => FeedPost(
         postDetailId: j['post_detail_id'] as String,
@@ -34,6 +56,11 @@ class FeedPost {
         totalReachableSeats: (j['total_reachable_seats'] as num?)?.toInt() ?? 0,
         eligibleViaRelaxation: j['eligible_via_relaxation'] as bool? ?? false,
         notes: [for (final n in (j['notes'] as List<dynamic>? ?? const [])) n.toString()],
+        matchKind: MatchKind.fromWire(j['match_kind']),
+        matchReasonLabel: j['match_reason_label'] as String?,
+        suggestionReasons: [
+          for (final r in (j['suggestion_reasons'] as List<dynamic>? ?? const [])) r.toString()
+        ],
       );
 }
 
@@ -48,6 +75,8 @@ class FeedItem {
     required this.nextStep,
     required this.bestPost,
     this.portalUrl,
+    this.matchKind = MatchKind.direct,
+    this.timelineJson,
   });
 
   final String jobPostId;
@@ -58,6 +87,10 @@ class FeedItem {
   final Urgency urgency;
   final String nextStep;
   final FeedPost bestPost;
+  final MatchKind matchKind;
+
+  /// Raw `timeline` object, stored as-is when the user marks the job Applied.
+  final Map<String, dynamic>? timelineJson;
 
   factory FeedItem.fromJson(Map<String, dynamic> j) => FeedItem(
         jobPostId: j['job_post_id'] as String,
@@ -68,6 +101,8 @@ class FeedItem {
         urgency: urgencyFromWire(j['urgency'] as String?),
         nextStep: j['next_step'] as String? ?? '',
         bestPost: FeedPost.fromJson(j['best_post'] as Map<String, dynamic>),
+        matchKind: MatchKind.fromWire(j['match_kind']),
+        timelineJson: j['timeline'] as Map<String, dynamic>?,
       );
 }
 
@@ -79,6 +114,8 @@ class FeedSnapshot {
     required this.fetchedAt,
     this.category,
     this.fromCache = false,
+    this.suggested = const [],
+    this.suggestedHiddenCount = 0,
   });
 
   static final empty = FeedSnapshot(items: const [], hiddenCount: 0, fetchedAt: DateTime(1970));
@@ -90,17 +127,28 @@ class FeedSnapshot {
   final DateTime fetchedAt;
   final bool fromCache;
 
-  factory FeedSnapshot.fromJson(Map<String, dynamic> j, {required DateTime fetchedAt, bool fromCache = false}) {
+  /// "💡 Suggested" tab, deadline-sorted, already capped by the backend.
+  final List<FeedItem> suggested;
+  final int suggestedHiddenCount;
+
+  factory FeedSnapshot.fromJson(Map<String, dynamic> j,
+      {required DateTime fetchedAt, bool fromCache = false}) {
     final hero = j['hero'];
     return FeedSnapshot(
       items: [
         if (hero is Map<String, dynamic>) FeedItem.fromJson(hero),
-        for (final i in (j['up_next'] as List<dynamic>? ?? const [])) FeedItem.fromJson(i as Map<String, dynamic>),
+        for (final i in (j['up_next'] as List<dynamic>? ?? const []))
+          FeedItem.fromJson(i as Map<String, dynamic>),
       ],
       hiddenCount: (j['hidden_count'] as num?)?.toInt() ?? 0,
       category: j['category'] as String?,
       fetchedAt: fetchedAt,
       fromCache: fromCache,
+      suggested: [
+        for (final i in (j['suggested'] as List<dynamic>? ?? const []))
+          FeedItem.fromJson(i as Map<String, dynamic>),
+      ],
+      suggestedHiddenCount: (j['suggested_hidden_count'] as num?)?.toInt() ?? 0,
     );
   }
 }

@@ -4,7 +4,8 @@ import '../domain/urgency.dart';
 import '../theme/app_theme.dart';
 
 class _Pill extends StatelessWidget {
-  const _Pill({required this.label, required this.foreground, required this.background, this.icon, this.semantics});
+  const _Pill(
+      {required this.label, required this.foreground, required this.background, this.icon, this.semantics});
 
   final String label;
   final Color foreground;
@@ -81,6 +82,18 @@ class SeatPill extends StatelessWidget {
       semantics: '$total reachable seats: $ur open, $quota ${category ?? 'reserved'}',
     );
   }
+}
+
+/// Small tinted tag in one of the palette colours ("💡 Suggested: Experience Gap").
+class TonePill extends StatelessWidget {
+  const TonePill({super.key, required this.label, required this.color});
+
+  final String label;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) =>
+      _Pill(label: label, foreground: color, background: color.withValues(alpha: 0.12));
 }
 
 class StatusPill extends StatelessWidget {

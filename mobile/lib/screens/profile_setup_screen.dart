@@ -2,14 +2,17 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../domain/qualification_taxonomy.dart';
 import '../domain/urgency.dart';
 import '../models/user_profile.dart';
 import '../providers/account_providers.dart';
+import '../services/api_client.dart';
 import '../theme/app_theme.dart';
 
 /// Opens the profile form as a near-full-height sheet. Returns true when saved.
 /// Never a trap: it can always be dismissed, and the dashboard offers it again.
-Future<bool> showProfileSetupSheet(BuildContext context, {UserProfileData? initial, String? suggestedName}) async {
+Future<bool> showProfileSetupSheet(BuildContext context,
+    {UserProfileData? initial, String? suggestedName}) async {
   final saved = await showModalBottomSheet<bool>(
     context: context,
     isScrollControlled: true,
@@ -22,7 +25,8 @@ Future<bool> showProfileSetupSheet(BuildContext context, {UserProfileData? initi
   return saved ?? false;
 }
 
-/// Collects exactly what the eligibility engine needs, and nothing else.
+/// Collects exactly what the eligibility engine needs, and nothing else:
+/// date of birth, category, highest qualification, experience, PwBD/ESM.
 class ProfileSetupScreen extends ConsumerStatefulWidget {
   const ProfileSetupScreen({super.key, this.initial, this.suggestedName});
 
@@ -36,17 +40,22 @@ class ProfileSetupScreen extends ConsumerStatefulWidget {
 class _ProfileSetupScreenState extends ConsumerState<ProfileSetupScreen> {
   late DateTime? _dob = widget.initial?.dateOfBirth;
   late ReservationCategory? _category = widget.initial?.category;
-  late final Set<String> _streams = {...?widget.initial?.streams};
+  // Old profiles (free-text streams) have no valid degree: start the picker empty.
+  late String? _degree = widget.initial?.isComplete == true ? widget.initial!.degreeTitle : null;
+  late String? _othersTier = widget.initial?.isOthers == true ? widget.initial!.qualificationTier : null;
+  late final _othersText = TextEditingController(text: widget.initial?.customQualificationText ?? '');
+  late double _experience = widget.initial?.experienceYears.clamp(0, kMaxExperienceYears).toDouble() ?? 0;
   late bool _pwbd = widget.initial?.isPwbd ?? false;
   late bool _exsm = widget.initial?.isExServiceman ?? false;
   late int _exsmYears = widget.initial?.exServicemanServiceYears ?? 0;
-  final _otherStream = TextEditingController();
   bool _saving = false;
   String? _error;
 
+  bool get _isOthers => _degree == kOthersDegreeCode;
+
   @override
   void dispose() {
-    _otherStream.dispose();
+    _othersText.dispose();
     super.dispose();
   }
 
@@ -64,21 +73,16 @@ class _ProfileSetupScreenState extends ConsumerState<ProfileSetupScreen> {
     if (picked != null) setState(() => _dob = picked);
   }
 
-  void _addOtherStream() {
-    final value = _otherStream.text.trim();
-    if (value.isEmpty) return;
-    setState(() {
-      _streams.add(value);
-      _otherStream.clear();
-    });
-  }
-
   /// First problem only: one thing to fix at a time.
   String? _validate() {
     final dobError = validateDob(_dob, DateTime.now());
     if (dobError != null) return dobError;
     if (_category == null) return 'Choose your reservation category.';
-    if (_streams.isEmpty) return 'Pick at least one degree or stream.';
+    if (_degree == null) return 'Pick your highest qualification.';
+    if (_isOthers) {
+      if (_othersText.text.trim().length < 2) return 'Type your qualification, e.g. B.Des.';
+      if (_othersTier == null) return 'Choose which level your qualification is.';
+    }
     return null;
   }
 
@@ -92,12 +96,16 @@ class _ProfileSetupScreenState extends ConsumerState<ProfileSetupScreen> {
       _saving = true;
       _error = null;
     });
+    final tier = _isOthers ? _othersTier! : degreeByCode(_degree)!.level;
     try {
-      await ref.read(profileProvider.notifier).save(UserProfileData(
+      final synced = await ref.read(profileProvider.notifier).save(UserProfileData(
             displayName: widget.initial?.displayName ?? widget.suggestedName ?? 'Me',
             dateOfBirth: _dob!,
             category: _category!,
-            streams: _streams.toList(),
+            qualificationTier: tier,
+            degreeTitle: _degree!,
+            customQualificationText: _isOthers ? _othersText.text.trim() : null,
+            experienceYears: _experience,
             isPwbd: _pwbd,
             isExServiceman: _exsm,
             exServicemanServiceYears: _exsm ? _exsmYears : 0,
@@ -109,9 +117,15 @@ class _ProfileSetupScreenState extends ConsumerState<ProfileSetupScreen> {
       Navigator.of(context).pop(true);
       messenger
         ..hideCurrentSnackBar()
-        ..showSnackBar(const SnackBar(content: Text('Saved. Finding jobs that fit you…')));
-    } catch (e) {
-      if (mounted) setState(() => _error = 'Could not save right now. Check your connection and try again.');
+        ..showSnackBar(SnackBar(
+          content: Text(synced
+              ? 'Saved. Finding jobs that fit you…'
+              : 'Saved on this phone. It will sync when you’re back online.'),
+        ));
+    } on ApiException catch (e) {
+      if (mounted) setState(() => _error = 'The server didn’t accept that: ${e.message}');
+    } catch (_) {
+      if (mounted) setState(() => _error = 'Could not save right now. Please try again.');
     } finally {
       if (mounted) setState(() => _saving = false);
     }
@@ -124,7 +138,7 @@ class _ProfileSetupScreenState extends ConsumerState<ProfileSetupScreen> {
     final today = DateTime.now();
     final dob = _dob;
     final dobError = dob == null ? null : validateDob(dob, today);
-    final customStreams = _streams.where((s) => !kStreamPresets.contains(s)).toList();
+    final reduceMotion = MediaQuery.of(context).disableAnimations;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -161,7 +175,8 @@ class _ProfileSetupScreenState extends ConsumerState<ProfileSetupScreen> {
                     if (dob != null) ...[
                       const SizedBox(height: 6),
                       Text(
-                        dobError ?? 'You are ${ageOn(dob, today)} today. Each job checks your age on its own cut-off date.',
+                        dobError ??
+                            'You are ${ageOn(dob, today)} today. Each job checks your age on its own cut-off date.',
                         style: text.bodySmall?.copyWith(color: dobError == null ? null : colors.warning),
                       ),
                     ],
@@ -170,65 +185,59 @@ class _ProfileSetupScreenState extends ConsumerState<ProfileSetupScreen> {
               ),
               _Section(
                 title: 'Reservation category',
-                child: InputDecorator(
-                  decoration: const InputDecoration(contentPadding: EdgeInsets.symmetric(horizontal: 12)),
-                  child: DropdownButtonHideUnderline(
-                    child: DropdownButton<ReservationCategory>(
-                      value: _category,
-                      isExpanded: true,
-                      hint: const Text('Choose one'),
-                      dropdownColor: AppPalette.surfaceVariant,
-                      items: [
-                        for (final c in ReservationCategory.values)
-                          DropdownMenuItem(value: c, child: Text(c.label)),
-                      ],
-                      onChanged: (c) => setState(() => _category = c),
-                    ),
-                  ),
+                child: Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    for (final c in ReservationCategory.values)
+                      ChoiceChip(
+                        label: Text(c.wire),
+                        tooltip: c.label,
+                        selected: _category == c,
+                        showCheckmark: false,
+                        selectedColor: colors.info.withValues(alpha: 0.22),
+                        onSelected: (_) => setState(() => _category = c),
+                      ),
+                  ],
                 ),
               ),
               _Section(
-                title: 'Degrees / streams',
-                subtitle: 'Pick every one you hold or will hold by the cut-off date.',
+                title: 'Highest qualification',
+                subtitle: 'The highest one you hold, or will hold by the cut-off date. '
+                    '“Any graduate” jobs match every degree.',
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    _DegreePicker(value: _degree, onChanged: (code) => setState(() => _degree = code)),
+                    AnimatedSize(
+                      duration: reduceMotion ? Duration.zero : const Duration(milliseconds: 220),
+                      curve: Curves.easeOutCubic,
+                      alignment: Alignment.topCenter,
+                      child: _isOthers
+                          ? _OthersFields(
+                              controller: _othersText,
+                              tier: _othersTier,
+                              onTier: (t) => setState(() => _othersTier = t),
+                            )
+                          : const SizedBox(width: double.infinity),
+                    ),
+                  ],
+                ),
+              ),
+              _Section(
+                title: 'Work experience',
+                subtitle: 'Full-time work after your qualification. Leave at Fresher if none.',
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Wrap(
-                      spacing: 8,
-                      runSpacing: 8,
-                      children: [
-                        for (final s in [...kStreamPresets, ...customStreams])
-                          FilterChip(
-                            label: Text(s),
-                            selected: _streams.contains(s),
-                            showCheckmark: true,
-                            selectedColor: colors.info.withValues(alpha: 0.22),
-                            checkmarkColor: colors.info,
-                            onSelected: (on) => setState(() => on ? _streams.add(s) : _streams.remove(s)),
-                          ),
-                      ],
-                    ),
-                    const SizedBox(height: 12),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: TextField(
-                            controller: _otherStream,
-                            textInputAction: TextInputAction.done,
-                            onSubmitted: (_) => _addOtherStream(),
-                            decoration: const InputDecoration(
-                              labelText: 'Something else?',
-                              hintText: 'e.g. B.Tech Mining',
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        IconButton.filledTonal(
-                          tooltip: 'Add',
-                          onPressed: _addOtherStream,
-                          icon: const Icon(Icons.add_rounded),
-                        ),
-                      ],
+                    Text(experienceLabel(_experience), style: text.titleMedium?.copyWith(color: colors.info)),
+                    Slider(
+                      value: _experience,
+                      max: kMaxExperienceYears,
+                      divisions: (kMaxExperienceYears * 2).toInt(), // half-year steps
+                      label: experienceLabel(_experience),
+                      semanticFormatterCallback: experienceLabel,
+                      onChanged: (v) => setState(() => _experience = v),
                     ),
                   ],
                 ),
@@ -264,7 +273,8 @@ class _ProfileSetupScreenState extends ConsumerState<ProfileSetupScreen> {
                             ),
                             SizedBox(
                               width: 32,
-                              child: Text('$_exsmYears', textAlign: TextAlign.center, style: text.titleMedium),
+                              child:
+                                  Text('$_exsmYears', textAlign: TextAlign.center, style: text.titleMedium),
                             ),
                             IconButton(
                               tooltip: 'More years',
@@ -312,6 +322,119 @@ class _ProfileSetupScreenState extends ConsumerState<ProfileSetupScreen> {
   /// "Mon 14 Jun 1998"
   static String _formatDob(DateTime d) =>
       '${formatDue(DateTime(d.year, d.month, d.day, 12)).split(',').first} ${d.year}';
+}
+
+/// One dropdown, degrees grouped under muted headings, "Others" last.
+class _DegreePicker extends StatelessWidget {
+  const _DegreePicker({required this.value, required this.onChanged});
+
+  final String? value;
+  final ValueChanged<String?> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final text = Theme.of(context).textTheme;
+    final items = <DropdownMenuItem<String>>[];
+    String? group;
+    for (final d in kDegrees) {
+      if (d.group != group) {
+        group = d.group;
+        items.add(DropdownMenuItem<String>(
+          enabled: false,
+          value: '__group_$group',
+          child: Text(group.toUpperCase(), style: text.labelSmall?.copyWith(color: AppPalette.textMuted)),
+        ));
+      }
+      items.add(DropdownMenuItem(value: d.code, child: Text(d.label)));
+    }
+    items
+      ..add(DropdownMenuItem<String>(
+        enabled: false,
+        value: '__group_others',
+        child: Text('NOT LISTED', style: text.labelSmall?.copyWith(color: AppPalette.textMuted)),
+      ))
+      ..add(const DropdownMenuItem(value: kOthersDegreeCode, child: Text('Others…')));
+
+    return InputDecorator(
+      decoration: const InputDecoration(contentPadding: EdgeInsets.symmetric(horizontal: 12)),
+      child: DropdownButtonHideUnderline(
+        child: DropdownButton<String>(
+          value: value,
+          isExpanded: true,
+          hint: const Text('Choose your degree'),
+          dropdownColor: AppPalette.surfaceVariant,
+          menuMaxHeight: 420,
+          // Show just the degree once chosen, not the group heading styling.
+          selectedItemBuilder: (_) => [
+            for (final item in items)
+              Align(
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  item.value == kOthersDegreeCode ? 'Others' : (degreeByCode(item.value)?.label ?? ''),
+                ),
+              ),
+          ],
+          items: items,
+          onChanged: onChanged,
+        ),
+      ),
+    );
+  }
+}
+
+/// Revealed when "Others" is picked: the degree name and its level.
+class _OthersFields extends StatelessWidget {
+  const _OthersFields({required this.controller, required this.tier, required this.onTier});
+
+  final TextEditingController controller;
+  final String? tier;
+  final ValueChanged<String> onTier;
+
+  @override
+  Widget build(BuildContext context) {
+    final text = Theme.of(context).textTheme;
+    final info = context.urgencyColors.info;
+    return Padding(
+      padding: const EdgeInsets.only(top: 14),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          TextField(
+            controller: controller,
+            textInputAction: TextInputAction.done,
+            maxLength: 120,
+            decoration: const InputDecoration(
+              labelText: 'Your qualification',
+              hintText: 'e.g., B.Des, BVSc, BAMS, CA',
+              counterText: '',
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            'We search each notification for this text. Separate alternatives with “/”, e.g. CA/CMA.',
+            style: text.bodySmall,
+          ),
+          const SizedBox(height: 14),
+          Text('Which level is it?', style: text.labelLarge),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              for (final level in kQualificationLevels)
+                ChoiceChip(
+                  label: Text(level.label),
+                  selected: tier == level.code,
+                  showCheckmark: false,
+                  selectedColor: info.withValues(alpha: 0.22),
+                  onSelected: (_) => onTier(level.code),
+                ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 class _Section extends StatelessWidget {

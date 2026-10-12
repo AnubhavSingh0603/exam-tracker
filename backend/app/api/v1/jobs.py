@@ -11,6 +11,7 @@ from app.schemas.feed import FeedResponse
 from app.schemas.job import JobPostOut, UploadResult
 from app.services.feed import build_feed
 from app.services.ingestion import ingest_notification
+from app.services.lifecycle import timeline_out
 from app.services.pdf_parser import ExtractionError
 
 router = APIRouter(prefix="/jobs", tags=["jobs"])
@@ -56,7 +57,8 @@ async def upload_notification(
 
     if not created:
         response.status_code = status.HTTP_200_OK
-    return UploadResult(created=created, job=JobPostOut.model_validate(job))
+    out = JobPostOut.model_validate(job).model_copy(update={"timeline": timeline_out(job)})
+    return UploadResult(created=created, job=out)
 
 
 @router.get("/feed", response_model=FeedResponse)
@@ -79,3 +81,4 @@ async def get_feed(
         if profile is None:
             raise HTTPException(status.HTTP_404_NOT_FOUND, "User not found")
     return await build_feed(session, profile, limit=limit)
+

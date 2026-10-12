@@ -83,6 +83,8 @@ class Settings(BaseSettings):
     firebase_credentials_file: str | None = None
     fcm_android_channel_id: str = "urgent_deadlines"  # must match the channel the app creates
     notify_interval_minutes: int = 30
+    # Exam watcher: each tracked exam's portal is re-checked this often (± jitter).
+    exam_watch_interval_hours: float = 4.0
     urgent_deadline_hours: int = 72
     # No pings between these local hours unless a deadline is under QUIET_HOURS_OVERRIDE_HOURS.
     quiet_hours_start: int = Field(22, ge=0, le=23)

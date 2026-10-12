@@ -2,17 +2,22 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../domain/lifecycle.dart';
 import '../domain/urgency.dart';
 import '../models/tracked_application.dart';
+import '../models/vault_entry.dart';
 import '../providers/providers.dart';
 import '../services/calendar_sync_service.dart';
 import '../theme/app_theme.dart';
 import '../utils/system_actions.dart';
 import 'app_card.dart';
 import 'credential_drawer.dart';
+import 'exam_lifecycle_stepper.dart';
 import 'pills.dart';
 
 enum _SyncState { idle, syncing, done }
+
+enum _Panel { none, timeline, credentials }
 
 enum _MenuAction { admitCardLive, examScheduled, backToApplied }
 
@@ -27,7 +32,7 @@ class TrackedApplicationCard extends ConsumerStatefulWidget {
 }
 
 class _TrackedApplicationCardState extends ConsumerState<TrackedApplicationCard> {
-  bool _expanded = false;
+  _Panel _panel = _Panel.none;
   _SyncState _sync = _SyncState.idle;
 
   TrackedApplication get app => widget.app;
@@ -45,6 +50,8 @@ class _TrackedApplicationCardState extends ConsumerState<TrackedApplicationCard>
       _sync = app.calendarSynced ? _SyncState.done : _SyncState.idle;
     }
   }
+
+  void _toggle(_Panel panel) => setState(() => _panel = _panel == panel ? _Panel.none : panel);
 
   Future<void> _syncToCalendar() async {
     setState(() => _sync = _SyncState.syncing);
@@ -70,7 +77,8 @@ class _TrackedApplicationCardState extends ConsumerState<TrackedApplicationCard>
       case _MenuAction.admitCardLive:
         final url = await _askAdmitCardUrl();
         if (url == null) return; // dialog cancelled
-        await notifier.setStatus(app.id, ApplicationStatus.admitCardLive, admitCardUrl: url.isEmpty ? null : url);
+        await notifier.setStatus(app.id, ApplicationStatus.admitCardLive,
+            admitCardUrl: url.isEmpty ? null : url);
       case _MenuAction.examScheduled:
         final when = await _pickExamDateTime();
         if (when == null) return;
@@ -160,13 +168,14 @@ class _TrackedApplicationCardState extends ConsumerState<TrackedApplicationCard>
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(app.examName, style: text.bodySmall),
+                if (app.examName != app.postName) Text(app.examName, style: text.bodySmall),
+                const SizedBox(height: 10),
+                _MilestoneBadge(app: app, now: widget.now),
                 const SizedBox(height: 10),
                 Wrap(
                   spacing: 8,
                   runSpacing: 8,
                   children: [
-                    StatusPill(label: app.status.label),
                     if (app.totalSeats != null)
                       SeatPill(
                         total: app.totalSeats!,
@@ -174,17 +183,29 @@ class _TrackedApplicationCardState extends ConsumerState<TrackedApplicationCard>
                         quota: app.quotaSeats ?? 0,
                         category: app.category,
                       ),
+                    ..._quickCopyChips(context, ref.watch(vaultEntryProvider(app.id)).dataOrNull),
                   ],
                 ),
+                if (app.updates.isNotEmpty) ...[
+                  const SizedBox(height: 8),
+                  _LatestNotice(update: app.updates.first),
+                ],
                 const SizedBox(height: 12),
                 Row(
                   children: [
                     Expanded(child: _SyncButton(state: _sync, onPressed: _syncToCalendar)),
-                    const SizedBox(width: 8),
-                    TextButton.icon(
-                      onPressed: () => setState(() => _expanded = !_expanded),
-                      icon: Icon(_expanded ? Icons.expand_less_rounded : Icons.key_rounded, size: 18),
-                      label: Text(_expanded ? 'Hide' : 'Credentials'),
+                    const SizedBox(width: 4),
+                    _PanelToggle(
+                      icon: Icons.timeline_rounded,
+                      label: 'Timeline',
+                      open: _panel == _Panel.timeline,
+                      onPressed: () => _toggle(_Panel.timeline),
+                    ),
+                    _PanelToggle(
+                      icon: Icons.key_rounded,
+                      label: 'IDs',
+                      open: _panel == _Panel.credentials,
+                      onPressed: () => _toggle(_Panel.credentials),
                     ),
                   ],
                 ),
@@ -192,12 +213,17 @@ class _TrackedApplicationCardState extends ConsumerState<TrackedApplicationCard>
                   duration: reduceMotion ? Duration.zero : const Duration(milliseconds: 200),
                   curve: Curves.easeOutCubic,
                   alignment: Alignment.topCenter,
-                  child: _expanded
-                      ? Padding(
-                          padding: const EdgeInsets.only(top: 12),
-                          child: CredentialDrawer(app: app),
-                        )
-                      : const SizedBox(width: double.infinity),
+                  child: switch (_panel) {
+                    _Panel.timeline => Padding(
+                        padding: const EdgeInsets.only(top: 14),
+                        child: ExamLifecycleStepper(app: app, now: widget.now),
+                      ),
+                    _Panel.credentials => Padding(
+                        padding: const EdgeInsets.only(top: 12),
+                        child: CredentialDrawer(app: app),
+                      ),
+                    _Panel.none => const SizedBox(width: double.infinity),
+                  },
                 ),
               ],
             ),
@@ -206,6 +232,200 @@ class _TrackedApplicationCardState extends ConsumerState<TrackedApplicationCard>
       ),
     );
   }
+}
+
+/// Live status from the exam watcher (or the user), with the one action that
+/// matters at that stage. 🟢 admit card · 🟡 exam · 🟣 answer key · 🔵 result.
+class _MilestoneBadge extends StatelessWidget {
+  const _MilestoneBadge({required this.app, required this.now});
+
+  final TrackedApplication app;
+  final DateTime now;
+
+  @override
+  Widget build(BuildContext context) {
+    final text = Theme.of(context).textTheme;
+    final t = app.timeline;
+    final status = app.displayStatus;
+    final (Color color, IconData icon) = switch (status) {
+      TrackerStatus.applied => (AppPalette.textMuted, Icons.hourglass_top_rounded),
+      TrackerStatus.admitCardLive => (AppPalette.sage, Icons.badge_rounded),
+      TrackerStatus.examScheduled => (AppPalette.honey, Icons.event_rounded),
+      TrackerStatus.answerKeyLive => (AppPalette.lavender, Icons.fact_check_rounded),
+      TrackerStatus.resultDeclared => (AppPalette.periwinkle, Icons.emoji_events_rounded),
+    };
+    final exam = app.effectiveExamAt;
+    final objection = t?.objectionDeadline;
+    final objectionOpen =
+        status == TrackerStatus.answerKeyLive && objection != null && !objection.isBefore(now);
+
+    final (String? actionLabel, String? actionUrl) = switch (status) {
+      TrackerStatus.admitCardLive => (
+          'Download admit card',
+          app.latestUpdate('admit_card')?.url ?? t?.admitCardUrl ?? app.admitCardUrl ?? app.portalUrl,
+        ),
+      TrackerStatus.answerKeyLive => (
+          'View answer key',
+          app.latestUpdate('answer_key')?.url ?? t?.answerKeyUrl
+        ),
+      TrackerStatus.resultDeclared => (
+          'Merit list',
+          app.latestUpdate('result')?.url ?? t?.meritListUrl ?? t?.scorecardUrl,
+        ),
+      _ => (null, null),
+    };
+
+    final subtitle = switch (status) {
+      TrackerStatus.applied => app.serverId != null
+          ? 'Watching the exam portal for admit card, dates and results'
+          : 'Not watched yet: it syncs when you’re signed in and online',
+      TrackerStatus.examScheduled when exam != null => stageDateLabel(exam, t?.examEnd),
+      _ => null,
+    };
+
+    return Container(
+      padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.10),
+        borderRadius: BorderRadius.circular(AppRadii.control),
+        border: Border.all(color: color.withValues(alpha: 0.35)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(icon, size: 18, color: color),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Semantics(
+                  liveRegion: true,
+                  child: Text(status.label, style: text.titleSmall?.copyWith(color: color)),
+                ),
+              ),
+              if (status == TrackerStatus.examScheduled && app.calendarSynced)
+                const _MiniChip(label: 'Calendar Synced', icon: Icons.event_available_rounded),
+              if (objectionOpen)
+                CountdownPill(
+                    due: DateTime(objection.year, objection.month, objection.day, 23, 59), now: now),
+            ],
+          ),
+          if (subtitle != null) ...[
+            const SizedBox(height: 4),
+            Text(subtitle, style: text.bodySmall),
+          ],
+          if (objectionOpen) ...[
+            const SizedBox(height: 4),
+            Text('Objection window closes ${stageDateLabel(objection)}', style: text.bodySmall),
+          ],
+          if (actionLabel != null && actionUrl != null) ...[
+            const SizedBox(height: 8),
+            FilledButton.tonalIcon(
+              onPressed: () => openExternal(context, actionUrl),
+              icon: const Icon(Icons.download_rounded, size: 18),
+              label: Text(actionLabel),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _MiniChip extends StatelessWidget {
+  const _MiniChip({required this.label, required this.icon});
+
+  final String label;
+  final IconData icon;
+
+  @override
+  Widget build(BuildContext context) {
+    final sage = context.urgencyColors.safe;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration:
+          BoxDecoration(color: sage.withValues(alpha: 0.14), borderRadius: BorderRadius.circular(999)),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 14, color: sage),
+          const SizedBox(width: 4),
+          Text(label, style: Theme.of(context).textTheme.labelSmall?.copyWith(color: sage)),
+        ],
+      ),
+    );
+  }
+}
+
+/// One tap copies the Registration / Roll number, right on the card.
+List<Widget> _quickCopyChips(BuildContext context, VaultEntry? vault) {
+  final reg = vault?.registrationId;
+  final roll = vault?.rollNumber;
+  return [
+    if (reg != null && reg.isNotEmpty)
+      ActionChip(
+        avatar: const Icon(Icons.copy_rounded, size: 16),
+        label: Text('Reg $reg'),
+        tooltip: 'Copy registration number',
+        onPressed: () => copyToClipboard(context, 'Registration number', reg),
+      ),
+    if (roll != null && roll.isNotEmpty)
+      ActionChip(
+        avatar: const Icon(Icons.copy_rounded, size: 16),
+        label: Text('Roll $roll'),
+        tooltip: 'Copy roll number',
+        onPressed: () => copyToClipboard(context, 'Roll number', roll),
+      ),
+  ];
+}
+
+/// The exam watcher's newest notice, tappable.
+class _LatestNotice extends StatelessWidget {
+  const _LatestNotice({required this.update});
+
+  final ExamUpdate update;
+
+  @override
+  Widget build(BuildContext context) {
+    final text = Theme.of(context).textTheme;
+    return InkWell(
+      onTap: () => openExternal(context, update.url),
+      borderRadius: BorderRadius.circular(AppRadii.control),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 4),
+        child: Row(
+          children: [
+            const Icon(Icons.notifications_active_outlined, size: 16, color: AppPalette.periwinkle),
+            const SizedBox(width: 6),
+            Expanded(
+              child: Text(
+                update.title,
+                style: text.bodySmall?.copyWith(color: AppPalette.textPrimary),
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _PanelToggle extends StatelessWidget {
+  const _PanelToggle({required this.icon, required this.label, required this.open, required this.onPressed});
+
+  final IconData icon;
+  final String label;
+  final bool open;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) => TextButton.icon(
+        onPressed: onPressed,
+        icon: Icon(open ? Icons.expand_less_rounded : icon, size: 18),
+        label: Text(open ? 'Hide' : label),
+      );
 }
 
 class _SyncButton extends StatelessWidget {
@@ -225,7 +445,8 @@ class _SyncButton extends StatelessWidget {
       _SyncState.done => OutlinedButton.icon(
           // Tapping again re-syncs (e.g. after editing dates) — it updates, never duplicates.
           onPressed: onPressed,
-          style: OutlinedButton.styleFrom(foregroundColor: sage, side: BorderSide(color: sage.withValues(alpha: 0.5))),
+          style: OutlinedButton.styleFrom(
+              foregroundColor: sage, side: BorderSide(color: sage.withValues(alpha: 0.5))),
           icon: const Icon(Icons.event_available_rounded, size: 18),
           label: const Text('In calendar'),
         ),

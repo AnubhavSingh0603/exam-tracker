@@ -13,10 +13,54 @@ class Category(StrEnum):
 
 
 class ApplicationStatus(StrEnum):
-    DISCOVERED = "discovered"
+    """Post-application progress, advanced by the exam watcher (never backwards)."""
+
+    DISCOVERED = "discovered"  # legacy: seen but not applied; never watched
     APPLIED = "applied"
     ADMIT_CARD_LIVE = "admit_card_live"
     EXAM_SCHEDULED = "exam_scheduled"
+    ANSWER_KEY_LIVE = "answer_key_live"
+    RESULT_DECLARED = "result_declared"
+
+    @property
+    def rank(self) -> int:
+        return list(ApplicationStatus).index(self)
+
+
+class ExamMilestone(StrEnum):
+    """What a notice found by the exam watcher announces."""
+
+    ADMIT_CARD = "admit_card"  # admit card / hall ticket / call letter
+    EXAM_SCHEDULE = "exam_schedule"  # exam date, schedule, city intimation slip
+    POSTPONED = "postponed"  # rescheduled / postponed / cancelled
+    ANSWER_KEY = "answer_key"  # answer key, response sheet, objections
+    RESULT = "result"  # result, merit list, cut-off, scorecard
+
+
+class UpdateSource(StrEnum):
+    OFFICIAL = "official"  # the exam's own portal / notice board
+    AGGREGATOR = "aggregator"  # seen by the general crawl (SarkariResult etc.)
+
+
+class MatchKind(StrEnum):
+    """How a post relates to the profile; drives the client's feed split."""
+
+    DIRECT = "direct"  # qualification, age and experience all met
+    SUGGESTED = "suggested"  # close enough to be worth a look; see SuggestionReason
+
+
+class SuggestionReason(StrEnum):
+    EXPERIENCE_GAP = "experience_gap"  # needs at most 1 year more experience than you have
+
+
+class MatchReason(StrEnum):
+    """Why the qualification matched; shown as a small tag on the card."""
+
+    DIRECT_DEGREE = "direct_degree"  # "Direct Degree Match": your degree is listed
+    UNIVERSAL_GRADUATE = "universal_graduate"  # "Universal Graduate Post": any graduate
+    UNIVERSAL_POST_GRADUATE = "universal_post_graduate"  # any post-graduate
+    SCHOOL_LEVEL = "school_level"  # 10th/12th post, covered by your higher qualification
+    CUSTOM_QUALIFICATION = "custom_qualification"  # "Others" text found in the eligibility text
 
 
 class UrgencyBand(StrEnum):

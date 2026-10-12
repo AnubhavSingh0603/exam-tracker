@@ -97,11 +97,115 @@ class TrackedAppsNotifier extends AsyncNotifier<List<TrackedApplication>> {
       quotaSeats: post.categoryQuotaSeats,
       createdAt: now,
       updatedAt: now,
+      jobPostId: item.jobPostId,
     );
     await _db.upsertApplication(app);
+    final timeline = item.timelineJson;
+    if (timeline != null) await _db.saveTimeline(item.jobPostId, jsonEncode(timeline));
     await reload();
     _syncStatus(app.id, ApplicationStatus.applied);
     return app;
+  }
+
+  /// Track an exam applied to outside the feed. With the backend it gets the
+  /// exam watcher; offline it is a plain local reminder.
+  Future<TrackedApplication> addManual({required String examName, String? portalUrl}) async {
+    final now = DateTime.now();
+    String id = 'local-${now.microsecondsSinceEpoch}';
+    String? serverId;
+    final api = _signedInApi();
+    if (api != null) {
+      try {
+        final created = await api.addManualApplication(examName: examName, portalUrl: portalUrl);
+        id = serverId = created['id'] as String;
+      } on ApiException {
+        rethrow; // e.g. invalid link: let the form say so
+      } catch (_) {
+        // Offline: keep it local; it can be re-added once online.
+      }
+    }
+    final app = TrackedApplication(
+      id: id,
+      examName: examName,
+      postName: examName,
+      status: ApplicationStatus.applied,
+      portalUrl: portalUrl,
+      createdAt: now,
+      updatedAt: now,
+    );
+    await _db.upsertApplication(app);
+    if (serverId != null) {
+      await _db.applyServerState(id, serverId: serverId, serverStatus: 'applied', updatesJson: '[]');
+    }
+    await reload();
+    return app;
+  }
+
+  ApiClient? _signedInApi() {
+    final api = ref.read(apiClientProvider);
+    if (api == null || api.usesApiKey) return null; // dev key mode has no per-user applications
+    if (ref.read(authProvider).dataOrNull == null) return null;
+    return api;
+  }
+
+  /// Pulls the exam watcher's findings (status, notices, timeline) into SQLite,
+  /// and updates the phone calendar where an announced exam date changed.
+  /// Best-effort: offline is fine, the last synced state stays on screen.
+  Future<void> syncFromServer() async {
+    final api = _signedInApi();
+    if (api == null) return;
+    final List<Map<String, dynamic>> remote;
+    try {
+      remote = await api.listApplications();
+    } catch (_) {
+      return;
+    }
+    final before = {for (final a in await _db.listApplications()) a.id: a};
+    final byServerId = {
+      for (final a in before.values)
+        if (a.serverId != null) a.serverId!: a.id
+    };
+    for (final r in remote) {
+      final serverId = r['id'] as String;
+      final postId = r['post_detail_id'] as String?;
+      var localId = byServerId[serverId] ?? (postId != null && before.containsKey(postId) ? postId : null);
+      if (localId == null) {
+        // Tracked on another device (or before reinstalling): add it here too.
+        localId = postId ?? serverId;
+        final now = DateTime.now();
+        await _db.upsertApplication(TrackedApplication(
+          id: localId,
+          examName: r['exam_name'] as String,
+          postName: r['exam_name'] as String,
+          organization: r['organization'] as String?,
+          status: ApplicationStatus.applied,
+          portalUrl: r['official_portal_url'] as String?,
+          jobPostId: r['job_id'] as String?,
+          createdAt: now,
+          updatedAt: now,
+        ));
+      }
+      final timeline = r['timeline'];
+      await _db.applyServerState(
+        localId,
+        serverId: serverId,
+        serverStatus: r['status'] as String? ?? 'applied',
+        updatesJson: jsonEncode(r['updates'] ?? const []),
+        timelineJson: timeline == null ? null : jsonEncode(timeline),
+      );
+    }
+    await reload();
+
+    // Keep calendar events honest when the watcher found a (new) exam date.
+    final calendar = ref.read(calendarSyncProvider);
+    for (final app in state.dataOrNull ?? const <TrackedApplication>[]) {
+      final old = before[app.id];
+      if (app.calendarSynced && old != null && old.effectiveExamAt != app.effectiveExamAt) {
+        try {
+          await calendar.syncExamToCalendar(app);
+        } catch (_) {}
+      }
+    }
   }
 
   /// Best-effort: lets the server stop deadline pings and start admit-card matching.
@@ -142,7 +246,8 @@ class TrackedAppsNotifier extends AsyncNotifier<List<TrackedApplication>> {
       ..invalidate(hasPasswordProvider(appId));
   }
 
-  Future<void> setStatus(String id, ApplicationStatus status, {DateTime? examAt, String? admitCardUrl}) async {
+  Future<void> setStatus(String id, ApplicationStatus status,
+      {DateTime? examAt, String? admitCardUrl}) async {
     await _db.updateStatus(id, status, examAt: examAt, admitCardUrl: admitCardUrl);
     await reload();
     _syncStatus(id, status);
@@ -166,15 +271,18 @@ final trackedAppsProvider =
 
 final activeAppsProvider = Provider<List<TrackedApplication>>((ref) {
   final all = ref.watch(trackedAppsProvider).dataOrNull ?? const [];
-  return [for (final a in all) if (!a.archived) a];
+  return [
+    for (final a in all)
+      if (!a.archived) a
+  ];
 });
 
-final vaultEntryProvider =
-    FutureProvider.autoDispose.family<VaultEntry?, String>((ref, appId) => ref.watch(databaseProvider).getVault(appId));
+final vaultEntryProvider = FutureProvider.autoDispose
+    .family<VaultEntry?, String>((ref, appId) => ref.watch(databaseProvider).getVault(appId));
 
 /// Only whether a password exists; the value itself is read on tap.
-final hasPasswordProvider =
-    FutureProvider.autoDispose.family<bool, String>((ref, appId) => ref.watch(secretStoreProvider).hasPassword(appId));
+final hasPasswordProvider = FutureProvider.autoDispose
+    .family<bool, String>((ref, appId) => ref.watch(secretStoreProvider).hasPassword(appId));
 
 // -----------------------------------------------------------------------------
 // Feed (online, with last-good cache for offline start-up)
@@ -216,6 +324,8 @@ class FeedNotifier extends AsyncNotifier<FeedSnapshot> {
       final body = await api.fetchFeedJson(userId: userId);
       final now = DateTime.now();
       await db.cacheFeed(body, now);
+      // Same moment is a good time to pull exam-watcher updates for tracked exams.
+      unawaited(ref.read(trackedAppsProvider.notifier).syncFromServer());
       return FeedSnapshot.fromJson(jsonDecode(body) as Map<String, dynamic>, fetchedAt: now);
     } on ApiException catch (e) {
       // 409: signed in but no profile yet. The profile prompt handles it.
@@ -240,10 +350,26 @@ const feedCap = 5;
 final visibleFeedProvider = Provider<List<FeedItem>>((ref) {
   final snapshot = ref.watch(feedProvider).dataOrNull;
   if (snapshot == null) return const [];
-  final trackedIds = {for (final a in ref.watch(trackedAppsProvider).dataOrNull ?? const <TrackedApplication>[]) a.id};
+  final trackedIds = {
+    for (final a in ref.watch(trackedAppsProvider).dataOrNull ?? const <TrackedApplication>[]) a.id
+  };
   final now = ref.watch(nowProvider);
   return [
     for (final item in snapshot.items)
+      if (!trackedIds.contains(item.bestPost.postDetailId) && item.deadline.isAfter(now)) item,
+  ].take(feedCap).toList(growable: false);
+});
+
+/// "💡 Suggested" tab: same Paralysis Shield rules as the main feed.
+final visibleSuggestedProvider = Provider<List<FeedItem>>((ref) {
+  final snapshot = ref.watch(feedProvider).dataOrNull;
+  if (snapshot == null) return const [];
+  final trackedIds = {
+    for (final a in ref.watch(trackedAppsProvider).dataOrNull ?? const <TrackedApplication>[]) a.id
+  };
+  final now = ref.watch(nowProvider);
+  return [
+    for (final item in snapshot.suggested)
       if (!trackedIds.contains(item.bestPost.postDetailId) && item.deadline.isAfter(now)) item,
   ].take(feedCap).toList(growable: false);
 });

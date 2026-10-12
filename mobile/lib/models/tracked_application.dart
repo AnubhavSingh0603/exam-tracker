@@ -1,4 +1,8 @@
+import 'dart:convert';
+
 import 'package:flutter/foundation.dart';
+
+import 'exam_timeline.dart';
 
 enum ApplicationStatus {
   applied('applied', 'Applied'),
@@ -11,6 +15,49 @@ enum ApplicationStatus {
 
   static ApplicationStatus fromWire(String? value) =>
       values.firstWhere((s) => s.wire == value, orElse: () => ApplicationStatus.applied);
+}
+
+/// Exam-watcher progress (backend `ApplicationStatus` minus "discovered").
+/// Local [ApplicationStatus] covers what the user sets by hand; this is what the
+/// server found on the exam's notice boards. The card shows whichever is further.
+enum TrackerStatus {
+  applied('applied', 'Applied'),
+  admitCardLive('admit_card_live', 'Admit Card Live'),
+  examScheduled('exam_scheduled', 'Exam Scheduled'),
+  answerKeyLive('answer_key_live', 'Answer Key Released'),
+  resultDeclared('result_declared', 'Result Declared');
+
+  const TrackerStatus(this.wire, this.label);
+  final String wire;
+  final String label;
+
+  static TrackerStatus? fromWire(String? value) {
+    for (final s in values) {
+      if (s.wire == value) return s;
+    }
+    return null;
+  }
+}
+
+/// One notice the exam watcher found (backend `ExamUpdateOut`).
+@immutable
+class ExamUpdate {
+  const ExamUpdate({required this.milestone, required this.title, required this.url, this.eventDate});
+
+  final String milestone; // admit_card | exam_schedule | postponed | answer_key | result
+  final String title;
+  final String url;
+  final DateTime? eventDate;
+
+  factory ExamUpdate.fromJson(Map<String, dynamic> j) {
+    final d = DateTime.tryParse(j['event_date'] as String? ?? '');
+    return ExamUpdate(
+      milestone: j['milestone'] as String? ?? '',
+      title: j['title'] as String? ?? '',
+      url: j['url'] as String? ?? '',
+      eventDate: d == null ? null : DateTime(d.year, d.month, d.day),
+    );
+  }
 }
 
 int? _ms(DateTime? d) => d?.toUtc().millisecondsSinceEpoch;
@@ -36,6 +83,11 @@ class TrackedApplication {
     this.quotaSeats,
     this.archived = false,
     this.calendarSynced = false,
+    this.jobPostId,
+    this.timeline,
+    this.serverId,
+    this.serverStatus,
+    this.updates = const [],
   });
 
   /// Backend `post_detail_id` when tracked from the feed, so the feed can hide it.
@@ -59,16 +111,73 @@ class TrackedApplication {
   /// Derived (from calendar_event_refs), never written back.
   final bool calendarSynced;
 
+  /// Backend `job_post_id` (the notification), used to refresh [timeline].
+  final String? jobPostId;
+
+  /// Post-application milestones from the server; null until first fetched.
+  final ExamTimeline? timeline;
+
+  /// Server-side application id (the exam watcher's handle); null until synced.
+  final String? serverId;
+
+  /// What the exam watcher found; null until synced / for offline-only exams.
+  final TrackerStatus? serverStatus;
+
+  /// Watcher notices, newest first.
+  final List<ExamUpdate> updates;
+
+  /// The further of what the user set and what the watcher found.
+  TrackerStatus get displayStatus {
+    final local = switch (status) {
+      ApplicationStatus.applied => TrackerStatus.applied,
+      ApplicationStatus.admitCardLive => TrackerStatus.admitCardLive,
+      ApplicationStatus.examScheduled => TrackerStatus.examScheduled,
+    };
+    final server = serverStatus;
+    return server != null && server.index > local.index ? server : local;
+  }
+
+  /// Newest watcher notice of a kind ('admit_card', 'result', ...).
+  ExamUpdate? latestUpdate(String milestone) {
+    for (final u in updates) {
+      if (u.milestone == milestone) return u;
+    }
+    return null;
+  }
+
+  /// Exam date the user entered, else the one the notification announced.
+  DateTime? get effectiveExamAt => examAt ?? timeline?.examStart;
+
   /// The date that matters *now* for this application.
   DateTime? get focusDate => switch (status) {
-        ApplicationStatus.applied => examAt ?? deadline,
-        ApplicationStatus.admitCardLive || ApplicationStatus.examScheduled => examAt,
+        ApplicationStatus.applied => effectiveExamAt ?? deadline,
+        ApplicationStatus.admitCardLive || ApplicationStatus.examScheduled => effectiveExamAt,
       };
 
   /// Best link for "open portal" / "download admit card".
   String? get actionUrl => status == ApplicationStatus.admitCardLive
-      ? (admitCardUrl ?? portalUrl)
+      ? (admitCardUrl ?? timeline?.admitCardUrl ?? portalUrl)
       : portalUrl;
+
+  static List<ExamUpdate> _updates(Object? raw) {
+    if (raw is! String || raw.isEmpty) return const [];
+    try {
+      return [
+        for (final u in jsonDecode(raw) as List<dynamic>) ExamUpdate.fromJson(u as Map<String, dynamic>)
+      ];
+    } catch (_) {
+      return const [];
+    }
+  }
+
+  static ExamTimeline? _timeline(Object? raw) {
+    if (raw is! String || raw.isEmpty) return null;
+    try {
+      return ExamTimeline.fromJson(jsonDecode(raw) as Map<String, dynamic>);
+    } catch (_) {
+      return null; // unreadable cache: refetched on the next refresh
+    }
+  }
 
   Map<String, Object?> toRow() => {
         'id': id,
@@ -87,6 +196,9 @@ class TrackedApplication {
         'archived': archived ? 1 : 0,
         'created_at': _ms(createdAt),
         'updated_at': _ms(updatedAt),
+        'job_post_id': jobPostId,
+        // timeline/server state is written separately (DatabaseService.saveTimeline,
+        // applyServerState) so a local edit never overwrites it with a stale copy.
       };
 
   factory TrackedApplication.fromRow(Map<String, Object?> r) => TrackedApplication(
@@ -107,6 +219,11 @@ class TrackedApplication {
         calendarSynced: r['calendar_synced'] == 1,
         createdAt: _dt(r['created_at'])!,
         updatedAt: _dt(r['updated_at'])!,
+        jobPostId: r['job_post_id'] as String?,
+        timeline: _timeline(r['timeline_json']),
+        serverId: r['server_id'] as String?,
+        serverStatus: TrackerStatus.fromWire(r['server_status'] as String?),
+        updates: _updates(r['updates_json']),
       );
 
   TrackedApplication copyWith({
@@ -134,5 +251,10 @@ class TrackedApplication {
         calendarSynced: calendarSynced,
         createdAt: createdAt,
         updatedAt: updatedAt ?? this.updatedAt,
+        jobPostId: jobPostId,
+        timeline: timeline,
+        serverId: serverId,
+        serverStatus: serverStatus,
+        updates: updates,
       );
 }

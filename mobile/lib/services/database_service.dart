@@ -26,7 +26,7 @@ class DatabaseService {
   final Database _db;
 
   static const _fileName = 'exam_tracker.db';
-  static const _version = 1;
+  static const _version = 2;
 
   /// [factory]/[path] are injectable so tests can use sqflite_common_ffi in memory.
   static Future<DatabaseService> open({DatabaseFactory? factory, String? path}) async {
@@ -38,6 +38,7 @@ class DatabaseService {
         version: _version,
         onConfigure: (db) => db.execute('PRAGMA foreign_keys = ON'),
         onCreate: _onCreate,
+        onUpgrade: _onUpgrade,
       ),
     );
     return DatabaseService._(db);
@@ -63,9 +64,15 @@ class DatabaseService {
           quota_seats        INTEGER,
           archived           INTEGER NOT NULL DEFAULT 0,
           created_at         INTEGER NOT NULL,
-          updated_at         INTEGER NOT NULL
+          updated_at         INTEGER NOT NULL,
+          job_post_id        TEXT,
+          timeline_json      TEXT,
+          server_id          TEXT,
+          server_status      TEXT,
+          updates_json       TEXT
         )''')
-      ..execute('CREATE INDEX ix_apps_active ON tracked_applications (archived, exam_timestamp, deadline_timestamp)')
+      ..execute(
+          'CREATE INDEX ix_apps_active ON tracked_applications (archived, exam_timestamp, deadline_timestamp)')
       ..execute('''
         CREATE TABLE credentials_vault (
           app_id          TEXT PRIMARY KEY
@@ -92,6 +99,15 @@ class DatabaseService {
           fetched_at INTEGER NOT NULL
         )''');
     await batch.commit(noResult: true);
+  }
+
+  /// v2: notification id, cached 5-stage timeline and exam-watcher state.
+  static Future<void> _onUpgrade(Database db, int from, int to) async {
+    if (from < 2) {
+      for (final column in ['job_post_id', 'timeline_json', 'server_id', 'server_status', 'updates_json']) {
+        await db.execute('ALTER TABLE tracked_applications ADD COLUMN $column TEXT');
+      }
+    }
   }
 
   Future<void> close() => _db.close();
@@ -128,7 +144,9 @@ class DatabaseService {
     await _db.transaction((txn) async {
       final updated = await txn.update(
         'tracked_applications',
-        Map.of(row)..remove('id')..remove('created_at'),
+        Map.of(row)
+          ..remove('id')
+          ..remove('created_at'),
         where: 'id = ?',
         whereArgs: [app.id],
       );
@@ -144,6 +162,34 @@ class DatabaseService {
           if (examAt != null) 'exam_timestamp': examAt.toUtc().millisecondsSinceEpoch,
           if (admitCardUrl != null) 'admit_card_url': admitCardUrl,
           'updated_at': DateTime.now().toUtc().millisecondsSinceEpoch,
+        },
+        where: 'id = ?',
+        whereArgs: [id],
+      );
+
+  /// Stores the server's timeline JSON on every application of that notification.
+  Future<void> saveTimeline(String jobPostId, String json) => _db.update(
+        'tracked_applications',
+        {'timeline_json': json},
+        where: 'job_post_id = ?',
+        whereArgs: [jobPostId],
+      );
+
+  /// Exam-watcher state from `GET /applications` for one local application.
+  Future<void> applyServerState(
+    String id, {
+    required String serverId,
+    required String serverStatus,
+    required String updatesJson,
+    String? timelineJson,
+  }) =>
+      _db.update(
+        'tracked_applications',
+        {
+          'server_id': serverId,
+          'server_status': serverStatus,
+          'updates_json': updatesJson,
+          if (timelineJson != null) 'timeline_json': timelineJson,
         },
         where: 'id = ?',
         whereArgs: [id],

@@ -31,7 +31,12 @@ final class CalendarSyncFailure extends CalendarSyncResult {
 
 /// One calendar event we intend to write.
 class _EventSpec {
-  _EventSpec({required this.kind, required this.title, required this.start, required this.end, required this.anchor});
+  _EventSpec(
+      {required this.kind,
+      required this.title,
+      required this.start,
+      required this.end,
+      required this.anchor});
 
   final String kind; // 'deadline' | 'exam'
   final String title;
@@ -151,7 +156,12 @@ class CalendarSyncService {
         anchor: deadline,
       ));
     }
-    final exam = app.examAt;
+    // The date the user entered, else the one the exam watcher found. Watcher dates
+    // carry no time: assume a 9 AM reporting time until the admit card says otherwise.
+    final announced = app.effectiveExamAt;
+    final exam = announced == null || app.examAt != null
+        ? announced
+        : DateTime(announced.year, announced.month, announced.day, 9);
     if (exam != null && exam.isAfter(now)) {
       specs.add(_EventSpec(
         kind: 'exam',

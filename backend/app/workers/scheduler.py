@@ -39,9 +39,10 @@ from app.core.config import get_settings
 from app.db.session import SessionLocal, engine
 from app.services import auth_service
 from app.services.discovery_pipeline import follow_detail_pages, ingest_pending_pdfs, run_due_crawls
+from app.services.exam_watcher import dispatch_exam_updates, run_exam_watch
 from app.services.fcm_service import fcm_enabled, send_urgent_notification
 from app.services.http_fetcher import Fetcher
-from app.services.notifier import notify_admit_cards, notify_urgent_deadlines
+from app.services.notifier import notify_urgent_deadlines
 from app.services.seeds import ensure_seed_sources
 
 log = logging.getLogger("worker")
@@ -124,6 +125,9 @@ async def main() -> None:
         async with SessionLocal() as session:
             return await ingest_pending_pdfs(session, fetcher, settings)
 
+    async def watch_exams() -> str:
+        return await run_exam_watch(SessionLocal, fetcher, settings)
+
     async def purge() -> int:
         async with SessionLocal() as session:
             return await auth_service.purge_expired_tokens(session)
@@ -131,8 +135,8 @@ async def main() -> None:
     async def notify() -> str:
         async with SessionLocal() as session:
             deadlines = await notify_urgent_deadlines(session, send_urgent_notification, settings=settings)
-            admit = await notify_admit_cards(session, send_urgent_notification, settings=settings)
-        return f"{deadlines} deadline, {admit} admit-card pushes"
+            exams = await dispatch_exam_updates(session, send_urgent_notification, settings=settings)
+        return f"{deadlines} deadline, {exams} exam-update pushes"
 
     stop = asyncio.Event()
 
@@ -162,6 +166,14 @@ async def main() -> None:
         IntervalTrigger(minutes=settings.ingest_interval_minutes, jitter=60),
         id="ingest",
         next_run_time=now + timedelta(minutes=4),
+    )
+    scheduler.add_job(
+        # Each run only checks exams not checked for exam_watch_interval_hours, so a
+        # short tick spreads the per-exam checks out instead of bursting every 4 h.
+        _guarded("watch_exams", watch_exams),
+        IntervalTrigger(minutes=settings.scheduler_tick_minutes * 3, jitter=120),
+        id="watch_exams",
+        next_run_time=now + timedelta(minutes=3),
     )
     scheduler.add_job(_guarded("purge", purge), CronTrigger(hour=3, minute=17), id="purge")
     if fcm_enabled():

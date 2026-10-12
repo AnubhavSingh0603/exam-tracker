@@ -7,3 +7,8 @@ backend/downloads/
 mobile/android/key.properties
 mobile/android/app/*.jks
 *.jks
+
+# Python caches
+__pycache__/
+.pytest_cache/
+.ruff_cache/

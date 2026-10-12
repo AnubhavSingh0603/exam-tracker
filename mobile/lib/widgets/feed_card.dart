@@ -45,9 +45,19 @@ class FeedCard extends StatelessWidget {
                 quota: post.categoryQuotaSeats,
                 category: category,
               ),
+              if (post.matchKind == MatchKind.suggested)
+                TonePill(label: suggestionBadge(post.suggestionReasons), color: context.urgencyColors.warning)
+              else if (post.matchReasonLabel != null)
+                StatusPill(label: post.matchReasonLabel!),
               if (post.eligibleViaRelaxation) const StatusPill(label: 'Via age relaxation'),
             ],
           ),
+          // Why it's only a suggestion, e.g. "Needs 2 yr experience; you have 1.5."
+          for (final note in post.notes)
+            if (post.matchKind == MatchKind.suggested && note.contains('experience')) ...[
+              const SizedBox(height: 8),
+              Text(note, style: text.bodySmall),
+            ],
           const SizedBox(height: 10),
           Row(
             children: [

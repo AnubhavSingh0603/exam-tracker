@@ -114,7 +114,26 @@ class ApiClient {
     return _json(res);
   }
 
-  // --- Application status (stops server-side deadline pings) -----------------------
+  // --- Tracked applications (Phase 2: the server's exam watcher) --------------------
+
+  /// Every exam the user tracks, with the watcher's status, notices and timeline.
+  Future<List<Map<String, dynamic>>> listApplications() async {
+    final res = await _send('GET', '/api/v1/applications');
+    if (res.statusCode != 200) throw _error(res, 'Could not load tracked exams');
+    return [for (final a in jsonDecode(_text(res)) as List<dynamic>) a as Map<String, dynamic>];
+  }
+
+  /// Track an exam that isn't in the feed; the watcher follows [portalUrl].
+  Future<Map<String, dynamic>> addManualApplication({required String examName, String? portalUrl}) async {
+    final res = await _send('POST', '/api/v1/applications', body: {
+      'exam_name': examName,
+      if (portalUrl != null && portalUrl.isNotEmpty) 'official_portal_url': portalUrl,
+    });
+    if (res.statusCode != 201) throw _error(res, 'Could not add the exam');
+    return _json(res);
+  }
+
+  // --- Application status (stops deadline pings, starts the exam watcher) ----------
 
   Future<void> setApplicationStatus(String postDetailId, String status) async {
     final res = await _send('PUT', '/api/v1/applications/$postDetailId', body: {'status': status});

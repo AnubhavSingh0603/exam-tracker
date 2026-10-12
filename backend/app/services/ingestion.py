@@ -14,7 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.core.config import get_settings
-from app.models import JobPost, PostDetail, VacancyMatrix
+from app.models import ExamLifecycleTimeline, JobPost, PostDetail, VacancyMatrix
 from app.schemas.notification import ParsedNotification
 from app.services.pdf_parser import extract_notification
 
@@ -25,7 +25,10 @@ async def load_job(session: AsyncSession, where: ColumnElement[bool]) -> JobPost
     stmt = (
         select(JobPost)
         .where(where)
-        .options(selectinload(JobPost.posts).selectinload(PostDetail.vacancy))
+        .options(
+            selectinload(JobPost.posts).selectinload(PostDetail.vacancy),
+            selectinload(JobPost.timeline),
+        )
         .execution_options(populate_existing=True)
     )
     return await session.scalar(stmt)
@@ -62,10 +65,17 @@ def _to_orm(parsed: ParsedNotification, *, sha256: str, pdf_path: str, model: st
                 eligible_streams=p.eligible_streams,
                 qualification_text=p.qualification_text,
                 age_relaxation_overrides=p.age_relaxation_overrides,
+                allowed_degrees=p.allowed_degrees,
+                raw_eligibility_text=p.raw_eligibility_text,
+                min_qualification_level=p.min_qualification_level,
+                is_open_to_any_graduate=p.is_open_to_any_graduate,
+                is_open_to_any_post_graduate=p.is_open_to_any_post_graduate,
+                min_experience_years=p.min_experience_years,
                 vacancy=VacancyMatrix(**p.vacancy.model_dump()),
             )
             for p in parsed.posts
         ],
+        timeline=ExamLifecycleTimeline(**parsed.timeline.model_dump()),
     )
 
 

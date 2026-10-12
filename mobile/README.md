@@ -46,7 +46,7 @@ Get `USER_ID` by creating your profile once on the backend:
 
 ```bash
 curl -H "X-API-Key: $API_KEY" -H "Content-Type: application/json" \
-  -d '{"display_name":"Me","date_of_birth":"1998-06-15","category":"SC","streams":["B.Tech ECE"]}' \
+  -d '{"display_name":"Me","date_of_birth":"1998-06-15","category":"SC","qualification_tier":"UG","degree_title":"B_TECH"}' \
   https://tracker.example.com/api/v1/users
 ```
 

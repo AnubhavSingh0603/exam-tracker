@@ -63,6 +63,20 @@ def test_quiet_hours_wrap_midnight_in_ist(utc, quiet):
             True,
         ),
         ("IBPS PO Admit Card", "Probationary Engineer 2026", "Bharat Electronics Limited", False),
+        # The exam's acronym identifies it even when its name has no "(CHSL)".
+        (
+            "SSC CHSL Answer Key 2026",
+            "Combined Higher Secondary Level Examination 2026",
+            "Staff Selection Commission",
+            True,
+        ),
+        # Generic words shared by two exam names don't identify either one.
+        (
+            "SSC Combined Graduate Level Tier-I Result",
+            "Combined Higher Secondary Level Examination 2026",
+            "Staff Selection Commission",
+            False,
+        ),
     ],
 )
 def test_alert_matching(alert, exam, org, match):

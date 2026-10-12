@@ -39,6 +39,22 @@ class ExtractedPost(BaseModel):
         "Use 'Any Graduate' or 'B.E./B.Tech Any Branch' for open eligibility."
     )
     qualification_summary: str | None = Field(description="One-sentence plain-English qualification summary")
+    eligibility_text: str | None = Field(
+        description="The post's essential-qualification paragraph copied verbatim (English), max ~800 chars"
+    )
+    min_qualification_level: str | None = Field(
+        description="Lowest qualification that makes a candidate eligible. One of: "
+        "MATRIC (10th), INTERMEDIATE (12th), DIPLOMA, UG (bachelor's), PG (master's), PHD"
+    )
+    open_to_any_graduate: bool | None = Field(
+        description="true if a bachelor's degree in ANY discipline is enough ('Any Graduate')"
+    )
+    open_to_any_post_graduate: bool | None = Field(
+        description="true if a master's degree in ANY discipline is enough ('Any Post Graduate')"
+    )
+    min_experience_years: float | None = Field(
+        description="Minimum post-qualification work experience in years; 0 or null if none required"
+    )
     vacancies: ExtractedVacancy
     age_relaxations: list[ExtractedRelaxation] = Field(
         description="Only relaxations specific to this post that differ from the notification-wide list"
@@ -55,5 +71,12 @@ class NotificationExtraction(BaseModel):
     application_end_time: str | None = Field(description="Closing time on the last date, 24h HH:MM")
     exam_date: str | None = Field(description="Tentative exam date, YYYY-MM-DD")
     age_as_on_date: str | None = Field(description="Date on which age is reckoned, YYYY-MM-DD")
+    fee_payment_last_date: str | None = Field(description="Last date for fee payment, YYYY-MM-DD")
+    correction_window_start_date: str | None = Field(description="Application edit/correction window opens")
+    correction_window_end_date: str | None = Field(description="Application edit/correction window closes")
+    admit_card_release_date: str | None = Field(description="Tentative admit card / hall ticket date")
+    exam_end_date: str | None = Field(description="Last day of a multi-day exam window, YYYY-MM-DD")
+    answer_key_date: str | None = Field(description="Tentative answer key release date")
+    result_date: str | None = Field(description="Tentative result declaration date")
     general_age_relaxations: list[ExtractedRelaxation]
     posts: list[ExtractedPost]

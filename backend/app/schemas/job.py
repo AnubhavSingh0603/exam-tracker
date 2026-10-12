@@ -3,6 +3,9 @@ from datetime import date, datetime
 
 from pydantic import BaseModel, ConfigDict
 
+from app.domain.qualifications import QualificationLevel
+from app.schemas.lifecycle import LifecycleTimelineOut
+
 
 class _ORM(BaseModel):
     model_config = ConfigDict(from_attributes=True)
@@ -28,6 +31,12 @@ class PostDetailOut(_ORM):
     age_as_on: date | None
     eligible_streams: list[str]
     qualification_text: str | None
+    allowed_degrees: list[str]
+    raw_eligibility_text: str | None
+    min_qualification_level: QualificationLevel | None
+    is_open_to_any_graduate: bool
+    is_open_to_any_post_graduate: bool
+    min_experience_years: float
     age_relaxation_overrides: dict[str, int]
     vacancy: VacancyOut | None
 
@@ -44,6 +53,7 @@ class JobPostOut(_ORM):
     needs_review: bool
     review_notes: list[str]
     posts: list[PostDetailOut]
+    timeline: LifecycleTimelineOut | None = None  # filled by the route (needs job dates too)
 
 
 class UploadResult(BaseModel):
