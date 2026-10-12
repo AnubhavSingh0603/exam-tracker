@@ -58,7 +58,7 @@ class _TrackedApplicationCardState extends ConsumerState<TrackedApplicationCard>
         if (!mounted) return;
         showCalmSnack(context,
             'Added $eventsWritten event${eventsWritten == 1 ? '' : 's'} with reminders at 7 days, 2 days and 3 hrs.');
-      case CalendarSyncFailure failure:
+      case final CalendarSyncFailure failure:
         setState(() => _sync = app.calendarSynced ? _SyncState.done : _SyncState.idle);
         showCalmSnack(context, failure.userMessage);
     }

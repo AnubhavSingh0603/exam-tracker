@@ -97,7 +97,7 @@ class DashboardScreen extends ConsumerWidget {
                 switch (step) {
                   null when trackedAsync.isLoading => const _HeroPlaceholder(),
                   null => const CalmEmptyHero(),
-                  NextStep s => HeroCard(
+                  final NextStep s => HeroCard(
                       step: s,
                       now: now,
                       onPrimary: () => openExternal(context, s.actionUrl),
@@ -139,7 +139,7 @@ class DashboardScreen extends ConsumerWidget {
                         key: ValueKey('tracked-${app.id}'),
                         direction: DismissDirection.endToStart,
                         background: const SizedBox.shrink(),
-                        secondaryBackground: _SwipeBackground(
+                        secondaryBackground: const _SwipeBackground(
                           color: AppPalette.textMuted,
                           icon: Icons.archive_rounded,
                           label: 'Archive',

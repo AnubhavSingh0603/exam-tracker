@@ -1,12 +1,12 @@
-// App module build script. Written for the Kotlin-DSL template that `flutter create`
-// generates (Flutter 3.29+). `flutter create .` keeps this file because it already exists.
+// App module build script, following the template of Flutter 3.47 / AGP 9 / Kotlin 2.4.
+// (No `kotlin-android` plugin line and `kotlin { compilerOptions }` instead of `kotlinOptions`:
+// both are required by this toolchain.)
 import com.android.build.api.variant.FilterConfiguration
 import java.io.FileInputStream
 import java.util.Properties
 
 plugins {
     id("com.android.application")
-    id("kotlin-android")
     // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
     id("dev.flutter.flutter-gradle-plugin")
 }
@@ -34,14 +34,10 @@ android {
     ndkVersion = flutter.ndkVersion
 
     compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_11
-        targetCompatibility = JavaVersion.VERSION_11
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
         // Required by ota_update 7.x.
         isCoreLibraryDesugaringEnabled = true
-    }
-
-    kotlinOptions {
-        jvmTarget = JavaVersion.VERSION_11.toString()
     }
 
     defaultConfig {
@@ -83,12 +79,19 @@ android {
     }
 }
 
+kotlin {
+    compilerOptions {
+        jvmTarget = org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17
+    }
+}
+
 // --- Version codes -------------------------------------------------------------
 // versionCode = <pubspec build number> × 10 + ABI digit (universal = 0).
-// Every newer release therefore outranks every older one, whether the phone has the
-// universal or a split APK, so the updater can never trigger a "downgrade" refusal.
-// The app recovers the release number with versionCode ~/ 10 (update_service.dart).
-// Registered after the Flutter plugin, so this runs after Flutter's own per-ABI codes.
+// Flutter's own split scheme (1000 × ABI + code) would make a universal APK look
+// *older* than a split one. With ×10, every newer release outranks every older one,
+// whether the phone has the universal or a split APK, so the updater never hits a
+// "downgrade" refusal. The app recovers the release number with versionCode ~/ 10
+// (update_service.dart). Registered after the Flutter plugin, so this runs last.
 // Verify with: apkanalyzer manifest version-code <apk>
 val abiDigit = mapOf("armeabi-v7a" to 1, "arm64-v8a" to 2, "x86_64" to 3)
 androidComponents {
@@ -101,7 +104,7 @@ androidComponents {
 }
 
 dependencies {
-    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")
+    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.5")
 }
 
 flutter {

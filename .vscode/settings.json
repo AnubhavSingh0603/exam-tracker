@@ -1,0 +1,14 @@
+{
+  // Don't index Flutter/Gradle build output: thousands of files, slows VS Code down.
+  "files.watcherExclude": {
+    "**/mobile/build/**": true,
+    "**/mobile/.dart_tool/**": true,
+    "**/mobile/android/.gradle/**": true
+  },
+  "search.exclude": {
+    "**/mobile/build": true,
+    "**/mobile/.dart_tool": true
+  },
+  "dart.lineLength": 110,
+  "files.eol": "\n"
+}

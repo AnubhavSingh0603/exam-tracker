@@ -1,0 +1,31 @@
+{
+  // Pick one in the Run and Debug panel (Ctrl+Shift+D), choose your phone in the
+  // status bar (bottom right), then press F5.
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "App: offline (no server)",
+      "type": "dart",
+      "request": "launch",
+      "cwd": "mobile",
+      "program": "lib/main.dart",
+      "args": ["--flavor", "direct"]
+    },
+    {
+      "name": "App: local server (env/dev.json)",
+      "type": "dart",
+      "request": "launch",
+      "cwd": "mobile",
+      "program": "lib/main.dart",
+      "args": ["--flavor", "direct", "--dart-define-from-file=env/dev.json"]
+    },
+    {
+      "name": "App: staging (env/staging.json)",
+      "type": "dart",
+      "request": "launch",
+      "cwd": "mobile",
+      "program": "lib/main.dart",
+      "args": ["--flavor", "direct", "--dart-define-from-file=env/staging.json"]
+    }
+  ]
+}

@@ -1,0 +1,10 @@
+{
+  // VS Code offers to install these when you open the folder.
+  "recommendations": [
+    "Dart-Code.flutter",
+    "Dart-Code.dart-code",
+    "ms-python.python",
+    "charliermarsh.ruff",
+    "ms-azuretools.vscode-docker"
+  ]
+}
