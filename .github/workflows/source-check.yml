@@ -1,0 +1,76 @@
+# One-off diagnostic: which job sources can GitHub's (US) servers reach?
+# Run it by hand: Actions -> "Source check" -> Run workflow. Results are pushed to the
+# `diagnostics` branch (source-check.md / .json) so they can be read without logging in.
+
+name: Source check
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  check:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Probe sources
+        run: |
+          BOT="ExamTracker/0.3 (personal exam tracker)"
+          WEB="Mozilla/5.0 (Linux; Android 14; SM-S918B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0 Mobile Safari/537.36"
+          mkdir -p out
+          urls=(
+            # current seeds
+            "https://www.sarkariresult.com/latestjob/"
+            "https://www.sarkariresult.com/admitcard/"
+            "https://www.freejobalert.com/latest-notifications/"
+            "https://ssc.gov.in/api/general-website/portal/notice-boards?page=1&limit=5&contentType=notice-boards&key=createdAt&order=DESC&isAttachment=true&language=english"
+            "https://upsc.gov.in/"
+            "https://www.ibps.in/"
+            # candidates
+            "https://www.sarkariresult.com/"
+            "https://sarkariresult.com.cm/latest-jobs/"
+            "https://sarkariresult.com.cm/admit-card/"
+            "https://sarkariresult.com.cm/answer-key/"
+            "https://sarkariresult.com.cm/result/"
+            "https://www.upsc.gov.in/recruitment/recruitment-advertisement"
+            "https://upsconline.nic.in/"
+            "https://nta.ac.in/"
+            "https://www.rrbcdg.gov.in/"
+            "https://rrbapply.gov.in/"
+            "https://www.freejobalert.com/admit-card/"
+            "https://t.me/s/sarkari_result"
+            "https://t.me/s/sarkariresult_com"
+            "https://t.me/s/freejobalert"
+          )
+          echo "| URL | as bot | as browser | server | ms |" > out/source-check.md
+          echo "|---|---|---|---|---|" >> out/source-check.md
+          echo "[" > out/source-check.json
+          first=1
+          for u in "${urls[@]}"; do
+            bot=$(curl -s -o /dev/null -w "%{http_code}" -L --max-time 25 -A "$BOT" "$u" || true)
+            res=$(curl -s -o body.html -w "%{http_code} %{time_total}" -L --max-time 25 -A "$WEB" -D headers.txt "$u" || true)
+            web=${res%% *}; secs=${res##* }
+            ms=$(python3 -c "print(int(float('${secs:-0}')*1000))")
+            server=$(grep -i -m1 '^server:' headers.txt 2>/dev/null | cut -d' ' -f2- | tr -d '\r' || true)
+            size=$(stat -c %s body.html 2>/dev/null || echo 0)
+            echo "| $u | $bot | $web (${size} B) | ${server:-?} | $ms |" >> out/source-check.md
+            [ $first -eq 1 ] || echo "," >> out/source-check.json; first=0
+            printf '{"url":"%s","bot":"%s","browser":"%s","bytes":%s,"server":"%s","ms":%s}' "$u" "$bot" "$web" "$size" "${server:-}" "$ms" >> out/source-check.json
+            rm -f body.html headers.txt
+          done
+          echo "]" >> out/source-check.json
+          echo "Checked from: $(curl -s --max-time 10 https://ipinfo.io/json | python3 -c 'import json,sys; d=json.load(sys.stdin); print(d.get("city"), d.get("region"), d.get("country"), d.get("org"))' 2>/dev/null)" >> out/source-check.md
+          cat out/source-check.md | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: Publish to the diagnostics branch
+        working-directory: out
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          git init -q -b diagnostics
+          git config user.name "exam-tracker diagnostics"
+          git config user.email "actions@users.noreply.github.com"
+          git add -A && git commit -qm "Source check $(date -u +%FT%TZ)"
+          git push -qf "https://x-access-token:${GH_TOKEN}@github.com/${{ github.repository }}.git" diagnostics
