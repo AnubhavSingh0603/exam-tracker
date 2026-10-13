@@ -133,7 +133,6 @@ class _JobCardState extends ConsumerState<JobCard> {
     final category = ref.watch(feedProvider).dataOrNull?.category;
     final post = item.bestPost;
     final pay = item.monthlyPay;
-    final reduceMotion = MediaQuery.of(context).disableAnimations;
     final jobCategory = JobCategory.fromWire(item.category);
 
     return AppCard(
@@ -173,13 +172,7 @@ class _JobCardState extends ConsumerState<JobCard> {
               for (final reason in widget.ranked.reasons) StatusPill(label: reason),
             ],
           ),
-          AnimatedSize(
-            duration: reduceMotion ? Duration.zero : const Duration(milliseconds: 200),
-            curve: Curves.easeOutCubic,
-            alignment: Alignment.topCenter,
-            child:
-                _open ? JobDetails(item: item, category: category) : const SizedBox(width: double.infinity),
-          ),
+          Fold(child: _open ? JobDetails(item: item, category: category) : null),
           const SizedBox(height: 12),
           Row(
             children: [

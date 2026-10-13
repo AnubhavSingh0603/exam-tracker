@@ -186,3 +186,25 @@ class PromptCard extends StatelessWidget {
     );
   }
 }
+
+/// Shows [child] (null = folded), animating the height. With "Remove animations"
+/// on, it switches instantly: AnimatedSize with a zero duration breaks mid-layout
+/// and leaves the card stretched and blank.
+class Fold extends StatelessWidget {
+  const Fold({super.key, required this.child, this.duration = const Duration(milliseconds: 200)});
+
+  final Widget? child;
+  final Duration duration;
+
+  @override
+  Widget build(BuildContext context) {
+    final content = child ?? const SizedBox(width: double.infinity);
+    if (MediaQuery.of(context).disableAnimations) return content;
+    return AnimatedSize(
+      duration: duration,
+      curve: Curves.easeOutCubic,
+      alignment: Alignment.topCenter,
+      child: content,
+    );
+  }
+}

@@ -11,6 +11,7 @@ import '../services/calendar_sync_service.dart';
 import '../theme/app_theme.dart';
 import '../utils/system_actions.dart';
 import 'app_card.dart';
+import 'common.dart';
 import 'credential_drawer.dart';
 import 'exam_lifecycle_stepper.dart';
 import 'pills.dart';
@@ -156,7 +157,6 @@ class _TrackedApplicationCardState extends ConsumerState<TrackedApplicationCard>
     final text = Theme.of(context).textTheme;
     final colors = context.urgencyColors;
     final focus = app.focusDate;
-    final reduceMotion = MediaQuery.of(context).disableAnimations;
 
     return AppCard(
       accent: colors.of(urgencyFor(focus, widget.now)),
@@ -249,10 +249,7 @@ class _TrackedApplicationCardState extends ConsumerState<TrackedApplicationCard>
                     ),
                   ],
                 ),
-                AnimatedSize(
-                  duration: reduceMotion ? Duration.zero : const Duration(milliseconds: 200),
-                  curve: Curves.easeOutCubic,
-                  alignment: Alignment.topCenter,
+                Fold(
                   child: switch (_panel) {
                     _Panel.timeline => Padding(
                         padding: const EdgeInsets.only(top: 14),
@@ -262,7 +259,7 @@ class _TrackedApplicationCardState extends ConsumerState<TrackedApplicationCard>
                         padding: const EdgeInsets.only(top: 12),
                         child: CredentialDrawer(app: app),
                       ),
-                    _Panel.none => const SizedBox(width: double.infinity),
+                    _Panel.none => null,
                   },
                 ),
               ],

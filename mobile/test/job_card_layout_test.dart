@@ -85,6 +85,9 @@ void main() {
       overrides: [feedProvider.overrideWith(() => _FakeFeed(snapshot))],
       child: MaterialApp(
         theme: AppTheme.darkPastel(),
+        // Phones with "Remove animations" on: the fold used to break only there.
+        builder: (context, child) =>
+            MediaQuery(data: MediaQuery.of(context).copyWith(disableAnimations: true), child: child!),
         home: Scaffold(
           body: SingleChildScrollView(
             padding: const EdgeInsets.all(16),
@@ -99,11 +102,22 @@ void main() {
     expect(find.text('Railway'), findsOneWidget);
     expect(find.text('₹35,400/month'), findsOneWidget);
 
+    final folded = tester.getSize(find.byType(JobCard)).height;
     await tester.tap(find.text('Details'));
     await tester.pumpAndSettle();
     expect(find.textContaining('Level 6 of 7th CPC'), findsNWidgets(2)); // one per post
     expect(find.textContaining('(+3 for OBC)'), findsNWidgets(2));
     expect(find.text('Show all'), findsNWidgets(2));
     expect(tester.takeException(), isNull); // no overflow
+
+    // "Less" folds the card back to its old height (it used to stay stretched, blank).
+    await tester.tap(find.text('Show all').first);
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Less'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Less'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('Level 6 of 7th CPC'), findsNothing);
+    expect(tester.getSize(find.byType(JobCard)).height, folded);
   });
 }

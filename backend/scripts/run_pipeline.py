@@ -122,9 +122,11 @@ async def reopen_open_jobs(now: datetime) -> int:
             select(DiscoveredItem).where(
                 DiscoveredItem.kind == ItemKind.DETAIL_PAGE,
                 DiscoveredItem.status == ItemStatus.DONE,
-                DiscoveredItem.error.is_(None),
                 DiscoveredItem.created_at >= now - REOPEN_UNDATED,
                 ~exists().where(child.page_url == DiscoveredItem.url),
+                # A page read before the parsers learnt its layout ("no notification link")
+                # gets a few more looks.
+                or_(DiscoveredItem.error.is_(None), DiscoveredItem.attempts < MAX_ATTEMPTS),
             )
         )
         for page in pages:

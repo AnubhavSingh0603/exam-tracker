@@ -7,6 +7,7 @@ import '../domain/urgency.dart';
 import '../models/user_profile.dart';
 import '../providers/account_providers.dart';
 import '../theme/app_theme.dart';
+import '../widgets/common.dart';
 
 /// Opens the profile form as a near-full-height sheet. Returns true when saved.
 /// Never a trap: it can always be dismissed, and the dashboard offers it again.
@@ -131,7 +132,6 @@ class _ProfileSetupScreenState extends ConsumerState<ProfileSetupScreen> {
     final today = DateTime.now();
     final dob = _dob;
     final dobError = dob == null ? null : validateDob(dob, today);
-    final reduceMotion = MediaQuery.of(context).disableAnimations;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -202,17 +202,14 @@ class _ProfileSetupScreenState extends ConsumerState<ProfileSetupScreen> {
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     _DegreePicker(value: _degree, onChanged: (code) => setState(() => _degree = code)),
-                    AnimatedSize(
-                      duration: reduceMotion ? Duration.zero : const Duration(milliseconds: 220),
-                      curve: Curves.easeOutCubic,
-                      alignment: Alignment.topCenter,
+                    Fold(
                       child: _isOthers
                           ? _OthersFields(
                               controller: _othersText,
                               tier: _othersTier,
                               onTier: (t) => setState(() => _othersTier = t),
                             )
-                          : const SizedBox(width: double.infinity),
+                          : null,
                     ),
                   ],
                 ),
