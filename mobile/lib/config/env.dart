@@ -10,7 +10,10 @@ abstract final class Env {
   /// The *Web application* OAuth client ID from Google Cloud ("serverClientId").
   /// A public identifier, not a secret. Empty = this build has no Google sign-in,
   /// so the app runs without backup.
-  static const googleServerClientId = String.fromEnvironment('GOOGLE_SERVER_CLIENT_ID');
+  static const googleServerClientId = String.fromEnvironment(
+    'GOOGLE_SERVER_CLIENT_ID',
+    defaultValue: '586998998046-3r460abp9kps2kdo3vhdlmitqkdk92oq.apps.googleusercontent.com',
+  );
 
   static bool get canSignIn => googleServerClientId.isNotEmpty;
 
