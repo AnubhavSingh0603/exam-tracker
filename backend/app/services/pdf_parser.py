@@ -53,6 +53,7 @@ from app.schemas.extraction import (
     NumberedExtraction,
 )
 from app.schemas.notification import ParsedNotification, ParsedPost, ParsedTimeline, ParsedVacancy
+from app.services import mistral_reader
 from app.services.pdf_slicer import PageSelection, select_relevant_pages
 from app.services.streams import infer_requirement
 
@@ -91,7 +92,11 @@ def usage() -> dict[str, object]:
 
 
 def quota_left() -> bool:
-    return bool(_models_to_try(None))
+    return bool(_models_to_try(None)) or (mistral_reader.configured() and not _mistral_out)
+
+
+# Mistral said "too many requests" this run: leave the rest for the next run.
+_mistral_out = False
 
 
 def _error_blob(exc: genai_errors.APIError) -> str:
@@ -236,12 +241,14 @@ async def extract_notifications(
     *,
     client: genai.Client | None = None,
     model: str | None = None,
+    mistral_client: httpx.AsyncClient | None = None,
 ) -> list[ParsedNotification | ExtractionError]:
     """Reads several PDFs (``str``: a job page's text) with as few Gemini requests as possible: up to
     ``gemini_batch_docs`` PDFs (``gemini_batch_pages`` pages) share one request.
 
-    One outcome per PDF, in order: the notification, or that PDF's error.
-    ``GeminiQuotaExhausted`` marks the PDFs left unread because every model ran out."""
+    One outcome per PDF, in order: the notification, or that PDF's error. Once every
+    Gemini model is out of quota, Mistral (if configured) reads what's left;
+    ``GeminiQuotaExhausted`` marks the PDFs nobody could read this run."""
     settings = get_settings()
     client = client or _default_client()
     outcomes: dict[int, ParsedNotification | ExtractionError] = {}
@@ -254,7 +261,36 @@ async def extract_notifications(
     for group in _group(ready, max_docs=settings.gemini_batch_docs, max_pages=settings.gemini_batch_pages):
         results = await _read_group(client, [doc for _, doc in group], model)
         outcomes.update((i, result) for (i, _), result in zip(group, results, strict=True))
+    if mistral_reader.configured():
+        for i, doc in ready:
+            if isinstance(outcomes[i], GeminiQuotaExhausted):
+                outcomes[i] = await _read_with_mistral(doc, mistral_client)
     return [outcomes[i] for i in range(len(pdfs))]
+
+
+async def _read_with_mistral(
+    doc: _Doc, client: httpx.AsyncClient | None
+) -> ParsedNotification | ExtractionError:
+    """Anything Mistral can't do goes back in the queue for Gemini tomorrow."""
+    global _mistral_out
+    if _mistral_out:
+        return GeminiQuotaExhausted("Gemini and Mistral are both out of quota for this run.")
+    text = (
+        doc.data if isinstance(doc.data, str) else await asyncio.to_thread(mistral_reader.pdf_text, doc.data)
+    )
+    if not text:
+        return GeminiQuotaExhausted("A scanned PDF (no text layer): waits for Gemini.")
+    try:
+        raw, model = await mistral_reader.extract(text, system=SYSTEM_INSTRUCTION, client=client)
+        request_counts[model] += 1
+        return _to_notification(raw, doc, model)
+    except mistral_reader.MistralOutOfQuota as exc:
+        log.warning("Mistral out for this run: %s", exc)
+        _mistral_out = True
+        return GeminiQuotaExhausted(str(exc))
+    except (mistral_reader.MistralError, ExtractionError) as exc:
+        log.warning("Mistral couldn't read a PDF (%s); it waits for Gemini", exc)
+        return GeminiQuotaExhausted(f"Mistral: {exc}")
 
 
 async def _prepare(data: bytes | str) -> _Doc:

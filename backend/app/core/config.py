@@ -38,6 +38,10 @@ class Settings(BaseSettings):
     # Several notifications share one request while they fit these limits.
     gemini_batch_docs: int = 3
     gemini_batch_pages: int = 48
+    # Backup reader once every Gemini model is out of free quota (Mistral's free tier).
+    mistral_api_key: SecretStr = SecretStr("")
+    mistral_models: str = "mistral-medium-latest,mistral-small-latest"
+    mistral_timeout_s: int = 120
 
     # --- Uploads ------------------------------------------------------------
     upload_dir: Path = Path("/data/notifications")

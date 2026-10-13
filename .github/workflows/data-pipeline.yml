@@ -12,7 +12,8 @@
 # some Indian ISPs (Jio, at times) block raw.githubusercontent.com.
 #
 # Needs one repository secret: GEMINI_API_KEY (Google AI Studio). Without it the run
-# still crawls and publishes; new PDFs wait until the key is added.
+# still crawls and publishes; new PDFs wait until the key is added. Optional second
+# secret: MISTRAL_API_KEY, read once Gemini's free quota is used up for the day.
 #
 # Run it by hand: Actions -> "Data pipeline" -> Run workflow.
 
@@ -51,6 +52,9 @@ jobs:
       # Used in turn when the main model is out of daily quota. Each model has its own free
       # quota (about 20 requests a day), and each request reads up to 3 notifications.
       GEMINI_FALLBACK_MODELS: ${{ vars.GEMINI_FALLBACK_MODELS || 'gemini-3.6-flash,gemini-3.5-flash-lite,gemini-3.1-flash-lite' }}
+      # Optional backup once every Gemini model is out of quota (Mistral's free tier).
+      MISTRAL_API_KEY: ${{ secrets.MISTRAL_API_KEY || '' }}
+      MISTRAL_MODELS: ${{ vars.MISTRAL_MODELS || 'mistral-medium-latest,mistral-small-latest' }}
       UPLOAD_DIR: /tmp/notifications
       # The server-only settings still need values to load the shared config.
       API_KEY: not-used-in-pipeline

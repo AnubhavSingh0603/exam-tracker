@@ -83,8 +83,11 @@ _CATEGORIES: tuple[tuple[str, re.Pattern[str]], ...] = tuple(
     (name, re.compile(pattern, re.IGNORECASE))
     for name, pattern in (
         ("railway", r"\b(?:rrb|rrc|railway|ntpc graduate|ntpc ug|metro rail|ircon|rites|konkan)\b"),
-        ("bank", r"\b(?:bank|banking|crp|ibps|sbi|rbi|nabard|sidbi|exim|lic|insurance|niacl|gic|sebi|"
-         r"ippb)\b"),
+        (
+            "bank",
+            r"\b(?:bank|banking|crp|ibps|sbi|rbi|nabard|sidbi|exim|lic|insurance|niacl|gic|sebi|"
+            r"ippb)\b",
+        ),
         ("ssc", r"\b(?:ssc|staff selection commission)\b"),
         ("upsc", r"\b(?:upsc|union public service commission)\b"),
         (

@@ -183,6 +183,7 @@ def _fresh_model_state(monkeypatch):
     monkeypatch.setattr(settings, "gemini_max_attempts", 3)
     monkeypatch.setattr(settings, "gemini_batch_docs", 3)
     monkeypatch.setattr(settings, "gemini_batch_pages", 48)
+    monkeypatch.setattr(pdf_parser, "_mistral_out", False)
     yield
     pdf_parser._unusable_models.clear()
     pdf_parser.request_counts.clear()
@@ -344,3 +345,80 @@ async def test_a_job_page_text_is_read_when_the_pdf_was_out_of_reach():
     out = await extract_notifications([page], client=client)
     assert out[0].exam_name == "RRB NTPC"
     assert page in seen[0]  # sent as text, not as a PDF part
+
+
+# -----------------------------------------------------------------------------
+# Mistral: the backup once every Gemini model is out of quota
+# -----------------------------------------------------------------------------
+
+
+def _text_pdf(name: str) -> bytes:
+    """A PDF with a real text layer (enough for Mistral to read)."""
+    doc = pymupdf.open()
+    page = doc.new_page()
+    page.insert_textbox(page.rect + (40, 40, -40, -40), f"{name}\n" + "Recruitment notification. " * 60)
+    data = doc.tobytes()
+    doc.close()
+    return data
+
+
+def _mistral(handler) -> httpx.AsyncClient:
+    return httpx.AsyncClient(transport=httpx.MockTransport(handler))
+
+
+def _mistral_answer(body: dict) -> httpx.Response:
+    return httpx.Response(200, json={"choices": [{"message": {"content": json.dumps(body)}}]})
+
+
+@pytest.fixture
+def mistral_on(monkeypatch):
+    from pydantic import SecretStr
+
+    monkeypatch.setattr(get_settings(), "mistral_api_key", SecretStr("test-mistral"))
+    monkeypatch.setattr(get_settings(), "mistral_models", "mistral-medium-latest")
+
+
+async def test_mistral_reads_what_gemini_had_no_quota_left_for(mistral_on):
+    day = _api_error(429, LIVE_DAILY_MESSAGE)
+    gemini = FakeClient({"main-model": day, "lite-model": day})
+    sent: list[dict] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        body = json.loads(request.content)
+        sent.append(body)
+        assert request.headers["Authorization"] == "Bearer test-mistral"
+        answer = {
+            k: v for k, v in _extraction("Read by Mistral").items() if k != "exam_date"
+        }  # a key left out
+        return _mistral_answer(answer)
+
+    out = await extract_notifications([_text_pdf("Alpha")], client=gemini, mistral_client=_mistral(handler))
+    assert out[0].exam_name == "Read by Mistral"
+    assert out[0].extraction_model == "mistral-medium-latest"
+    assert sent[0]["response_format"] == {"type": "json_object"}
+    assert "Alpha" in sent[0]["messages"][1]["content"]  # the PDF's text, not the PDF
+    assert pdf_parser.quota_left()  # Mistral can still read more this run
+    assert pdf_parser.usage()["requests"]["mistral-medium-latest"] == 1
+
+
+async def test_when_mistral_is_rate_limited_too_the_pdf_waits_for_the_next_run(mistral_on, monkeypatch):
+    monkeypatch.setattr("app.services.mistral_reader.wait_exponential_jitter", lambda **_: lambda _state: 0)
+    day = _api_error(429, LIVE_DAILY_MESSAGE)
+    gemini = FakeClient({"main-model": day, "lite-model": day})
+    client = _mistral(lambda _request: httpx.Response(429, json={"message": "Requests rate limit exceeded"}))
+    out = await extract_notifications(
+        [_text_pdf("Alpha"), _text_pdf("Bravo")], client=gemini, mistral_client=client
+    )
+    assert all(isinstance(o, GeminiQuotaExhausted) for o in out)
+    assert not pdf_parser.quota_left()
+
+
+async def test_a_scanned_pdf_waits_for_gemini_instead_of_going_to_mistral(mistral_on):
+    day = _api_error(429, LIVE_DAILY_MESSAGE)
+    gemini = FakeClient({"main-model": day, "lite-model": day})
+
+    def handler(_request):  # never called: there is no text to send
+        raise AssertionError("Mistral was asked to read an empty page")
+
+    out = await extract_notifications([_pdf("x")], client=gemini, mistral_client=_mistral(handler))
+    assert isinstance(out[0], GeminiQuotaExhausted)
