@@ -48,11 +48,18 @@ final List<(Milestone, RegExp)> milestonePatterns = [
   ),
   (
     Milestone.answerKey,
-    _phrases([r'answer keys?', r'(?:provisional|tentative) keys?', r'response sheets?', r'objection\w*', r'question papers?']),
+    _phrases([
+      r'answer keys?',
+      r'(?:provisional|tentative) keys?',
+      r'response sheets?',
+      r'objection\w*',
+      r'question papers?'
+    ]),
   ),
   (
     Milestone.admitCard,
-    _phrases([r'e-?admit cards?', r'admit cards?', r'hall tickets?', r'call letters?', 'admission certificate']),
+    _phrases(
+        [r'e-?admit cards?', r'admit cards?', r'hall tickets?', r'call letters?', 'admission certificate']),
   ),
   (
     Milestone.examSchedule,
@@ -116,14 +123,60 @@ Set<String> _years(String text) =>
 // --- Alert ↔ exam matching (alert_matching.py) -------------------------------------
 
 const _stopwords = {
-  'the', 'of', 'and', 'for', 'in', 'to', 'a', 'an', '&', 'admit', 'card', 'cards', 'call', 'letter',
-  'hall', 'ticket', 'exam', 'examination', 'recruitment', 'online', 'form', 'notification', 'post',
-  'posts', 'various', 'out', 'released', 'download', 'phase', 'tier', 'stage', 'limited', 'ltd',
-  'india', 'indian', 'government', 'govt', 'advt', 'no',
+  'the',
+  'of',
+  'and',
+  'for',
+  'in',
+  'to',
+  'a',
+  'an',
+  '&',
+  'admit',
+  'card',
+  'cards',
+  'call',
+  'letter',
+  'hall',
+  'ticket',
+  'exam',
+  'examination',
+  'recruitment',
+  'online',
+  'form',
+  'notification',
+  'post',
+  'posts',
+  'various',
+  'out',
+  'released',
+  'download',
+  'phase',
+  'tier',
+  'stage',
+  'limited',
+  'ltd',
+  'india',
+  'indian',
+  'government',
+  'govt',
+  'advt',
+  'no',
 };
 const _weak = {
-  'combined', 'level', 'graduate', 'graduates', 'higher', 'secondary', 'senior', 'junior', 'general',
-  'common', 'entrance', 'test', 'selection',
+  'combined',
+  'level',
+  'graduate',
+  'graduates',
+  'higher',
+  'secondary',
+  'senior',
+  'junior',
+  'general',
+  'common',
+  'entrance',
+  'test',
+  'selection',
 };
 final _yearToken = RegExp(r'^(19|20)\d\d$');
 
@@ -137,8 +190,12 @@ Set<String> _tokens(String text) => {
 Set<String> _acronyms(String name) {
   final words = [for (final m in RegExp('[A-Za-z]+').allMatches(name)) m.group(0)!];
   final full = words.map((w) => w[0]).join().toLowerCase();
-  final short = words.where((w) => !_stopwords.contains(w.toLowerCase())).map((w) => w[0]).join().toLowerCase();
-  return {for (final a in [full, short]) if (a.length > 1) a};
+  final short =
+      words.where((w) => !_stopwords.contains(w.toLowerCase())).map((w) => w[0]).join().toLowerCase();
+  return {
+    for (final a in [full, short])
+      if (a.length > 1) a
+  };
 }
 
 /// True when the notice names this exam, not just the same organisation.
@@ -187,7 +244,8 @@ final _tracking = RegExp(r'^(utm_|fbclid|gclid|ref$|amp$)');
 String canonicalUrl(String url) {
   final u = Uri.tryParse(url.trim());
   if (u == null || !u.hasScheme) return url.trim();
-  final query = u.query.split('&').where((kv) => kv.isNotEmpty && !_tracking.hasMatch(kv.split('=').first)).join('&');
+  final query =
+      u.query.split('&').where((kv) => kv.isNotEmpty && !_tracking.hasMatch(kv.split('=').first)).join('&');
   return Uri(
     scheme: u.scheme.toLowerCase(),
     host: u.host.toLowerCase(),
@@ -311,11 +369,20 @@ Map<String, dynamic> fillTimeline(Map<String, dynamic> timeline, DetectedUpdate 
 /// Notification text per milestone (matches the backend's push texts).
 (String, String) notificationText(Milestone m, String examName, String noticeTitle) {
   final (title, body) = switch (m) {
-    Milestone.admitCard => ('🎫 Admit card out: $examName', 'Download it now — portals often close it before the exam.'),
+    Milestone.admitCard => (
+        '🎫 Admit card out: $examName',
+        'Download it now — portals often close it before the exam.'
+      ),
     Milestone.examSchedule => ('📅 Exam date update: $examName', noticeTitle),
     Milestone.postponed => ('⚠️ Exam rescheduled: $examName', noticeTitle),
-    Milestone.answerKey => ('📝 Answer key released: $examName', 'Check your answers; objections have a deadline.'),
+    Milestone.answerKey => (
+        '📝 Answer key released: $examName',
+        'Check your answers; objections have a deadline.'
+      ),
     Milestone.result => ('🏁 Result declared: $examName', noticeTitle),
   };
-  return (title.length > 120 ? title.substring(0, 120) : title, body.length > 240 ? body.substring(0, 240) : body);
+  return (
+    title.length > 120 ? title.substring(0, 120) : title,
+    body.length > 240 ? body.substring(0, 240) : body
+  );
 }

@@ -7,7 +7,9 @@ import 'package:flutter_test/flutter_test.dart';
 void main() {
   final now = DateTime.utc(2026, 10, 13, 6);
 
-  Map<String, dynamic> post(String id, {List<String> degrees = const ['B_TECH'], double exp = 0, int ur = 20}) => {
+  Map<String, dynamic> post(String id,
+          {List<String> degrees = const ['B_TECH'], double exp = 0, int ur = 20}) =>
+      {
         'id': id,
         'post_name': 'Post $id',
         'base_max_age': 30,
@@ -49,7 +51,9 @@ void main() {
       job('later', const Duration(days: 20), [post('a')]),
       job('closed', const Duration(hours: -1), [post('b')]),
       job('soon', const Duration(days: 2), [post('c', ur: 5), post('d', ur: 40)]),
-      job('other-degree', const Duration(days: 1), [post('e', degrees: ['B_COM'])]),
+      job('other-degree', const Duration(days: 1), [
+        post('e', degrees: ['B_COM'])
+      ]),
     ]);
     expect(snap.items.map((i) => i.jobPostId), ['soon', 'later']);
     expect(snap.items.first.bestPost.postDetailId, 'd'); // most reachable seats
@@ -72,7 +76,9 @@ void main() {
   });
 
   test('applied posts are hidden and the Paralysis Shield caps at 5', () {
-    final jobs = [for (var i = 0; i < 8; i++) job('j$i', Duration(days: i + 1), [post('p$i')])];
+    final jobs = [
+      for (var i = 0; i < 8; i++) job('j$i', Duration(days: i + 1), [post('p$i')])
+    ];
     final snap = build(jobs, applied: {'p0'});
     expect(snap.items.length, 5);
     expect(snap.items.first.jobPostId, 'j1');

@@ -115,8 +115,10 @@ const _stop = {'in', 'of', 'the', 'and', 'degree', 'course', 'with', 'from', 'a'
 const _generic = {'bachelor', 'bachelors', 'master', 'masters', 'diploma', 'graduate', 'graduation', 'post'};
 final _splitAlternatives = RegExp(r'[/,;|]| or ', caseSensitive: false);
 
-List<String> _contentWords(String text) =>
-    [for (final w in normaliseText(text).split(' ')) if (w.isNotEmpty && !_stop.contains(w)) w];
+List<String> _contentWords(String text) => [
+      for (final w in normaliseText(text).split(' '))
+        if (w.isNotEmpty && !_stop.contains(w)) w
+    ];
 
 /// 'CA/CS' -> ['ca', 'cs']; 'B Des (Fashion)' -> ['b des fashion', 'bdes'].
 List<String> customTerms(String customText) {
@@ -173,7 +175,8 @@ _Qual _evaluateQualification(UserProfileData p, PublishedPost post) {
   final pg = _rank('PG');
 
   if (needRank != null && tier < needRank) {
-    return _Qual(false, null, 'Needs ${_levelLabel(need!)}; your highest is ${_levelLabel(p.qualificationTier)}.');
+    return _Qual(
+        false, null, 'Needs ${_levelLabel(need!)}; your highest is ${_levelLabel(p.qualificationTier)}.');
   }
   if (anyPg && tier >= pg) return const _Qual(true, MatchReason.universalPostGraduate);
   if (anyGrad && tier >= ug) return const _Qual(true, MatchReason.universalGraduate);
@@ -212,7 +215,8 @@ String _d(DateTime d) => '${d.day.toString().padLeft(2, '0')} ${_months[d.month 
 
 /// Throws [ArgumentError] when the date of birth is after the post's cut-off
 /// (corrupt data: the post is skipped).
-EligibilityResult evaluateEligibility(UserProfileData p, PublishedPost post, {bool strictUrMigration = true}) {
+EligibilityResult evaluateEligibility(UserProfileData p, PublishedPost post,
+    {bool strictUrMigration = true}) {
   final reasons = <String>[];
   var ageOk = true;
   var viaRelaxation = false;

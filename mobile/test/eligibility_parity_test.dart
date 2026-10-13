@@ -28,7 +28,8 @@ void main() {
   for (final raw in cases) {
     final c = raw as Map<String, dynamic>;
     test(c['name'] as String, () {
-      final post = PublishedPost.fromJson({'id': 'p', 'post_name': 'Post', ...c['post'] as Map<String, dynamic>});
+      final post =
+          PublishedPost.fromJson({'id': 'p', 'post_name': 'Post', ...c['post'] as Map<String, dynamic>});
       final r = evaluateEligibility(profile(c['profile'] as Map<String, dynamic>), post);
       final expect_ = c['expect'] as Map<String, dynamic>;
       final actual = {
@@ -44,7 +45,8 @@ void main() {
         'total_reachable_seats': r.totalReachableSeats,
         'experience_gap_years': r.experienceGapYears,
       };
-      expect(actual, {...expect_, 'experience_gap_years': (expect_['experience_gap_years'] as num).toDouble()});
+      expect(
+          actual, {...expect_, 'experience_gap_years': (expect_['experience_gap_years'] as num).toDouble()});
     });
   }
 

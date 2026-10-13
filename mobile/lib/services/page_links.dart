@@ -13,7 +13,10 @@ List<PageLink> extractPageLinks(String html, String baseUrl) {
   for (final a in doc.querySelectorAll('a[href]')) {
     final href = (a.attributes['href'] ?? '').trim();
     final lower = href.toLowerCase();
-    if (href.isEmpty || lower.startsWith('#') || lower.startsWith('javascript:') || lower.startsWith('mailto:') ||
+    if (href.isEmpty ||
+        lower.startsWith('#') ||
+        lower.startsWith('javascript:') ||
+        lower.startsWith('mailto:') ||
         lower.startsWith('tel:')) {
       continue;
     }

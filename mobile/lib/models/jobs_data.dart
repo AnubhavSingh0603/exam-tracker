@@ -99,7 +99,9 @@ class PublishedPost {
         minAge: _int(j['min_age']),
         baseMaxAge: _int(j['base_max_age']),
         ageAsOn: _date(j['age_as_on']),
-        eligibleStreams: [for (final s in (j['eligible_streams'] as List<dynamic>? ?? const [])) s.toString()],
+        eligibleStreams: [
+          for (final s in (j['eligible_streams'] as List<dynamic>? ?? const [])) s.toString()
+        ],
         qualificationText: j['qualification_text'] as String?,
         rawEligibilityText: j['raw_eligibility_text'] as String?,
         allowedDegrees: [for (final s in (j['allowed_degrees'] as List<dynamic>? ?? const [])) s.toString()],
@@ -157,7 +159,8 @@ class PublishedJob {
         examDate: _date(j['exam_date']),
         timelineJson: j['timeline'] as Map<String, dynamic>?,
         posts: [
-          for (final p in (j['posts'] as List<dynamic>? ?? const [])) PublishedPost.fromJson(p as Map<String, dynamic>),
+          for (final p in (j['posts'] as List<dynamic>? ?? const []))
+            PublishedPost.fromJson(p as Map<String, dynamic>),
         ],
       );
 }
@@ -175,11 +178,15 @@ class JobsFile {
   factory JobsFile.fromJson(Map<String, dynamic> j) {
     final schema = _int(j['schema']) ?? 0;
     if (schema > kJobsSchemaVersion) {
-      throw FormatException('jobs.json schema $schema is newer than this app ($kJobsSchemaVersion). Update the app.');
+      throw FormatException(
+          'jobs.json schema $schema is newer than this app ($kJobsSchemaVersion). Update the app.');
     }
     return JobsFile(
       generatedAt: _dateTime(j['generated_at']) ?? DateTime(1970),
-      jobs: [for (final job in (j['jobs'] as List<dynamic>? ?? const [])) PublishedJob.fromJson(job as Map<String, dynamic>)],
+      jobs: [
+        for (final job in (j['jobs'] as List<dynamic>? ?? const []))
+          PublishedJob.fromJson(job as Map<String, dynamic>)
+      ],
     );
   }
 }

@@ -49,14 +49,24 @@ void main() {
     });
 
     test('alert matching, incl. acronyms and generic words', () {
-      expect(alertMatchesExam('SSC CGL Admit Card 2026', 'Combined Graduate Level Examination 2026 (CGL)', ssc), isTrue);
-      expect(alertMatchesExam('SSC CHSL Admit Card 2026', 'Combined Graduate Level Examination 2026 (CGL)', ssc), isFalse);
-      expect(alertMatchesExam('SSC CHSL Answer Key 2026', 'Combined Higher Secondary Level Examination 2026', ssc), isTrue);
       expect(
-        alertMatchesExam('SSC Combined Graduate Level Tier-I Result', 'Combined Higher Secondary Level Examination 2026', ssc),
+          alertMatchesExam('SSC CGL Admit Card 2026', 'Combined Graduate Level Examination 2026 (CGL)', ssc),
+          isTrue);
+      expect(
+          alertMatchesExam('SSC CHSL Admit Card 2026', 'Combined Graduate Level Examination 2026 (CGL)', ssc),
+          isFalse);
+      expect(
+          alertMatchesExam(
+              'SSC CHSL Answer Key 2026', 'Combined Higher Secondary Level Examination 2026', ssc),
+          isTrue);
+      expect(
+        alertMatchesExam('SSC Combined Graduate Level Tier-I Result',
+            'Combined Higher Secondary Level Examination 2026', ssc),
         isFalse,
       );
-      expect(alertMatchesExam('RRB NTPC Admit Card 2026 Out', 'RRB NTPC Graduate Level 2026', 'Railway Recruitment Board'),
+      expect(
+          alertMatchesExam(
+              'RRB NTPC Admit Card 2026 Out', 'RRB NTPC Graduate Level 2026', 'Railway Recruitment Board'),
           isTrue);
       expect(
         alertMatchesExam('Railway RRB Section Controller Admit Card 2026', 'RRB NTPC Graduate Level 2026',
@@ -96,7 +106,9 @@ void main() {
       examSpecificPage: false,
       knownUrls: const {},
     );
-    expect([for (final u in found) (u.milestone, u.url.split('/').last)], [
+    expect([
+      for (final u in found) (u.milestone, u.url.split('/').last)
+    ], [
       (Milestone.admitCard, 'cgl26-admit.pdf'),
       (Milestone.examSchedule, 'cgl26-city.pdf'),
     ]);
@@ -108,7 +120,8 @@ void main() {
     final now = DateTime(2026, 12, 1, 10);
 
     setUpAll(sqfliteFfiInit);
-    setUp(() async => db = await DatabaseService.open(factory: databaseFactoryFfi, path: inMemoryDatabasePath));
+    setUp(
+        () async => db = await DatabaseService.open(factory: databaseFactoryFfi, path: inMemoryDatabasePath));
     tearDown(() => db.close());
 
     MockClient fakeWeb({int portalStatus = 200}) => MockClient((req) async {
@@ -117,14 +130,19 @@ void main() {
               jsonEncode({
                 'schema': 1,
                 'notices': [
-                  {'title': 'SSC CGL 2026 Answer Key Out', 'url': 'https://agg.example/cgl-2026-answer-key', 'milestone': 'answer_key'},
+                  {
+                    'title': 'SSC CGL 2026 Answer Key Out',
+                    'url': 'https://agg.example/cgl-2026-answer-key',
+                    'milestone': 'answer_key'
+                  },
                   {'title': 'IBPS PO Result', 'url': 'https://agg.example/ibps', 'milestone': 'result'},
                 ],
               }),
               200,
             );
           }
-          if (req.url.host == 'ssc.gov.in') return http.Response(noticeBoard, portalStatus, headers: {'content-type': 'text/html'});
+          if (req.url.host == 'ssc.gov.in')
+            return http.Response(noticeBoard, portalStatus, headers: {'content-type': 'text/html'});
           return http.Response('', 404);
         });
 

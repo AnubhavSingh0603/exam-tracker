@@ -84,7 +84,8 @@ class ExamWatchService {
   }
 
   Future<WatchFinding> _record(TrackedApplication app, List<DetectedUpdate> detected, DateTime at) async {
-    final status = advanceStatus(app.watcherStatus ?? TrackerStatus.applied, detected.map((d) => d.milestone));
+    final status =
+        advanceStatus(app.watcherStatus ?? TrackerStatus.applied, detected.map((d) => d.milestone));
     final updates = [
       for (final d in detected)
         ExamUpdate(
@@ -130,11 +131,13 @@ class ExamWatchService {
   Future<List<PageLink>?> _pageLinks(String url) async {
     try {
       final uri = Uri.parse(url.contains('://') ? url : 'https://$url');
-      final res = await _client.get(uri, headers: {'User-Agent': _userAgent, 'Accept': 'text/html,*/*'}).timeout(_timeout);
+      final res = await _client
+          .get(uri, headers: {'User-Agent': _userAgent, 'Accept': 'text/html,*/*'}).timeout(_timeout);
       if (res.statusCode != 200 || res.bodyBytes.length > _maxPageBytes) return null;
       final type = res.headers['content-type'] ?? '';
       if (type.contains('pdf')) return const [];
-      return extractPageLinks(utf8.decode(res.bodyBytes, allowMalformed: true), res.request?.url.toString() ?? url);
+      return extractPageLinks(
+          utf8.decode(res.bodyBytes, allowMalformed: true), res.request?.url.toString() ?? url);
     } catch (_) {
       return null;
     }

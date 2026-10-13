@@ -33,7 +33,8 @@ abstract final class NotificationService {
   }
 
   /// [key] keeps one notification per exam + milestone (a newer one replaces it).
-  static Future<void> show({required String key, required String title, required String body, String? url}) async {
+  static Future<void> show(
+      {required String key, required String title, required String body, String? url}) async {
     await init();
     await _plugin.show(
       key.hashCode & 0x7fffffff,

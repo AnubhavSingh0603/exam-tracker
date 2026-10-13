@@ -50,9 +50,8 @@ class JobsRepository {
     try {
       final prefs = await SharedPreferences.getInstance();
       final etag = cache == null ? null : prefs.getString(_etagKey);
-      final res = await _client
-          .get(_url, headers: {'Accept': 'application/json', if (etag != null) 'If-None-Match': etag})
-          .timeout(_timeout);
+      final res = await _client.get(_url,
+          headers: {'Accept': 'application/json', if (etag != null) 'If-None-Match': etag}).timeout(_timeout);
       final now = DateTime.now();
       if (res.statusCode == 304 && cache != null) {
         await _db.touchFeedCache(now);
