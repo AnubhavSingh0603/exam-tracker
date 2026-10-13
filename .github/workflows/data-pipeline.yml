@@ -54,7 +54,7 @@ jobs:
       GEMINI_FALLBACK_MODELS: ${{ vars.GEMINI_FALLBACK_MODELS || 'gemini-3.6-flash,gemini-3.5-flash-lite,gemini-3.1-flash-lite' }}
       # Optional backup once every Gemini model is out of quota (Mistral's free tier).
       MISTRAL_API_KEY: ${{ secrets.MISTRAL_API_KEY || '' }}
-      MISTRAL_MODELS: ${{ vars.MISTRAL_MODELS || 'mistral-medium-latest,mistral-small-latest' }}
+      MISTRAL_MODELS: ${{ vars.MISTRAL_MODELS || 'ministral-14b-latest,ministral-8b-latest,mistral-small-latest' }}
       UPLOAD_DIR: /tmp/notifications
       # The server-only settings still need values to load the shared config.
       API_KEY: not-used-in-pipeline

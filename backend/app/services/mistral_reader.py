@@ -40,8 +40,13 @@ def configured() -> bool:
     return bool(key) and key.lower() not in {"unset", "none", "changeme"}
 
 
+# Models that refused this run (no free access, or out of quota): not asked again.
+_refused: set[str] = set()
+
+
 def models() -> list[str]:
-    return [m.strip() for m in get_settings().mistral_models.split(",") if m.strip()]
+    names = [m.strip() for m in get_settings().mistral_models.split(",") if m.strip()]
+    return [m for m in names if m not in _refused]
 
 
 def pdf_text(data: bytes) -> str:
@@ -118,11 +123,12 @@ async def extract(
                         response.raise_for_status()
             except httpx.HTTPStatusError as exc:
                 code = exc.response.status_code
-                if code == 429:
-                    raise MistralOutOfQuota(f"Mistral rate limit ({model})") from exc
                 last = MistralError(f"Mistral API error {code} ({model}): {exc.response.text[:200]}")
-                if code in {400, 404}:
-                    continue  # unknown model name: try the next one
+                if code in {400, 403, 404, 429}:
+                    # Unknown model, not in the free plan, or out of quota: the next model may work.
+                    log.warning("Mistral model %s refused (%s); skipped for this run", model, code)
+                    _refused.add(model)
+                    continue
                 raise last from exc
             except httpx.TransportError as exc:
                 raise MistralOutOfQuota(f"Mistral did not answer ({type(exc).__name__})") from exc
@@ -134,7 +140,8 @@ async def extract(
                 ), model
             except (KeyError, IndexError, TypeError, ValueError, ValidationError) as exc:
                 raise MistralError(f"Mistral's answer didn't fit the schema: {exc}") from exc
-        raise last or MistralError("No Mistral model configured")
+        # Every model refused: nothing more to read with Mistral this run.
+        raise MistralOutOfQuota(str(last) if last else "No Mistral model available")
     finally:
         if own:
             await http.aclose()

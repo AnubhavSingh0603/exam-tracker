@@ -375,7 +375,13 @@ def mistral_on(monkeypatch):
     from pydantic import SecretStr
 
     monkeypatch.setattr(get_settings(), "mistral_api_key", SecretStr("test-mistral"))
-    monkeypatch.setattr(get_settings(), "mistral_models", "mistral-medium-latest")
+    monkeypatch.setattr(get_settings(), "mistral_models", "ministral-14b-latest,mistral-small-latest")
+    monkeypatch.setattr("app.services.mistral_reader.wait_exponential_jitter", lambda **_: lambda _state: 0)
+    from app.services import mistral_reader
+
+    mistral_reader._refused.clear()
+    yield
+    mistral_reader._refused.clear()
 
 
 async def test_mistral_reads_what_gemini_had_no_quota_left_for(mistral_on):
@@ -387,6 +393,8 @@ async def test_mistral_reads_what_gemini_had_no_quota_left_for(mistral_on):
         body = json.loads(request.content)
         sent.append(body)
         assert request.headers["Authorization"] == "Bearer test-mistral"
+        if body["model"] == "ministral-14b-latest":  # not in this account's free plan
+            return httpx.Response(429, json={"message": "Rate limit exceeded", "code": "1300"})
         answer = {
             k: v for k, v in _extraction("Read by Mistral").items() if k != "exam_date"
         }  # a key left out
@@ -394,11 +402,16 @@ async def test_mistral_reads_what_gemini_had_no_quota_left_for(mistral_on):
 
     out = await extract_notifications([_text_pdf("Alpha")], client=gemini, mistral_client=_mistral(handler))
     assert out[0].exam_name == "Read by Mistral"
-    assert out[0].extraction_model == "mistral-medium-latest"
-    assert sent[0]["response_format"] == {"type": "json_object"}
-    assert "Alpha" in sent[0]["messages"][1]["content"]  # the PDF's text, not the PDF
+    assert out[0].extraction_model == "mistral-small-latest"  # after the first model refused
+    assert sent[-1]["response_format"] == {"type": "json_object"}
+    assert "Alpha" in sent[-1]["messages"][1]["content"]  # the PDF's text, not the PDF
     assert pdf_parser.quota_left()  # Mistral can still read more this run
-    assert pdf_parser.usage()["requests"]["mistral-medium-latest"] == 1
+    assert pdf_parser.usage()["requests"]["mistral-small-latest"] == 1
+
+    # The refusing model isn't asked again in this run.
+    sent.clear()
+    await extract_notifications([_text_pdf("Bravo")], client=gemini, mistral_client=_mistral(handler))
+    assert [b["model"] for b in sent] == ["mistral-small-latest"]
 
 
 async def test_when_mistral_is_rate_limited_too_the_pdf_waits_for_the_next_run(mistral_on, monkeypatch):

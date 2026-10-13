@@ -40,7 +40,7 @@ class Settings(BaseSettings):
     gemini_batch_pages: int = 48
     # Backup reader once every Gemini model is out of free quota (Mistral's free tier).
     mistral_api_key: SecretStr = SecretStr("")
-    mistral_models: str = "mistral-medium-latest,mistral-small-latest"
+    mistral_models: str = "ministral-14b-latest,ministral-8b-latest,mistral-small-latest"
     mistral_timeout_s: int = 120
 
     # --- Uploads ------------------------------------------------------------
