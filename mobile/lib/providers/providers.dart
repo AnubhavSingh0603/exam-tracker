@@ -11,6 +11,7 @@ import '../models/tracked_application.dart';
 import '../models/vault_entry.dart';
 import '../services/api_client.dart';
 import '../services/calendar_sync_service.dart';
+import '../services/background_watch.dart';
 import '../services/database_service.dart';
 import '../services/jobs_repository.dart';
 import '../services/secret_store.dart';
@@ -105,29 +106,15 @@ class TrackedAppsNotifier extends AsyncNotifier<List<TrackedApplication>> {
     final timeline = item.timelineJson;
     if (timeline != null) await _db.saveTimeline(item.jobPostId, jsonEncode(timeline));
     await reload();
-    _syncStatus(app.id, ApplicationStatus.applied);
     return app;
   }
 
-  /// Track an exam applied to outside the feed. With the backend it gets the
-  /// exam watcher; offline it is a plain local reminder.
+  /// Track an exam applied to outside the feed. The phone's exam watcher follows
+  /// [portalUrl] (if given) and the job-site notices that name the exam.
   Future<TrackedApplication> addManual({required String examName, String? portalUrl}) async {
     final now = DateTime.now();
-    String id = 'local-${now.microsecondsSinceEpoch}';
-    String? serverId;
-    final api = _signedInApi();
-    if (api != null) {
-      try {
-        final created = await api.addManualApplication(examName: examName, portalUrl: portalUrl);
-        id = serverId = created['id'] as String;
-      } on ApiException {
-        rethrow; // e.g. invalid link: let the form say so
-      } catch (_) {
-        // Offline: keep it local; it can be re-added once online.
-      }
-    }
     final app = TrackedApplication(
-      id: id,
+      id: 'local-${now.microsecondsSinceEpoch}',
       examName: examName,
       postName: examName,
       status: ApplicationStatus.applied,
@@ -136,95 +123,21 @@ class TrackedAppsNotifier extends AsyncNotifier<List<TrackedApplication>> {
       updatedAt: now,
     );
     await _db.upsertApplication(app);
-    if (serverId != null) {
-      await _db.applyServerState(id, serverId: serverId, serverStatus: 'applied', updatesJson: '[]');
-    }
     await reload();
+    unawaited(checkForUpdates(force: true)); // its admit card may already be out
     return app;
   }
 
-  ApiClient? _signedInApi() {
-    final api = ref.read(apiClientProvider);
-    if (api == null || api.usesApiKey) return null; // dev key mode has no per-user applications
-    if (ref.read(authProvider).dataOrNull == null) return null;
-    return api;
-  }
-
-  /// Pulls the exam watcher's findings (status, notices, timeline) into SQLite,
-  /// and updates the phone calendar where an announced exam date changed.
-  /// Best-effort: offline is fine, the last synced state stays on screen.
-  Future<void> syncFromServer() async {
-    final api = _signedInApi();
-    if (api == null) return;
-    final List<Map<String, dynamic>> remote;
+  /// Runs the exam watcher now (pull-to-refresh, app start). Throttled to once per
+  /// 30 minutes unless [force]d; the background task runs it every ~4 hours.
+  Future<int> checkForUpdates({bool force = false}) async {
     try {
-      remote = await api.listApplications();
+      final found = await runWatchAndNotify(_db, force: force);
+      if (found > 0) await reload();
+      return found;
     } catch (_) {
-      return;
+      return 0; // offline: the next run catches up
     }
-    final before = {for (final a in await _db.listApplications()) a.id: a};
-    final byServerId = {
-      for (final a in before.values)
-        if (a.serverId != null) a.serverId!: a.id
-    };
-    for (final r in remote) {
-      final serverId = r['id'] as String;
-      final postId = r['post_detail_id'] as String?;
-      var localId = byServerId[serverId] ?? (postId != null && before.containsKey(postId) ? postId : null);
-      if (localId == null) {
-        // Tracked on another device (or before reinstalling): add it here too.
-        localId = postId ?? serverId;
-        final now = DateTime.now();
-        await _db.upsertApplication(TrackedApplication(
-          id: localId,
-          examName: r['exam_name'] as String,
-          postName: r['exam_name'] as String,
-          organization: r['organization'] as String?,
-          status: ApplicationStatus.applied,
-          portalUrl: r['official_portal_url'] as String?,
-          jobPostId: r['job_id'] as String?,
-          createdAt: now,
-          updatedAt: now,
-        ));
-      }
-      final timeline = r['timeline'];
-      await _db.applyServerState(
-        localId,
-        serverId: serverId,
-        serverStatus: r['status'] as String? ?? 'applied',
-        updatesJson: jsonEncode(r['updates'] ?? const []),
-        timelineJson: timeline == null ? null : jsonEncode(timeline),
-      );
-    }
-    await reload();
-
-    // Keep calendar events honest when the watcher found a (new) exam date.
-    final calendar = ref.read(calendarSyncProvider);
-    for (final app in state.dataOrNull ?? const <TrackedApplication>[]) {
-      final old = before[app.id];
-      if (app.calendarSynced && old != null && old.effectiveExamAt != app.effectiveExamAt) {
-        try {
-          await calendar.syncExamToCalendar(app);
-        } catch (_) {}
-      }
-    }
-  }
-
-  /// Best-effort: lets the server stop deadline pings and start admit-card matching.
-  /// Local SQLite stays the source of truth, so failures (offline) are ignored.
-  void _syncStatus(String postDetailId, ApplicationStatus? status) {
-    final api = ref.read(apiClientProvider);
-    if (api == null || api.usesApiKey) return;
-    if (ref.read(authProvider).dataOrNull == null) return;
-    unawaited(() async {
-      try {
-        if (status == null) {
-          await api.deleteApplication(postDetailId);
-        } else {
-          await api.setApplicationStatus(postDetailId, status.wire);
-        }
-      } catch (_) {}
-    }());
   }
 
   /// Undo for swipe-right: forget it entirely so it returns to the feed.
@@ -237,7 +150,6 @@ class TrackedAppsNotifier extends AsyncNotifier<List<TrackedApplication>> {
     await _db.deleteApplication(id);
     await _secrets.deletePassword(id);
     await reload();
-    _syncStatus(id, null);
   }
 
   Future<void> saveCredentials(String appId, CredentialsInput input) async {
@@ -252,7 +164,6 @@ class TrackedAppsNotifier extends AsyncNotifier<List<TrackedApplication>> {
       {DateTime? examAt, String? admitCardUrl}) async {
     await _db.updateStatus(id, status, examAt: examAt, admitCardUrl: admitCardUrl);
     await reload();
-    _syncStatus(id, status);
   }
 
   /// Optimistic so the Dismissible leaves the tree in the same frame.

@@ -89,24 +89,22 @@ void main() {
       updatedAt: now,
     ));
     await db.saveTimeline('job-1', '{"job_post_id":"job-1","exam_start":"2026-12-14"}');
-    await db.applyServerState(
+    await db.saveWatcherState(
       'b',
-      serverId: 'srv-b',
-      serverStatus: 'admit_card_live',
+      status: 'admit_card_live',
       updatesJson: '[{"milestone":"admit_card","title":"Admit Card","url":"https://x"}]',
     );
 
     final b = (await db.getApplication('b'))!;
     expect(b.timeline?.examStart, DateTime(2026, 12, 14));
     expect(b.effectiveExamAt, DateTime(2026, 12, 14));
-    expect(b.serverId, 'srv-b');
     expect(b.displayStatus, TrackerStatus.admitCardLive);
     expect(b.latestUpdate('admit_card')?.url, 'https://x');
 
     // A local edit (upsert) must not wipe what the server sent.
     await db.upsertApplication(b.copyWith(status: ApplicationStatus.examScheduled));
     final again = (await db.getApplication('b'))!;
-    expect(again.serverStatus, TrackerStatus.admitCardLive);
+    expect(again.watcherStatus, TrackerStatus.admitCardLive);
     expect(again.timeline, isNotNull);
     expect((await db.getApplication('a'))!.timeline, isNull);
   });
@@ -148,9 +146,9 @@ void main() {
     final upgraded = await DatabaseService.open(factory: databaseFactoryFfi, path: path);
     final old = (await upgraded.getApplication('old'))!;
     expect(old.examName, 'RRB NTPC');
-    expect(old.serverStatus, isNull);
+    expect(old.watcherStatus, isNull);
     expect((await upgraded.getVault('old'))!.rollNumber, 'R-42');
-    await upgraded.applyServerState('old', serverId: 's', serverStatus: 'result_declared', updatesJson: '[]');
+    await upgraded.saveWatcherState('old', status: 'result_declared', updatesJson: '[]');
     expect((await upgraded.getApplication('old'))!.displayStatus, TrackerStatus.resultDeclared);
     await upgraded.close();
     await dir.delete(recursive: true);

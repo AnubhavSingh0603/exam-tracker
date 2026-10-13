@@ -9,6 +9,8 @@
     <!-- Android 13+: requested once on the dashboard (permission_handler) for FCM
          deadline / admit-card pings. Below 13 it's granted at install. -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- One-time "Allow background checks" (exam watcher every ~4 h). -->
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
 
     <!-- In-app updater (direct flavour). Removed again in src/store/AndroidManifest.xml. -->
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />

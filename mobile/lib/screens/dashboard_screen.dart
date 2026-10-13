@@ -14,6 +14,7 @@ import '../models/tracked_application.dart';
 import '../providers/account_providers.dart';
 import '../providers/providers.dart';
 import '../services/auth_service.dart';
+import '../services/notification_service.dart';
 import '../theme/app_theme.dart';
 import '../utils/system_actions.dart';
 import '../widgets/add_exam_sheet.dart';
@@ -85,7 +86,11 @@ class DashboardScreen extends ConsumerWidget {
       child: Scaffold(
         body: SafeArea(
           child: RefreshIndicator(
-            onRefresh: () => ref.read(feedProvider.notifier).refresh(),
+            // New jobs from the data feed + the exam watcher for tracked exams.
+            onRefresh: () => Future.wait<Object?>([
+              ref.read(feedProvider.notifier).refresh(),
+              ref.read(trackedAppsProvider.notifier).checkForUpdates(force: true),
+            ]),
             child: CustomScrollView(
               physics: const AlwaysScrollableScrollPhysics(),
               slivers: [
@@ -296,7 +301,11 @@ class _AccountGateState extends ConsumerState<_AccountGate> {
         });
       }
     }, fireImmediately: true);
-    WidgetsBinding.instance.addPostFrameCallback((_) => _askNotificationsOnce());
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _askNotificationsOnce();
+      unawaited(NotificationService.openLaunchLink()); // a notification tap opened the app
+      unawaited(ref.read(trackedAppsProvider.notifier).checkForUpdates()); // throttled
+    });
   }
 
   /// FCM pings need this on Android 13+. Asked once; the system dialog is the explanation.
@@ -316,6 +325,28 @@ class _AccountGateState extends ConsumerState<_AccountGate> {
 
   @override
   Widget build(BuildContext context) => widget.child;
+}
+
+/// The exam watcher runs every ~4 h in the background; battery optimisation
+/// (aggressive on Samsung/Xiaomi) can postpone it for many hours. One system
+/// dialog turns that off for this app only.
+Future<void> _allowBackgroundChecks(BuildContext context) async {
+  try {
+    if (await Permission.ignoreBatteryOptimizations.isGranted) {
+      if (context.mounted) showCalmSnack(context, 'Background checks are already allowed.');
+      return;
+    }
+    final status = await Permission.ignoreBatteryOptimizations.request();
+    if (!context.mounted) return;
+    showCalmSnack(
+      context,
+      status.isGranted
+          ? 'Done. Exam updates will be checked every few hours.'
+          : 'Not changed. Updates still arrive, just less often.',
+    );
+  } catch (_) {
+    if (context.mounted) showCalmSnack(context, 'This phone doesn’t offer that setting.');
+  }
 }
 
 class _AccountButton extends ConsumerWidget {
@@ -342,10 +373,12 @@ class _AccountButton extends ConsumerWidget {
       tooltip: 'Account',
       onSelected: (v) async {
         if (v == 'profile') await _openProfile(context, ref);
+        if (v == 'background' && context.mounted) await _allowBackgroundChecks(context);
         if (v == 'signout') await ref.read(authProvider.notifier).signOut();
       },
       itemBuilder: (_) => [
         const PopupMenuItem(value: 'profile', child: Text('Edit profile')),
+        const PopupMenuItem(value: 'background', child: Text('Allow background checks')),
         if (session != null) const PopupMenuItem(value: 'signout', child: Text('Sign out')),
       ],
       child: Padding(

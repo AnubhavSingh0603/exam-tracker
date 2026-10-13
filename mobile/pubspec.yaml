@@ -39,6 +39,9 @@ dependencies:
   package_info_plus: ^8.1.0
   device_info_plus: ^11.1.0
   shared_preferences: ^2.3.3
+  workmanager: ^0.10.10
+  flutter_local_notifications: ^18.0.1
+  html: ^0.15.7
 
 dev_dependencies:
   flutter_test:

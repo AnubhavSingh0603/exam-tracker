@@ -6,7 +6,9 @@ import 'package:timezone/data/latest.dart' as tzdata;
 import 'providers/providers.dart';
 import 'screens/dashboard_screen.dart';
 import 'services/auth_service.dart';
+import 'services/background_watch.dart';
 import 'services/database_service.dart';
+import 'services/notification_service.dart';
 import 'theme/app_theme.dart';
 import 'widgets/update_gate.dart';
 
@@ -18,6 +20,12 @@ Future<void> main() async {
     await AuthService.initialize(); // Google sign-in; no-op if this build isn't configured for it
   } catch (_) {
     // A misconfigured OAuth client must not stop the offline app from starting.
+  }
+  try {
+    await NotificationService.init();
+    await scheduleBackgroundWatch(); // exam watcher every ~4 h, even with the app closed
+  } catch (_) {
+    // Notifications/background work are extras: the app must still start without them.
   }
 
   SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(

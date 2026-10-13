@@ -276,9 +276,9 @@ class _MilestoneBadge extends StatelessWidget {
     };
 
     final subtitle = switch (status) {
-      TrackerStatus.applied => app.serverId != null
-          ? 'Watching the exam portal for admit card, dates and results'
-          : 'Not watched yet: it syncs when you’re signed in and online',
+      TrackerStatus.applied => (app.portalUrl ?? '').isNotEmpty
+          ? 'Watching its portal and job sites for admit card, dates and results'
+          : 'Watching job sites for admit card, dates and results',
       TrackerStatus.examScheduled when exam != null => stageDateLabel(exam, t?.examEnd),
       _ => null,
     };

@@ -233,6 +233,9 @@ def _fill_timeline(t: ExamLifecycleTimeline, u: DetectedUpdate, seen_on: date) -
         case ExamMilestone.ADMIT_CARD:
             t.admit_card_url = u.url[:1000]
             t.admit_card_release = t.admit_card_release or seen_on
+            # "Admit Card (Exam on 14.12.2026)": the printed date is the exam date, if none is known yet.
+            if u.event_date is not None and u.event_date >= seen_on and t.exam_start is None:
+                t.exam_start = u.event_date
         case ExamMilestone.EXAM_SCHEDULE | ExamMilestone.POSTPONED:
             if "city" in text or "intimation" in text:
                 t.exam_city_slip_url = u.url[:1000]

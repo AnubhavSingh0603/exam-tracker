@@ -19,7 +19,7 @@ void main() {
         createdAt: now,
         updatedAt: now,
         timeline: timeline,
-        serverStatus: server,
+        watcherStatus: server,
       );
 
   ExamTimeline timeline(Map<String, dynamic> fields) =>

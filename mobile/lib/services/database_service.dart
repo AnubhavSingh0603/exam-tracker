@@ -175,19 +175,18 @@ class DatabaseService {
         whereArgs: [jobPostId],
       );
 
-  /// Exam-watcher state from `GET /applications` for one local application.
-  Future<void> applyServerState(
+  /// What the exam watcher found for one application: status, notices, timeline.
+  /// (`server_status` is a column name kept from the server era.)
+  Future<void> saveWatcherState(
     String id, {
-    required String serverId,
-    required String serverStatus,
+    required String status,
     required String updatesJson,
     String? timelineJson,
   }) =>
       _db.update(
         'tracked_applications',
         {
-          'server_id': serverId,
-          'server_status': serverStatus,
+          'server_status': status,
           'updates_json': updatesJson,
           if (timelineJson != null) 'timeline_json': timelineJson,
         },
