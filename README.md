@@ -1,6 +1,11 @@
-# Exam Tracker
+# ApplyTrack
 
-ADHD-first tracker for Indian Govt/PSU and corporate recruitment exams.
+**One clear next step. Less to keep in mind.** A calm, ADHD-friendly Android app for
+Indian government and PSU jobs and exams.
+
+**Download:** [latest release](https://github.com/AnubhavSingh0603/exam-tracker/releases/latest)
+(most phones: the `arm64-v8a` file) · [home page](https://anubhavsingh0603.github.io/exam-tracker/) ·
+[privacy policy](https://anubhavsingh0603.github.io/exam-tracker/privacy.html)
 
 | Folder | What | Status |
 |---|---|---|

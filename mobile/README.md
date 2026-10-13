@@ -1,4 +1,4 @@
-# Exam Tracker — Android client (Phase 2)
+# ApplyTrack — Android app
 
 Flutter · Riverpod · sqflite · device_calendar · flutter_secure_storage.
 

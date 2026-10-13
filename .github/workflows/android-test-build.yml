@@ -110,8 +110,8 @@ jobs:
           flutter build apk --debug --flavor direct "${platform_args[@]}" --dart-define-from-file=env/ci-test.json
           short="${GITHUB_SHA::7}"
           mkdir -p dist
-          cp "$(ls build/app/outputs/flutter-apk/*direct-debug.apk | head -n1)" "dist/exam-tracker-test-$short-$abi.apk"
-          echo "APK_NAME=exam-tracker-test-$short-$abi.apk" >> "$GITHUB_ENV"
+          cp "$(ls build/app/outputs/flutter-apk/*direct-debug.apk | head -n1)" "dist/applytrack-test-$short-$abi.apk"
+          echo "APK_NAME=applytrack-test-$short-$abi.apk" >> "$GITHUB_ENV"
           ls -lh dist
 
       - uses: actions/upload-artifact@v5
@@ -128,5 +128,5 @@ jobs:
         run: |
           tag="test-${GITHUB_RUN_NUMBER}"
           gh release create "$tag" dist/*.apk --prerelease --target "$GITHUB_SHA" \
-            --title "Test build #${GITHUB_RUN_NUMBER} (${GITHUB_SHA::7})" \
+            --title "ApplyTrack test build #${GITHUB_RUN_NUMBER} (${GITHUB_SHA::7})" \
             --notes "Debug build for personal testing. Not for distribution. Uninstall store/release versions first."
