@@ -265,6 +265,10 @@ class DatabaseService {
 
   Future<void> clearFeedCache() => _db.delete('feed_cache');
 
+  /// The server said "unchanged" (HTTP 304): the cached copy is current as of [at].
+  Future<void> touchFeedCache(DateTime at) =>
+      _db.update('feed_cache', {'fetched_at': at.toUtc().millisecondsSinceEpoch}, where: 'id = 1');
+
   Future<(String body, DateTime fetchedAt)?> readFeedCache() async {
     final rows = await _db.query('feed_cache', where: 'id = 1');
     if (rows.isEmpty) return null;

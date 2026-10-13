@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../config/env.dart';
+import '../domain/feed_builder.dart';
 import '../domain/next_step.dart';
 import '../models/feed.dart';
 import '../models/tracked_application.dart';
@@ -11,6 +12,7 @@ import '../models/vault_entry.dart';
 import '../services/api_client.dart';
 import '../services/calendar_sync_service.dart';
 import '../services/database_service.dart';
+import '../services/jobs_repository.dart';
 import '../services/secret_store.dart';
 import '../services/update_service.dart';
 import 'account_providers.dart';
@@ -288,58 +290,57 @@ final hasPasswordProvider = FutureProvider.autoDispose
 // Feed (online, with last-good cache for offline start-up)
 // -----------------------------------------------------------------------------
 
+final jobsRepositoryProvider = Provider<JobsRepository>((ref) {
+  final repo = JobsRepository(ref.watch(databaseProvider));
+  ref.onDispose(repo.close);
+  return repo;
+});
+
+/// jobs.json from the data pipeline. Starts from the offline copy when there is
+/// one (instant start-up), then refreshes from the network in the background.
+class JobsLoadNotifier extends AsyncNotifier<JobsLoad?> {
+  JobsRepository get _repo => ref.read(jobsRepositoryProvider);
+
+  @override
+  Future<JobsLoad?> build() async {
+    final cached = await _repo.cached();
+    if (cached != null) {
+      unawaited(Future.microtask(refresh));
+      return cached;
+    }
+    return _repo.load();
+  }
+
+  Future<void> refresh() async {
+    final next = await AsyncValue.guard(_repo.load);
+    // Keep showing the last good list when a refresh fails.
+    if (next.hasValue || !state.hasValue) state = next;
+  }
+}
+
+final jobsLoadProvider = AsyncNotifierProvider<JobsLoadNotifier, JobsLoad?>(JobsLoadNotifier.new);
+
+/// The personalised feed, computed on this phone from jobs.json + the profile.
 class FeedNotifier extends AsyncNotifier<FeedSnapshot> {
   @override
-  Future<FeedSnapshot> build() {
-    // Re-fetch when the account changes (sign-in/out, dev profile created).
-    ref.watch(authProvider.select((a) => a.dataOrNull?.userId));
-    ref.watch(devProfileIdProvider);
-    return _load();
+  Future<FeedSnapshot> build() async {
+    final profile = await ref.watch(profileProvider.future);
+    if (profile == null || !profile.isComplete) return FeedSnapshot.empty;
+    final load = await ref.watch(jobsLoadProvider.future);
+    if (load == null) return FeedSnapshot.empty;
+    final tracked = ref.read(trackedAppsProvider).dataOrNull ?? const <TrackedApplication>[];
+    return buildFeed(
+      jobs: load.file,
+      profile: profile,
+      appliedPostIds: {for (final a in tracked) a.id},
+      now: DateTime.now(),
+      fetchedAt: load.fetchedAt,
+      fromCache: load.fromCache,
+    );
   }
 
-  Future<void> refresh() async => state = await AsyncValue.guard(_load);
-
-  Future<FeedSnapshot> _load() async {
-    final db = ref.read(databaseProvider);
-    final api = ref.read(apiClientProvider);
-    final cached = await db.readFeedCache();
-
-    FeedSnapshot? fromCache() => cached == null
-        ? null
-        : FeedSnapshot.fromJson(
-            jsonDecode(cached.$1) as Map<String, dynamic>,
-            fetchedAt: cached.$2,
-            fromCache: true,
-          );
-
-    if (api == null) return fromCache() ?? FeedSnapshot.empty;
-    String? userId;
-    if (api.usesApiKey) {
-      userId = await ref.read(devProfileIdProvider.future);
-      if (userId == null) return FeedSnapshot.empty; // profile not created yet
-    } else if ((await ref.read(authProvider.future)) == null) {
-      return FeedSnapshot.empty; // signed out: nothing personalised to show
-    }
-    try {
-      final body = await api.fetchFeedJson(userId: userId);
-      final now = DateTime.now();
-      await db.cacheFeed(body, now);
-      // Same moment is a good time to pull exam-watcher updates for tracked exams.
-      unawaited(ref.read(trackedAppsProvider.notifier).syncFromServer());
-      return FeedSnapshot.fromJson(jsonDecode(body) as Map<String, dynamic>, fetchedAt: now);
-    } on ApiException catch (e) {
-      // 409: signed in but no profile yet. The profile prompt handles it.
-      if (e.statusCode == 409 || e.statusCode == 404) return FeedSnapshot.empty;
-      final snapshot = fromCache();
-      if (snapshot != null) return snapshot;
-      rethrow;
-    } catch (_) {
-      // Network down, timeout, or malformed body: fall back to the last good feed.
-      final snapshot = fromCache();
-      if (snapshot != null) return snapshot;
-      rethrow;
-    }
-  }
+  /// Pull-to-refresh: fetch jobs.json again (the feed rebuilds from it).
+  Future<void> refresh() => ref.read(jobsLoadProvider.notifier).refresh();
 }
 
 final feedProvider = AsyncNotifierProvider<FeedNotifier, FeedSnapshot>(FeedNotifier.new);

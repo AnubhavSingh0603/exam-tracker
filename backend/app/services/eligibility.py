@@ -239,9 +239,9 @@ def evaluate_qualification(profile: ProfileLike, post: PostLike) -> Qualificatio
         haystacks = [post.raw_eligibility_text or "", post.qualification_text or "", *lines]
         if custom_text_matches(profile.custom_qualification_text, haystacks):
             return QualificationOutcome(True, MatchReason.CUSTOM_QUALIFICATION)
-    if not allowed and not any_grad and not any_pg and need is None:
-        if profile.degree_title == OTHERS and (post.raw_eligibility_text or lines):
+        if any(h.strip() for h in haystacks):
             return QualificationOutcome(False, None, "Your qualification isn't mentioned in the eligibility.")
+    if not allowed and not any_grad and not any_pg and need is None:
         return QualificationOutcome(
             None, None, "Qualification could not be auto-verified — check the notification."
         )

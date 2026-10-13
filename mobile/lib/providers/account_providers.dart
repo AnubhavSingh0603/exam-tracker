@@ -6,7 +6,6 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../config/env.dart';
 import '../models/user_profile.dart';
-import '../services/api_client.dart';
 import '../services/auth_service.dart';
 import 'providers.dart';
 
@@ -135,73 +134,19 @@ abstract final class ProfileCache {
   }
 }
 
+/// The eligibility profile lives on this phone (matching runs here too).
+/// Step 3 adds a Google Drive backup so it survives a reinstall.
 class ProfileNotifier extends AsyncNotifier<UserProfileData?> {
   @override
-  Future<UserProfileData?> build() async {
-    final api = ref.watch(apiClientProvider);
-    if (api == null) return ProfileCache.read();
-    String? devId;
-    if (api.usesApiKey) {
-      devId = await ref.watch(devProfileIdProvider.future);
-    } else {
-      // Rebuild only when the *user* changes, not on every token refresh.
-      final userId = ref.watch(authProvider.select((a) => a.dataOrNull?.userId));
-      if (userId == null) return null;
-    }
+  Future<UserProfileData?> build() => ProfileCache.read();
 
-    final cached = await ProfileCache.read();
-    if (cached != null && await ProfileCache.hasPendingSync()) {
-      // Saved offline last time: push it now (the local copy is the newer one).
-      try {
-        await _push(cached);
-      } catch (_) {}
-      return cached;
-    }
-    try {
-      final json = api.usesApiKey
-          ? (devId == null ? null : await api.getProfileById(devId))
-          : await api.getMyProfile();
-      final profile = json == null ? null : UserProfileData.fromJson(json);
-      if (profile != null) await ProfileCache.write(profile, pendingSync: false);
-      return profile;
-    } catch (_) {
-      if (cached != null) return cached; // offline: keep working with the last known profile
-      rethrow;
-    }
-  }
-
-  /// Saves on the phone first, then syncs to the backend and refreshes the feed.
-  /// Returns false when the sync has to wait for a connection (it retries on next start).
+  /// Saves on the phone; the feed recomputes from it. Returns true (kept for
+  /// callers that used to wait for a server sync).
   Future<bool> save(UserProfileData data) async {
-    await ProfileCache.write(data, pendingSync: true);
-    state = AsyncData(data);
-    try {
-      await _push(data);
-      return true;
-    } on ApiException {
-      rethrow; // the server rejected it (e.g. validation): the user must fix something
-    } catch (_) {
-      return false;
-    } finally {
-      ref.invalidate(feedProvider);
-    }
-  }
-
-  Future<void> _push(UserProfileData data) async {
-    final api = ref.read(apiClientProvider);
-    if (api == null) {
-      await ProfileCache.write(data, pendingSync: false); // offline build: local only
-      return;
-    }
-    if (api.usesApiKey) {
-      // Admin endpoints can only create, so dev mode stores the new profile id.
-      final created = await api.createProfile(data.toJson());
-      await ref.read(devProfileIdProvider.notifier).set(created['id'] as String);
-    } else {
-      final saved = await api.saveMyProfile(data.toJson());
-      await ref.read(authProvider.notifier).rememberProfileId(saved['id'] as String);
-    }
     await ProfileCache.write(data, pendingSync: false);
+    state = AsyncData(data);
+    ref.invalidate(feedProvider);
+    return true;
   }
 }
 
@@ -217,16 +162,9 @@ enum AccountStatus {
 }
 
 final accountStatusProvider = Provider<AccountStatus>((ref) {
-  if (!Env.hasBackend) return AccountStatus.offline;
-  if (!Env.devKeyMode) {
-    if (!Env.canSignIn) return AccountStatus.offline;
-    final auth = ref.watch(authProvider);
-    if (auth.isLoading && !auth.hasValue) return AccountStatus.loading;
-    if (auth.dataOrNull == null) return AccountStatus.signedOut;
-  }
+  // No account needed: jobs come from the public data feed, matching runs on the phone.
   final profile = ref.watch(profileProvider);
   if (profile.isLoading && !profile.hasValue) return AccountStatus.loading;
-  if (profile.hasError && !profile.hasValue) return AccountStatus.unavailable;
   final data = profile.dataOrNull;
   return (data == null || !data.isComplete) ? AccountStatus.needsProfile : AccountStatus.ready;
 });

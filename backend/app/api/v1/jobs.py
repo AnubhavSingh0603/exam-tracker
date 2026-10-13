@@ -81,4 +81,3 @@ async def get_feed(
         if profile is None:
             raise HTTPException(status.HTTP_404_NOT_FOUND, "User not found")
     return await build_feed(session, profile, limit=limit)
-

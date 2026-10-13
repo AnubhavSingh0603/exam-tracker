@@ -24,4 +24,3 @@ def timeline_out(job: JobPost) -> LifecycleTimelineOut:
             "exam_start": base.exam_start or job.exam_date,
         }
     )
-

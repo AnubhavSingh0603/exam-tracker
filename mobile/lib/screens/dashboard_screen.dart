@@ -188,9 +188,7 @@ class _Header extends StatelessWidget {
     final text = Theme.of(context).textTheme;
     final snap = snapshot;
     final String status;
-    if (!Env.hasBackend) {
-      status = 'Offline mode · tracked applications only';
-    } else if (snap != null && snap.fromCache) {
+    if (snap != null && snap.fromCache) {
       status = 'Offline · job list from ${formatDue(snap.fetchedAt)}';
     } else {
       status = formatDue(now).split(',').first; // "Sat 11 Oct"

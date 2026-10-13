@@ -40,7 +40,8 @@ def render() -> str:
         lines.append(f"  QualificationLevel({_s(lv.value)}, {_s(LEVEL_LABELS[lv])}, {lv.rank}),")
     lines += ["];", "", "const kDegrees = <DegreeOption>["]
     for d in DEGREES:
-        lines.append(f"  DegreeOption({_s(d.code)}, {_s(d.label)}, {_s(d.level.value)}, {_s(d.group)}),")
+        args = ", ".join(_s(v) for v in (d.code, d.label, d.level.value, d.group, d.implies))
+        lines.append(f"  DegreeOption({args}),")
     lines += ["];", ""]
     return "\n".join(lines)
 

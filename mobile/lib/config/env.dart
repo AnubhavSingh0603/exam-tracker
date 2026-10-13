@@ -48,6 +48,16 @@ abstract final class Env {
   static const googleServerClientId = String.fromEnvironment('GOOGLE_SERVER_CLIENT_ID');
 
   static bool get hasBackend => apiBaseUrl.isNotEmpty;
+
+  /// Where the data pipeline publishes jobs.json / notices.json (the repo's `data`
+  /// branch). No server needed: the phone matches jobs itself.
+  static const _dataBaseUrl = String.fromEnvironment(
+    'DATA_BASE_URL',
+    defaultValue: 'https://raw.githubusercontent.com/AnubhavSingh0603/exam-tracker/data',
+  );
+
+  static String get dataBaseUrl =>
+      _dataBaseUrl.endsWith('/') ? _dataBaseUrl.substring(0, _dataBaseUrl.length - 1) : _dataBaseUrl;
   static bool get canSignIn => hasBackend && !devKeyMode && googleServerClientId.isNotEmpty;
 
   /// Calendar events are written in this zone. The audience is India-only, so

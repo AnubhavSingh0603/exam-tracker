@@ -1,0 +1,1610 @@
+{
+ "cases": [
+  {
+   "name": "direct degree match",
+   "profile": {
+    "date_of_birth": "2002-01-01",
+    "category": "UR",
+    "qualification_tier": "UG",
+    "degree_title": "B_TECH",
+    "custom_qualification_text": null,
+    "experience_years": 0.0,
+    "is_pwbd": false,
+    "is_ex_serviceman": false,
+    "ex_serviceman_service_years": 0
+   },
+   "post": {
+    "min_age": 18,
+    "base_max_age": 25,
+    "age_as_on": "2026-10-01",
+    "eligible_streams": [
+     "B.E./B.Tech"
+    ],
+    "qualification_text": null,
+    "raw_eligibility_text": null,
+    "allowed_degrees": [
+     "B_TECH"
+    ],
+    "min_qualification_level": "UG",
+    "is_open_to_any_graduate": false,
+    "is_open_to_any_post_graduate": false,
+    "min_experience_years": 0.0,
+    "age_relaxation_overrides": {},
+    "vacancy": {
+     "ur": 20,
+     "sc": 6,
+     "st": 3,
+     "obc": 11,
+     "ews": 4,
+     "total": 44
+    }
+   },
+   "expect": {
+    "match_kind": "direct",
+    "is_eligible": true,
+    "qualification_match": true,
+    "match_reason": "direct_degree",
+    "eligible_via_relaxation": false,
+    "effective_max_age": 25,
+    "relaxation_years": 0,
+    "category_quota_seats": 0,
+    "ur_open_seats": 20,
+    "total_reachable_seats": 20,
+    "experience_gap_years": 0.0
+   }
+  },
+  {
+   "name": "sc 28 eligible via relaxation: quota seats only",
+   "profile": {
+    "date_of_birth": "1998-06-15",
+    "category": "SC",
+    "qualification_tier": "UG",
+    "degree_title": "B_TECH",
+    "custom_qualification_text": null,
+    "experience_years": 0.0,
+    "is_pwbd": false,
+    "is_ex_serviceman": false,
+    "ex_serviceman_service_years": 0
+   },
+   "post": {
+    "min_age": 18,
+    "base_max_age": 25,
+    "age_as_on": "2026-10-01",
+    "eligible_streams": [
+     "B.E./B.Tech"
+    ],
+    "qualification_text": null,
+    "raw_eligibility_text": null,
+    "allowed_degrees": [
+     "B_TECH"
+    ],
+    "min_qualification_level": "UG",
+    "is_open_to_any_graduate": false,
+    "is_open_to_any_post_graduate": false,
+    "min_experience_years": 0.0,
+    "age_relaxation_overrides": {},
+    "vacancy": {
+     "ur": 20,
+     "sc": 6,
+     "st": 3,
+     "obc": 11,
+     "ews": 4,
+     "total": 44
+    }
+   },
+   "expect": {
+    "match_kind": "direct",
+    "is_eligible": true,
+    "qualification_match": true,
+    "match_reason": "direct_degree",
+    "eligible_via_relaxation": true,
+    "effective_max_age": 30,
+    "relaxation_years": 5,
+    "category_quota_seats": 6,
+    "ur_open_seats": 0,
+    "total_reachable_seats": 6,
+    "experience_gap_years": 0.0
+   }
+  },
+  {
+   "name": "sc young: ur + quota",
+   "profile": {
+    "date_of_birth": "2002-01-01",
+    "category": "SC",
+    "qualification_tier": "UG",
+    "degree_title": "B_TECH",
+    "custom_qualification_text": null,
+    "experience_years": 0.0,
+    "is_pwbd": false,
+    "is_ex_serviceman": false,
+    "ex_serviceman_service_years": 0
+   },
+   "post": {
+    "min_age": 18,
+    "base_max_age": 25,
+    "age_as_on": "2026-10-01",
+    "eligible_streams": [
+     "B.E./B.Tech"
+    ],
+    "qualification_text": null,
+    "raw_eligibility_text": null,
+    "allowed_degrees": [
+     "B_TECH"
+    ],
+    "min_qualification_level": "UG",
+    "is_open_to_any_graduate": false,
+    "is_open_to_any_post_graduate": false,
+    "min_experience_years": 0.0,
+    "age_relaxation_overrides": {},
+    "vacancy": {
+     "ur": 20,
+     "sc": 6,
+     "st": 3,
+     "obc": 11,
+     "ews": 4,
+     "total": 44
+    }
+   },
+   "expect": {
+    "match_kind": "direct",
+    "is_eligible": true,
+    "qualification_match": true,
+    "match_reason": "direct_degree",
+    "eligible_via_relaxation": false,
+    "effective_max_age": 30,
+    "relaxation_years": 5,
+    "category_quota_seats": 6,
+    "ur_open_seats": 20,
+    "total_reachable_seats": 26,
+    "experience_gap_years": 0.0
+   }
+  },
+  {
+   "name": "ur 28 too old",
+   "profile": {
+    "date_of_birth": "1998-06-15",
+    "category": "UR",
+    "qualification_tier": "UG",
+    "degree_title": "B_TECH",
+    "custom_qualification_text": null,
+    "experience_years": 0.0,
+    "is_pwbd": false,
+    "is_ex_serviceman": false,
+    "ex_serviceman_service_years": 0
+   },
+   "post": {
+    "min_age": 18,
+    "base_max_age": 25,
+    "age_as_on": "2026-10-01",
+    "eligible_streams": [
+     "B.E./B.Tech"
+    ],
+    "qualification_text": null,
+    "raw_eligibility_text": null,
+    "allowed_degrees": [
+     "B_TECH"
+    ],
+    "min_qualification_level": "UG",
+    "is_open_to_any_graduate": false,
+    "is_open_to_any_post_graduate": false,
+    "min_experience_years": 0.0,
+    "age_relaxation_overrides": {},
+    "vacancy": {
+     "ur": 20,
+     "sc": 6,
+     "st": 3,
+     "obc": 11,
+     "ews": 4,
+     "total": 44
+    }
+   },
+   "expect": {
+    "match_kind": null,
+    "is_eligible": false,
+    "qualification_match": true,
+    "match_reason": "direct_degree",
+    "eligible_via_relaxation": false,
+    "effective_max_age": 25,
+    "relaxation_years": 0,
+    "category_quota_seats": 0,
+    "ur_open_seats": 0,
+    "total_reachable_seats": 0,
+    "experience_gap_years": 0.0
+   }
+  },
+  {
+   "name": "obc + pwbd stack",
+   "profile": {
+    "date_of_birth": "1988-01-01",
+    "category": "OBC",
+    "qualification_tier": "UG",
+    "degree_title": "B_TECH",
+    "custom_qualification_text": null,
+    "experience_years": 0.0,
+    "is_pwbd": true,
+    "is_ex_serviceman": false,
+    "ex_serviceman_service_years": 0
+   },
+   "post": {
+    "min_age": 18,
+    "base_max_age": 25,
+    "age_as_on": "2026-10-01",
+    "eligible_streams": [
+     "B.E./B.Tech"
+    ],
+    "qualification_text": null,
+    "raw_eligibility_text": null,
+    "allowed_degrees": [
+     "B_TECH"
+    ],
+    "min_qualification_level": "UG",
+    "is_open_to_any_graduate": false,
+    "is_open_to_any_post_graduate": false,
+    "min_experience_years": 0.0,
+    "age_relaxation_overrides": {},
+    "vacancy": {
+     "ur": 20,
+     "sc": 6,
+     "st": 3,
+     "obc": 11,
+     "ews": 4,
+     "total": 44
+    }
+   },
+   "expect": {
+    "match_kind": "direct",
+    "is_eligible": true,
+    "qualification_match": true,
+    "match_reason": "direct_degree",
+    "eligible_via_relaxation": true,
+    "effective_max_age": 38,
+    "relaxation_years": 13,
+    "category_quota_seats": 11,
+    "ur_open_seats": 0,
+    "total_reachable_seats": 11,
+    "experience_gap_years": 0.0
+   }
+  },
+  {
+   "name": "ews gets no relaxation",
+   "profile": {
+    "date_of_birth": "2000-01-01",
+    "category": "EWS",
+    "qualification_tier": "UG",
+    "degree_title": "B_TECH",
+    "custom_qualification_text": null,
+    "experience_years": 0.0,
+    "is_pwbd": false,
+    "is_ex_serviceman": false,
+    "ex_serviceman_service_years": 0
+   },
+   "post": {
+    "min_age": 18,
+    "base_max_age": 25,
+    "age_as_on": "2026-10-01",
+    "eligible_streams": [
+     "B.E./B.Tech"
+    ],
+    "qualification_text": null,
+    "raw_eligibility_text": null,
+    "allowed_degrees": [
+     "B_TECH"
+    ],
+    "min_qualification_level": "UG",
+    "is_open_to_any_graduate": false,
+    "is_open_to_any_post_graduate": false,
+    "min_experience_years": 0.0,
+    "age_relaxation_overrides": {},
+    "vacancy": {
+     "ur": 20,
+     "sc": 6,
+     "st": 3,
+     "obc": 11,
+     "ews": 4,
+     "total": 44
+    }
+   },
+   "expect": {
+    "match_kind": null,
+    "is_eligible": false,
+    "qualification_match": true,
+    "match_reason": "direct_degree",
+    "eligible_via_relaxation": false,
+    "effective_max_age": 25,
+    "relaxation_years": 0,
+    "category_quota_seats": 0,
+    "ur_open_seats": 0,
+    "total_reachable_seats": 0,
+    "experience_gap_years": 0.0
+   }
+  },
+  {
+   "name": "ex-serviceman adds service years",
+   "profile": {
+    "date_of_birth": "1994-01-01",
+    "category": "UR",
+    "qualification_tier": "UG",
+    "degree_title": "B_TECH",
+    "custom_qualification_text": null,
+    "experience_years": 0.0,
+    "is_pwbd": false,
+    "is_ex_serviceman": true,
+    "ex_serviceman_service_years": 6
+   },
+   "post": {
+    "min_age": 18,
+    "base_max_age": 25,
+    "age_as_on": "2026-10-01",
+    "eligible_streams": [
+     "B.E./B.Tech"
+    ],
+    "qualification_text": null,
+    "raw_eligibility_text": null,
+    "allowed_degrees": [
+     "B_TECH"
+    ],
+    "min_qualification_level": "UG",
+    "is_open_to_any_graduate": false,
+    "is_open_to_any_post_graduate": false,
+    "min_experience_years": 0.0,
+    "age_relaxation_overrides": {},
+    "vacancy": {
+     "ur": 20,
+     "sc": 6,
+     "st": 3,
+     "obc": 11,
+     "ews": 4,
+     "total": 44
+    }
+   },
+   "expect": {
+    "match_kind": "direct",
+    "is_eligible": true,
+    "qualification_match": true,
+    "match_reason": "direct_degree",
+    "eligible_via_relaxation": true,
+    "effective_max_age": 34,
+    "relaxation_years": 9,
+    "category_quota_seats": 0,
+    "ur_open_seats": 20,
+    "total_reachable_seats": 20,
+    "experience_gap_years": 0.0
+   }
+  },
+  {
+   "name": "notification override wins",
+   "profile": {
+    "date_of_birth": "1998-06-15",
+    "category": "OBC",
+    "qualification_tier": "UG",
+    "degree_title": "B_TECH",
+    "custom_qualification_text": null,
+    "experience_years": 0.0,
+    "is_pwbd": false,
+    "is_ex_serviceman": false,
+    "ex_serviceman_service_years": 0
+   },
+   "post": {
+    "min_age": 18,
+    "base_max_age": 25,
+    "age_as_on": "2026-10-01",
+    "eligible_streams": [
+     "B.E./B.Tech"
+    ],
+    "qualification_text": null,
+    "raw_eligibility_text": null,
+    "allowed_degrees": [
+     "B_TECH"
+    ],
+    "min_qualification_level": "UG",
+    "is_open_to_any_graduate": false,
+    "is_open_to_any_post_graduate": false,
+    "min_experience_years": 0.0,
+    "age_relaxation_overrides": {
+     "OBC": 5
+    },
+    "vacancy": {
+     "ur": 20,
+     "sc": 6,
+     "st": 3,
+     "obc": 11,
+     "ews": 4,
+     "total": 44
+    }
+   },
+   "expect": {
+    "match_kind": "direct",
+    "is_eligible": true,
+    "qualification_match": true,
+    "match_reason": "direct_degree",
+    "eligible_via_relaxation": true,
+    "effective_max_age": 30,
+    "relaxation_years": 5,
+    "category_quota_seats": 11,
+    "ur_open_seats": 0,
+    "total_reachable_seats": 11,
+    "experience_gap_years": 0.0
+   }
+  },
+  {
+   "name": "below minimum age",
+   "profile": {
+    "date_of_birth": "2010-01-01",
+    "category": "UR",
+    "qualification_tier": "UG",
+    "degree_title": "B_TECH",
+    "custom_qualification_text": null,
+    "experience_years": 0.0,
+    "is_pwbd": false,
+    "is_ex_serviceman": false,
+    "ex_serviceman_service_years": 0
+   },
+   "post": {
+    "min_age": 18,
+    "base_max_age": 25,
+    "age_as_on": "2026-10-01",
+    "eligible_streams": [
+     "B.E./B.Tech"
+    ],
+    "qualification_text": null,
+    "raw_eligibility_text": null,
+    "allowed_degrees": [
+     "B_TECH"
+    ],
+    "min_qualification_level": "UG",
+    "is_open_to_any_graduate": false,
+    "is_open_to_any_post_graduate": false,
+    "min_experience_years": 0.0,
+    "age_relaxation_overrides": {},
+    "vacancy": {
+     "ur": 20,
+     "sc": 6,
+     "st": 3,
+     "obc": 11,
+     "ews": 4,
+     "total": 44
+    }
+   },
+   "expect": {
+    "match_kind": null,
+    "is_eligible": false,
+    "qualification_match": true,
+    "match_reason": "direct_degree",
+    "eligible_via_relaxation": false,
+    "effective_max_age": 25,
+    "relaxation_years": 0,
+    "category_quota_seats": 0,
+    "ur_open_seats": 0,
+    "total_reachable_seats": 0,
+    "experience_gap_years": 0.0
+   }
+  },
+  {
+   "name": "no age cut-off: not verified but shown",
+   "profile": {
+    "date_of_birth": "2002-01-01",
+    "category": "UR",
+    "qualification_tier": "UG",
+    "degree_title": "B_TECH",
+    "custom_qualification_text": null,
+    "experience_years": 0.0,
+    "is_pwbd": false,
+    "is_ex_serviceman": false,
+    "ex_serviceman_service_years": 0
+   },
+   "post": {
+    "min_age": 18,
+    "base_max_age": 25,
+    "age_as_on": null,
+    "eligible_streams": [
+     "B.E./B.Tech"
+    ],
+    "qualification_text": null,
+    "raw_eligibility_text": null,
+    "allowed_degrees": [
+     "B_TECH"
+    ],
+    "min_qualification_level": "UG",
+    "is_open_to_any_graduate": false,
+    "is_open_to_any_post_graduate": false,
+    "min_experience_years": 0.0,
+    "age_relaxation_overrides": {},
+    "vacancy": {
+     "ur": 20,
+     "sc": 6,
+     "st": 3,
+     "obc": 11,
+     "ews": 4,
+     "total": 44
+    }
+   },
+   "expect": {
+    "match_kind": "direct",
+    "is_eligible": true,
+    "qualification_match": true,
+    "match_reason": "direct_degree",
+    "eligible_via_relaxation": false,
+    "effective_max_age": null,
+    "relaxation_years": 0,
+    "category_quota_seats": 0,
+    "ur_open_seats": 20,
+    "total_reachable_seats": 20,
+    "experience_gap_years": 0.0
+   }
+  },
+  {
+   "name": "other degree blocked",
+   "profile": {
+    "date_of_birth": "2002-01-01",
+    "category": "UR",
+    "qualification_tier": "UG",
+    "degree_title": "B_SC",
+    "custom_qualification_text": null,
+    "experience_years": 0.0,
+    "is_pwbd": false,
+    "is_ex_serviceman": false,
+    "ex_serviceman_service_years": 0
+   },
+   "post": {
+    "min_age": 18,
+    "base_max_age": 25,
+    "age_as_on": "2026-10-01",
+    "eligible_streams": [
+     "B.E./B.Tech"
+    ],
+    "qualification_text": null,
+    "raw_eligibility_text": null,
+    "allowed_degrees": [
+     "B_TECH"
+    ],
+    "min_qualification_level": "UG",
+    "is_open_to_any_graduate": false,
+    "is_open_to_any_post_graduate": false,
+    "min_experience_years": 0.0,
+    "age_relaxation_overrides": {},
+    "vacancy": {
+     "ur": 20,
+     "sc": 6,
+     "st": 3,
+     "obc": 11,
+     "ews": 4,
+     "total": 44
+    }
+   },
+   "expect": {
+    "match_kind": null,
+    "is_eligible": false,
+    "qualification_match": false,
+    "match_reason": null,
+    "eligible_via_relaxation": false,
+    "effective_max_age": 25,
+    "relaxation_years": 0,
+    "category_quota_seats": 0,
+    "ur_open_seats": 0,
+    "total_reachable_seats": 0,
+    "experience_gap_years": 0.0
+   }
+  },
+  {
+   "name": "m.tech implies b.tech",
+   "profile": {
+    "date_of_birth": "2002-01-01",
+    "category": "UR",
+    "qualification_tier": "PG",
+    "degree_title": "M_TECH",
+    "custom_qualification_text": null,
+    "experience_years": 0.0,
+    "is_pwbd": false,
+    "is_ex_serviceman": false,
+    "ex_serviceman_service_years": 0
+   },
+   "post": {
+    "min_age": 18,
+    "base_max_age": 25,
+    "age_as_on": "2026-10-01",
+    "eligible_streams": [
+     "B.E./B.Tech"
+    ],
+    "qualification_text": null,
+    "raw_eligibility_text": null,
+    "allowed_degrees": [
+     "B_TECH"
+    ],
+    "min_qualification_level": "UG",
+    "is_open_to_any_graduate": false,
+    "is_open_to_any_post_graduate": false,
+    "min_experience_years": 0.0,
+    "age_relaxation_overrides": {},
+    "vacancy": {
+     "ur": 20,
+     "sc": 6,
+     "st": 3,
+     "obc": 11,
+     "ews": 4,
+     "total": 44
+    }
+   },
+   "expect": {
+    "match_kind": "direct",
+    "is_eligible": true,
+    "qualification_match": true,
+    "match_reason": "direct_degree",
+    "eligible_via_relaxation": false,
+    "effective_max_age": 25,
+    "relaxation_years": 0,
+    "category_quota_seats": 0,
+    "ur_open_seats": 20,
+    "total_reachable_seats": 20,
+    "experience_gap_years": 0.0
+   }
+  },
+  {
+   "name": "any graduate: b.a.",
+   "profile": {
+    "date_of_birth": "2002-01-01",
+    "category": "UR",
+    "qualification_tier": "UG",
+    "degree_title": "B_A",
+    "custom_qualification_text": null,
+    "experience_years": 0.0,
+    "is_pwbd": false,
+    "is_ex_serviceman": false,
+    "ex_serviceman_service_years": 0
+   },
+   "post": {
+    "min_age": 18,
+    "base_max_age": 25,
+    "age_as_on": "2026-10-01",
+    "eligible_streams": [
+     "Any graduate"
+    ],
+    "qualification_text": null,
+    "raw_eligibility_text": null,
+    "allowed_degrees": [],
+    "min_qualification_level": "UG",
+    "is_open_to_any_graduate": true,
+    "is_open_to_any_post_graduate": false,
+    "min_experience_years": 0.0,
+    "age_relaxation_overrides": {},
+    "vacancy": {
+     "ur": 20,
+     "sc": 6,
+     "st": 3,
+     "obc": 11,
+     "ews": 4,
+     "total": 44
+    }
+   },
+   "expect": {
+    "match_kind": "direct",
+    "is_eligible": true,
+    "qualification_match": true,
+    "match_reason": "universal_graduate",
+    "eligible_via_relaxation": false,
+    "effective_max_age": 25,
+    "relaxation_years": 0,
+    "category_quota_seats": 0,
+    "ur_open_seats": 20,
+    "total_reachable_seats": 20,
+    "experience_gap_years": 0.0
+   }
+  },
+  {
+   "name": "any graduate: diploma blocked",
+   "profile": {
+    "date_of_birth": "2002-01-01",
+    "category": "UR",
+    "qualification_tier": "DIPLOMA",
+    "degree_title": "DIPLOMA",
+    "custom_qualification_text": null,
+    "experience_years": 0.0,
+    "is_pwbd": false,
+    "is_ex_serviceman": false,
+    "ex_serviceman_service_years": 0
+   },
+   "post": {
+    "min_age": 18,
+    "base_max_age": 25,
+    "age_as_on": "2026-10-01",
+    "eligible_streams": [
+     "Any graduate"
+    ],
+    "qualification_text": null,
+    "raw_eligibility_text": null,
+    "allowed_degrees": [],
+    "min_qualification_level": "UG",
+    "is_open_to_any_graduate": true,
+    "is_open_to_any_post_graduate": false,
+    "min_experience_years": 0.0,
+    "age_relaxation_overrides": {},
+    "vacancy": {
+     "ur": 20,
+     "sc": 6,
+     "st": 3,
+     "obc": 11,
+     "ews": 4,
+     "total": 44
+    }
+   },
+   "expect": {
+    "match_kind": null,
+    "is_eligible": false,
+    "qualification_match": false,
+    "match_reason": null,
+    "eligible_via_relaxation": false,
+    "effective_max_age": 25,
+    "relaxation_years": 0,
+    "category_quota_seats": 0,
+    "ur_open_seats": 0,
+    "total_reachable_seats": 0,
+    "experience_gap_years": 0.0
+   }
+  },
+  {
+   "name": "any pg: ug blocked",
+   "profile": {
+    "date_of_birth": "2002-01-01",
+    "category": "UR",
+    "qualification_tier": "UG",
+    "degree_title": "B_TECH",
+    "custom_qualification_text": null,
+    "experience_years": 0.0,
+    "is_pwbd": false,
+    "is_ex_serviceman": false,
+    "ex_serviceman_service_years": 0
+   },
+   "post": {
+    "min_age": 18,
+    "base_max_age": 25,
+    "age_as_on": "2026-10-01",
+    "eligible_streams": [],
+    "qualification_text": null,
+    "raw_eligibility_text": null,
+    "allowed_degrees": [],
+    "min_qualification_level": "PG",
+    "is_open_to_any_graduate": false,
+    "is_open_to_any_post_graduate": true,
+    "min_experience_years": 0.0,
+    "age_relaxation_overrides": {},
+    "vacancy": {
+     "ur": 20,
+     "sc": 6,
+     "st": 3,
+     "obc": 11,
+     "ews": 4,
+     "total": 44
+    }
+   },
+   "expect": {
+    "match_kind": null,
+    "is_eligible": false,
+    "qualification_match": false,
+    "match_reason": null,
+    "eligible_via_relaxation": false,
+    "effective_max_age": 25,
+    "relaxation_years": 0,
+    "category_quota_seats": 0,
+    "ur_open_seats": 0,
+    "total_reachable_seats": 0,
+    "experience_gap_years": 0.0
+   }
+  },
+  {
+   "name": "any pg: mba",
+   "profile": {
+    "date_of_birth": "2002-01-01",
+    "category": "UR",
+    "qualification_tier": "PG",
+    "degree_title": "MBA",
+    "custom_qualification_text": null,
+    "experience_years": 0.0,
+    "is_pwbd": false,
+    "is_ex_serviceman": false,
+    "ex_serviceman_service_years": 0
+   },
+   "post": {
+    "min_age": 18,
+    "base_max_age": 25,
+    "age_as_on": "2026-10-01",
+    "eligible_streams": [],
+    "qualification_text": null,
+    "raw_eligibility_text": null,
+    "allowed_degrees": [],
+    "min_qualification_level": "PG",
+    "is_open_to_any_graduate": false,
+    "is_open_to_any_post_graduate": true,
+    "min_experience_years": 0.0,
+    "age_relaxation_overrides": {},
+    "vacancy": {
+     "ur": 20,
+     "sc": 6,
+     "st": 3,
+     "obc": 11,
+     "ews": 4,
+     "total": 44
+    }
+   },
+   "expect": {
+    "match_kind": "direct",
+    "is_eligible": true,
+    "qualification_match": true,
+    "match_reason": "universal_post_graduate",
+    "eligible_via_relaxation": false,
+    "effective_max_age": 25,
+    "relaxation_years": 0,
+    "category_quota_seats": 0,
+    "ur_open_seats": 20,
+    "total_reachable_seats": 20,
+    "experience_gap_years": 0.0
+   }
+  },
+  {
+   "name": "12th post cascades to graduates",
+   "profile": {
+    "date_of_birth": "2002-01-01",
+    "category": "UR",
+    "qualification_tier": "UG",
+    "degree_title": "B_COM",
+    "custom_qualification_text": null,
+    "experience_years": 0.0,
+    "is_pwbd": false,
+    "is_ex_serviceman": false,
+    "ex_serviceman_service_years": 0
+   },
+   "post": {
+    "min_age": 18,
+    "base_max_age": 25,
+    "age_as_on": "2026-10-01",
+    "eligible_streams": [
+     "12th pass"
+    ],
+    "qualification_text": null,
+    "raw_eligibility_text": null,
+    "allowed_degrees": [
+     "CLASS_12"
+    ],
+    "min_qualification_level": "INTERMEDIATE",
+    "is_open_to_any_graduate": false,
+    "is_open_to_any_post_graduate": false,
+    "min_experience_years": 0.0,
+    "age_relaxation_overrides": {},
+    "vacancy": {
+     "ur": 20,
+     "sc": 6,
+     "st": 3,
+     "obc": 11,
+     "ews": 4,
+     "total": 44
+    }
+   },
+   "expect": {
+    "match_kind": "direct",
+    "is_eligible": true,
+    "qualification_match": true,
+    "match_reason": "school_level",
+    "eligible_via_relaxation": false,
+    "effective_max_age": 25,
+    "relaxation_years": 0,
+    "category_quota_seats": 0,
+    "ur_open_seats": 20,
+    "total_reachable_seats": 20,
+    "experience_gap_years": 0.0
+   }
+  },
+  {
+   "name": "12th post does not cascade to diploma",
+   "profile": {
+    "date_of_birth": "2002-01-01",
+    "category": "UR",
+    "qualification_tier": "DIPLOMA",
+    "degree_title": "DIPLOMA",
+    "custom_qualification_text": null,
+    "experience_years": 0.0,
+    "is_pwbd": false,
+    "is_ex_serviceman": false,
+    "ex_serviceman_service_years": 0
+   },
+   "post": {
+    "min_age": 18,
+    "base_max_age": 25,
+    "age_as_on": "2026-10-01",
+    "eligible_streams": [
+     "12th pass"
+    ],
+    "qualification_text": null,
+    "raw_eligibility_text": null,
+    "allowed_degrees": [
+     "CLASS_12"
+    ],
+    "min_qualification_level": "INTERMEDIATE",
+    "is_open_to_any_graduate": false,
+    "is_open_to_any_post_graduate": false,
+    "min_experience_years": 0.0,
+    "age_relaxation_overrides": {},
+    "vacancy": {
+     "ur": 20,
+     "sc": 6,
+     "st": 3,
+     "obc": 11,
+     "ews": 4,
+     "total": 44
+    }
+   },
+   "expect": {
+    "match_kind": null,
+    "is_eligible": false,
+    "qualification_match": false,
+    "match_reason": null,
+    "eligible_via_relaxation": false,
+    "effective_max_age": 25,
+    "relaxation_years": 0,
+    "category_quota_seats": 0,
+    "ur_open_seats": 0,
+    "total_reachable_seats": 0,
+    "experience_gap_years": 0.0
+   }
+  },
+  {
+   "name": "10th post cascades to iti",
+   "profile": {
+    "date_of_birth": "2002-01-01",
+    "category": "UR",
+    "qualification_tier": "DIPLOMA",
+    "degree_title": "ITI",
+    "custom_qualification_text": null,
+    "experience_years": 0.0,
+    "is_pwbd": false,
+    "is_ex_serviceman": false,
+    "ex_serviceman_service_years": 0
+   },
+   "post": {
+    "min_age": 18,
+    "base_max_age": 25,
+    "age_as_on": "2026-10-01",
+    "eligible_streams": [
+     "10th pass"
+    ],
+    "qualification_text": null,
+    "raw_eligibility_text": null,
+    "allowed_degrees": [
+     "CLASS_10"
+    ],
+    "min_qualification_level": "MATRIC",
+    "is_open_to_any_graduate": false,
+    "is_open_to_any_post_graduate": false,
+    "min_experience_years": 0.0,
+    "age_relaxation_overrides": {},
+    "vacancy": {
+     "ur": 20,
+     "sc": 6,
+     "st": 3,
+     "obc": 11,
+     "ews": 4,
+     "total": 44
+    }
+   },
+   "expect": {
+    "match_kind": "direct",
+    "is_eligible": true,
+    "qualification_match": true,
+    "match_reason": "school_level",
+    "eligible_via_relaxation": false,
+    "effective_max_age": 25,
+    "relaxation_years": 0,
+    "category_quota_seats": 0,
+    "ur_open_seats": 20,
+    "total_reachable_seats": 20,
+    "experience_gap_years": 0.0
+   }
+  },
+  {
+   "name": "10th + iti trade post does not cascade",
+   "profile": {
+    "date_of_birth": "2002-01-01",
+    "category": "UR",
+    "qualification_tier": "UG",
+    "degree_title": "B_A",
+    "custom_qualification_text": null,
+    "experience_years": 0.0,
+    "is_pwbd": false,
+    "is_ex_serviceman": false,
+    "ex_serviceman_service_years": 0
+   },
+   "post": {
+    "min_age": 18,
+    "base_max_age": 25,
+    "age_as_on": "2026-10-01",
+    "eligible_streams": [
+     "10th + ITI"
+    ],
+    "qualification_text": null,
+    "raw_eligibility_text": null,
+    "allowed_degrees": [
+     "ITI"
+    ],
+    "min_qualification_level": "DIPLOMA",
+    "is_open_to_any_graduate": false,
+    "is_open_to_any_post_graduate": false,
+    "min_experience_years": 0.0,
+    "age_relaxation_overrides": {},
+    "vacancy": {
+     "ur": 20,
+     "sc": 6,
+     "st": 3,
+     "obc": 11,
+     "ews": 4,
+     "total": 44
+    }
+   },
+   "expect": {
+    "match_kind": null,
+    "is_eligible": false,
+    "qualification_match": false,
+    "match_reason": null,
+    "eligible_via_relaxation": false,
+    "effective_max_age": 25,
+    "relaxation_years": 0,
+    "category_quota_seats": 0,
+    "ur_open_seats": 0,
+    "total_reachable_seats": 0,
+    "experience_gap_years": 0.0
+   }
+  },
+  {
+   "name": "needs higher tier",
+   "profile": {
+    "date_of_birth": "2002-01-01",
+    "category": "UR",
+    "qualification_tier": "UG",
+    "degree_title": "B_TECH",
+    "custom_qualification_text": null,
+    "experience_years": 0.0,
+    "is_pwbd": false,
+    "is_ex_serviceman": false,
+    "ex_serviceman_service_years": 0
+   },
+   "post": {
+    "min_age": 18,
+    "base_max_age": 25,
+    "age_as_on": "2026-10-01",
+    "eligible_streams": [
+     "M.Tech"
+    ],
+    "qualification_text": null,
+    "raw_eligibility_text": null,
+    "allowed_degrees": [
+     "M_TECH"
+    ],
+    "min_qualification_level": "PG",
+    "is_open_to_any_graduate": false,
+    "is_open_to_any_post_graduate": false,
+    "min_experience_years": 0.0,
+    "age_relaxation_overrides": {},
+    "vacancy": {
+     "ur": 20,
+     "sc": 6,
+     "st": 3,
+     "obc": 11,
+     "ews": 4,
+     "total": 44
+    }
+   },
+   "expect": {
+    "match_kind": null,
+    "is_eligible": false,
+    "qualification_match": false,
+    "match_reason": null,
+    "eligible_via_relaxation": false,
+    "effective_max_age": 25,
+    "relaxation_years": 0,
+    "category_quota_seats": 0,
+    "ur_open_seats": 0,
+    "total_reachable_seats": 0,
+    "experience_gap_years": 0.0
+   }
+  },
+  {
+   "name": "nothing machine-readable: unverified",
+   "profile": {
+    "date_of_birth": "2002-01-01",
+    "category": "UR",
+    "qualification_tier": "UG",
+    "degree_title": "B_TECH",
+    "custom_qualification_text": null,
+    "experience_years": 0.0,
+    "is_pwbd": false,
+    "is_ex_serviceman": false,
+    "ex_serviceman_service_years": 0
+   },
+   "post": {
+    "min_age": 18,
+    "base_max_age": 25,
+    "age_as_on": "2026-10-01",
+    "eligible_streams": [],
+    "qualification_text": null,
+    "raw_eligibility_text": null,
+    "allowed_degrees": [],
+    "min_qualification_level": null,
+    "is_open_to_any_graduate": false,
+    "is_open_to_any_post_graduate": false,
+    "min_experience_years": 0.0,
+    "age_relaxation_overrides": {},
+    "vacancy": {
+     "ur": 20,
+     "sc": 6,
+     "st": 3,
+     "obc": 11,
+     "ews": 4,
+     "total": 44
+    }
+   },
+   "expect": {
+    "match_kind": "direct",
+    "is_eligible": true,
+    "qualification_match": null,
+    "match_reason": null,
+    "eligible_via_relaxation": false,
+    "effective_max_age": 25,
+    "relaxation_years": 0,
+    "category_quota_seats": 0,
+    "ur_open_seats": 20,
+    "total_reachable_seats": 20,
+    "experience_gap_years": 0.0
+   }
+  },
+  {
+   "name": "level only: unverified",
+   "profile": {
+    "date_of_birth": "2002-01-01",
+    "category": "UR",
+    "qualification_tier": "UG",
+    "degree_title": "B_TECH",
+    "custom_qualification_text": null,
+    "experience_years": 0.0,
+    "is_pwbd": false,
+    "is_ex_serviceman": false,
+    "ex_serviceman_service_years": 0
+   },
+   "post": {
+    "min_age": 18,
+    "base_max_age": 25,
+    "age_as_on": "2026-10-01",
+    "eligible_streams": [],
+    "qualification_text": null,
+    "raw_eligibility_text": null,
+    "allowed_degrees": [],
+    "min_qualification_level": "UG",
+    "is_open_to_any_graduate": false,
+    "is_open_to_any_post_graduate": false,
+    "min_experience_years": 0.0,
+    "age_relaxation_overrides": {},
+    "vacancy": {
+     "ur": 20,
+     "sc": 6,
+     "st": 3,
+     "obc": 11,
+     "ews": 4,
+     "total": 44
+    }
+   },
+   "expect": {
+    "match_kind": "direct",
+    "is_eligible": true,
+    "qualification_match": null,
+    "match_reason": null,
+    "eligible_via_relaxation": false,
+    "effective_max_age": 25,
+    "relaxation_years": 0,
+    "category_quota_seats": 0,
+    "ur_open_seats": 20,
+    "total_reachable_seats": 20,
+    "experience_gap_years": 0.0
+   }
+  },
+  {
+   "name": "others found in eligibility text",
+   "profile": {
+    "date_of_birth": "2002-01-01",
+    "category": "UR",
+    "qualification_tier": "UG",
+    "degree_title": "OTHERS",
+    "custom_qualification_text": "B.Des",
+    "experience_years": 0.0,
+    "is_pwbd": false,
+    "is_ex_serviceman": false,
+    "ex_serviceman_service_years": 0
+   },
+   "post": {
+    "min_age": 18,
+    "base_max_age": 25,
+    "age_as_on": "2026-10-01",
+    "eligible_streams": [
+     "B.Des"
+    ],
+    "qualification_text": null,
+    "raw_eligibility_text": "Bachelor's Degree in Design (B.Des) from a recognised institute.",
+    "allowed_degrees": [],
+    "min_qualification_level": "UG",
+    "is_open_to_any_graduate": false,
+    "is_open_to_any_post_graduate": false,
+    "min_experience_years": 0.0,
+    "age_relaxation_overrides": {},
+    "vacancy": {
+     "ur": 20,
+     "sc": 6,
+     "st": 3,
+     "obc": 11,
+     "ews": 4,
+     "total": 44
+    }
+   },
+   "expect": {
+    "match_kind": "direct",
+    "is_eligible": true,
+    "qualification_match": true,
+    "match_reason": "custom_qualification",
+    "eligible_via_relaxation": false,
+    "effective_max_age": 25,
+    "relaxation_years": 0,
+    "category_quota_seats": 0,
+    "ur_open_seats": 20,
+    "total_reachable_seats": 20,
+    "experience_gap_years": 0.0
+   }
+  },
+  {
+   "name": "others with alternatives",
+   "profile": {
+    "date_of_birth": "2002-01-01",
+    "category": "UR",
+    "qualification_tier": "UG",
+    "degree_title": "OTHERS",
+    "custom_qualification_text": "CA/CS",
+    "experience_years": 0.0,
+    "is_pwbd": false,
+    "is_ex_serviceman": false,
+    "ex_serviceman_service_years": 0
+   },
+   "post": {
+    "min_age": 18,
+    "base_max_age": 25,
+    "age_as_on": "2026-10-01",
+    "eligible_streams": [],
+    "qualification_text": null,
+    "raw_eligibility_text": "Qualified CA or ICWA",
+    "allowed_degrees": [],
+    "min_qualification_level": "UG",
+    "is_open_to_any_graduate": false,
+    "is_open_to_any_post_graduate": false,
+    "min_experience_years": 0.0,
+    "age_relaxation_overrides": {},
+    "vacancy": {
+     "ur": 20,
+     "sc": 6,
+     "st": 3,
+     "obc": 11,
+     "ews": 4,
+     "total": 44
+    }
+   },
+   "expect": {
+    "match_kind": "direct",
+    "is_eligible": true,
+    "qualification_match": true,
+    "match_reason": "custom_qualification",
+    "eligible_via_relaxation": false,
+    "effective_max_age": 25,
+    "relaxation_years": 0,
+    "category_quota_seats": 0,
+    "ur_open_seats": 20,
+    "total_reachable_seats": 20,
+    "experience_gap_years": 0.0
+   }
+  },
+  {
+   "name": "others not mentioned",
+   "profile": {
+    "date_of_birth": "2002-01-01",
+    "category": "UR",
+    "qualification_tier": "UG",
+    "degree_title": "OTHERS",
+    "custom_qualification_text": "BVSc",
+    "experience_years": 0.0,
+    "is_pwbd": false,
+    "is_ex_serviceman": false,
+    "ex_serviceman_service_years": 0
+   },
+   "post": {
+    "min_age": 18,
+    "base_max_age": 25,
+    "age_as_on": "2026-10-01",
+    "eligible_streams": [
+     "BAMS"
+    ],
+    "qualification_text": null,
+    "raw_eligibility_text": "BAMS degree",
+    "allowed_degrees": [],
+    "min_qualification_level": "UG",
+    "is_open_to_any_graduate": false,
+    "is_open_to_any_post_graduate": false,
+    "min_experience_years": 0.0,
+    "age_relaxation_overrides": {},
+    "vacancy": {
+     "ur": 20,
+     "sc": 6,
+     "st": 3,
+     "obc": 11,
+     "ews": 4,
+     "total": 44
+    }
+   },
+   "expect": {
+    "match_kind": null,
+    "is_eligible": false,
+    "qualification_match": false,
+    "match_reason": null,
+    "eligible_via_relaxation": false,
+    "effective_max_age": 25,
+    "relaxation_years": 0,
+    "category_quota_seats": 0,
+    "ur_open_seats": 0,
+    "total_reachable_seats": 0,
+    "experience_gap_years": 0.0
+   }
+  },
+  {
+   "name": "others with no text in post: unverified",
+   "profile": {
+    "date_of_birth": "2002-01-01",
+    "category": "UR",
+    "qualification_tier": "UG",
+    "degree_title": "OTHERS",
+    "custom_qualification_text": "BVSc",
+    "experience_years": 0.0,
+    "is_pwbd": false,
+    "is_ex_serviceman": false,
+    "ex_serviceman_service_years": 0
+   },
+   "post": {
+    "min_age": 18,
+    "base_max_age": 25,
+    "age_as_on": "2026-10-01",
+    "eligible_streams": [],
+    "qualification_text": null,
+    "raw_eligibility_text": null,
+    "allowed_degrees": [],
+    "min_qualification_level": null,
+    "is_open_to_any_graduate": false,
+    "is_open_to_any_post_graduate": false,
+    "min_experience_years": 0.0,
+    "age_relaxation_overrides": {},
+    "vacancy": {
+     "ur": 20,
+     "sc": 6,
+     "st": 3,
+     "obc": 11,
+     "ews": 4,
+     "total": 44
+    }
+   },
+   "expect": {
+    "match_kind": "direct",
+    "is_eligible": true,
+    "qualification_match": null,
+    "match_reason": null,
+    "eligible_via_relaxation": false,
+    "effective_max_age": 25,
+    "relaxation_years": 0,
+    "category_quota_seats": 0,
+    "ur_open_seats": 20,
+    "total_reachable_seats": 20,
+    "experience_gap_years": 0.0
+   }
+  },
+  {
+   "name": "experience met",
+   "profile": {
+    "date_of_birth": "2002-01-01",
+    "category": "UR",
+    "qualification_tier": "UG",
+    "degree_title": "B_TECH",
+    "custom_qualification_text": null,
+    "experience_years": 2.0,
+    "is_pwbd": false,
+    "is_ex_serviceman": false,
+    "ex_serviceman_service_years": 0
+   },
+   "post": {
+    "min_age": 18,
+    "base_max_age": 25,
+    "age_as_on": "2026-10-01",
+    "eligible_streams": [
+     "B.E./B.Tech"
+    ],
+    "qualification_text": null,
+    "raw_eligibility_text": null,
+    "allowed_degrees": [
+     "B_TECH"
+    ],
+    "min_qualification_level": "UG",
+    "is_open_to_any_graduate": false,
+    "is_open_to_any_post_graduate": false,
+    "min_experience_years": 2.0,
+    "age_relaxation_overrides": {},
+    "vacancy": {
+     "ur": 20,
+     "sc": 6,
+     "st": 3,
+     "obc": 11,
+     "ews": 4,
+     "total": 44
+    }
+   },
+   "expect": {
+    "match_kind": "direct",
+    "is_eligible": true,
+    "qualification_match": true,
+    "match_reason": "direct_degree",
+    "eligible_via_relaxation": false,
+    "effective_max_age": 25,
+    "relaxation_years": 0,
+    "category_quota_seats": 0,
+    "ur_open_seats": 20,
+    "total_reachable_seats": 20,
+    "experience_gap_years": 0.0
+   }
+  },
+  {
+   "name": "half a year short: suggested",
+   "profile": {
+    "date_of_birth": "2002-01-01",
+    "category": "UR",
+    "qualification_tier": "UG",
+    "degree_title": "B_TECH",
+    "custom_qualification_text": null,
+    "experience_years": 1.5,
+    "is_pwbd": false,
+    "is_ex_serviceman": false,
+    "ex_serviceman_service_years": 0
+   },
+   "post": {
+    "min_age": 18,
+    "base_max_age": 25,
+    "age_as_on": "2026-10-01",
+    "eligible_streams": [
+     "B.E./B.Tech"
+    ],
+    "qualification_text": null,
+    "raw_eligibility_text": null,
+    "allowed_degrees": [
+     "B_TECH"
+    ],
+    "min_qualification_level": "UG",
+    "is_open_to_any_graduate": false,
+    "is_open_to_any_post_graduate": false,
+    "min_experience_years": 2.0,
+    "age_relaxation_overrides": {},
+    "vacancy": {
+     "ur": 20,
+     "sc": 6,
+     "st": 3,
+     "obc": 11,
+     "ews": 4,
+     "total": 44
+    }
+   },
+   "expect": {
+    "match_kind": "suggested",
+    "is_eligible": false,
+    "qualification_match": true,
+    "match_reason": "direct_degree",
+    "eligible_via_relaxation": false,
+    "effective_max_age": 25,
+    "relaxation_years": 0,
+    "category_quota_seats": 0,
+    "ur_open_seats": 20,
+    "total_reachable_seats": 20,
+    "experience_gap_years": 0.5
+   }
+  },
+  {
+   "name": "fresher 3 years short: hidden",
+   "profile": {
+    "date_of_birth": "2002-01-01",
+    "category": "UR",
+    "qualification_tier": "UG",
+    "degree_title": "B_TECH",
+    "custom_qualification_text": null,
+    "experience_years": 0.0,
+    "is_pwbd": false,
+    "is_ex_serviceman": false,
+    "ex_serviceman_service_years": 0
+   },
+   "post": {
+    "min_age": 18,
+    "base_max_age": 25,
+    "age_as_on": "2026-10-01",
+    "eligible_streams": [
+     "B.E./B.Tech"
+    ],
+    "qualification_text": null,
+    "raw_eligibility_text": null,
+    "allowed_degrees": [
+     "B_TECH"
+    ],
+    "min_qualification_level": "UG",
+    "is_open_to_any_graduate": false,
+    "is_open_to_any_post_graduate": false,
+    "min_experience_years": 3.0,
+    "age_relaxation_overrides": {},
+    "vacancy": {
+     "ur": 20,
+     "sc": 6,
+     "st": 3,
+     "obc": 11,
+     "ews": 4,
+     "total": 44
+    }
+   },
+   "expect": {
+    "match_kind": null,
+    "is_eligible": false,
+    "qualification_match": true,
+    "match_reason": "direct_degree",
+    "eligible_via_relaxation": false,
+    "effective_max_age": 25,
+    "relaxation_years": 0,
+    "category_quota_seats": 0,
+    "ur_open_seats": 0,
+    "total_reachable_seats": 0,
+    "experience_gap_years": 3.0
+   }
+  },
+  {
+   "name": "missing vacancy matrix",
+   "profile": {
+    "date_of_birth": "2002-01-01",
+    "category": "SC",
+    "qualification_tier": "UG",
+    "degree_title": "B_TECH",
+    "custom_qualification_text": null,
+    "experience_years": 0.0,
+    "is_pwbd": false,
+    "is_ex_serviceman": false,
+    "ex_serviceman_service_years": 0
+   },
+   "post": {
+    "min_age": 18,
+    "base_max_age": 25,
+    "age_as_on": "2026-10-01",
+    "eligible_streams": [
+     "B.E./B.Tech"
+    ],
+    "qualification_text": null,
+    "raw_eligibility_text": null,
+    "allowed_degrees": [
+     "B_TECH"
+    ],
+    "min_qualification_level": "UG",
+    "is_open_to_any_graduate": false,
+    "is_open_to_any_post_graduate": false,
+    "min_experience_years": 0.0,
+    "age_relaxation_overrides": {},
+    "vacancy": null
+   },
+   "expect": {
+    "match_kind": "direct",
+    "is_eligible": true,
+    "qualification_match": true,
+    "match_reason": "direct_degree",
+    "eligible_via_relaxation": false,
+    "effective_max_age": 30,
+    "relaxation_years": 5,
+    "category_quota_seats": 0,
+    "ur_open_seats": 0,
+    "total_reachable_seats": 0,
+    "experience_gap_years": 0.0
+   }
+  }
+ ]
+}
