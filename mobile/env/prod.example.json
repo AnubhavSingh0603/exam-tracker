@@ -1,8 +1,8 @@
 {
-  "APP_ENV": "prod",
-  "API_BASE_URL_PROD": "https://tracker.example.com",
+  "_comment": "All optional: leave a key out to use the default built into the app.",
   "GOOGLE_SERVER_CLIENT_ID": "1234567890-web.apps.googleusercontent.com",
+  "DATA_BASE_URL": "https://raw.githubusercontent.com/OWNER/REPO/data",
+  "TIME_ZONE": "Asia/Kolkata",
   "RELEASE_MANIFEST_URL": "https://github.com/OWNER/REPO/releases/latest/download/latest.json",
-  "RELEASES_PAGE_URL": "https://github.com/OWNER/REPO/releases/latest",
-  "TIME_ZONE": "Asia/Kolkata"
+  "RELEASES_PAGE_URL": "https://github.com/OWNER/REPO/releases/latest"
 }

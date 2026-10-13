@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../providers/providers.dart';
-import '../services/api_client.dart';
 import '../theme/app_theme.dart';
 
 /// Track an exam applied to outside the feed. The server's exam watcher then
@@ -56,17 +55,13 @@ class _AddExamSheetState extends ConsumerState<_AddExamSheet> {
       _error = null;
     });
     try {
-      final app = await ref.read(trackedAppsProvider.notifier).addManual(examName: name, portalUrl: link);
+      await ref.read(trackedAppsProvider.notifier).addManual(examName: name, portalUrl: link);
       if (!mounted) return;
       final messenger = ScaffoldMessenger.of(context);
       Navigator.of(context).pop();
-      messenger.showSnackBar(SnackBar(
-        content: Text(app.id.startsWith('local-')
-            ? 'Added on this phone. Automatic updates need you signed in and online.'
-            : 'Added. We’ll watch for its admit card, dates and results.'),
-      ));
-    } on ApiException catch (e) {
-      if (mounted) setState(() => _error = e.message);
+      messenger.showSnackBar(
+        const SnackBar(content: Text('Added. We’ll watch for its admit card, dates and results.')),
+      );
     } catch (_) {
       if (mounted) setState(() => _error = 'Could not add it right now. Try again.');
     } finally {

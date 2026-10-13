@@ -3,20 +3,20 @@ import 'dart:convert';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../config/env.dart';
 import '../domain/feed_builder.dart';
 import '../domain/next_step.dart';
 import '../models/feed.dart';
 import '../models/tracked_application.dart';
 import '../models/vault_entry.dart';
-import '../services/api_client.dart';
 import '../services/calendar_sync_service.dart';
 import '../services/background_watch.dart';
+import '../services/backup_service.dart';
 import '../services/database_service.dart';
 import '../services/jobs_repository.dart';
 import '../services/secret_store.dart';
 import '../services/update_service.dart';
 import 'account_providers.dart';
+import 'backup_providers.dart';
 
 // -----------------------------------------------------------------------------
 // Infrastructure
@@ -28,19 +28,6 @@ final databaseProvider = Provider<DatabaseService>(
 );
 
 final secretStoreProvider = Provider<SecretStore>((ref) => SecretStore());
-
-final apiClientProvider = Provider<ApiClient?>((ref) {
-  if (!Env.hasBackend) return null;
-  final client = ApiClient(
-    baseUrl: Env.apiBaseUrl,
-    apiKey: Env.apiKey, // empty unless a non-prod dev build set API_KEY
-    // read, not watch: the client lives across token refreshes
-    accessToken: ({bool forceRefresh = false}) =>
-        ref.read(authProvider.notifier).accessToken(forceRefresh: forceRefresh),
-  );
-  ref.onDispose(client.close);
-  return client;
-});
 
 final updateServiceProvider = Provider<UpdateService>((ref) {
   final service = UpdateService();
@@ -77,6 +64,9 @@ class TrackedAppsNotifier extends AsyncNotifier<List<TrackedApplication>> {
   DatabaseService get _db => ref.read(databaseProvider);
   SecretStore get _secrets => ref.read(secretStoreProvider);
 
+  /// Every change below ends with this: the Drive backup follows ~10 s later.
+  void _changed() => ref.read(backupControllerProvider.notifier).markDirty();
+
   @override
   Future<List<TrackedApplication>> build() => _db.listApplications();
 
@@ -106,6 +96,7 @@ class TrackedAppsNotifier extends AsyncNotifier<List<TrackedApplication>> {
     final timeline = item.timelineJson;
     if (timeline != null) await _db.saveTimeline(item.jobPostId, jsonEncode(timeline));
     await reload();
+    _changed();
     return app;
   }
 
@@ -124,6 +115,7 @@ class TrackedAppsNotifier extends AsyncNotifier<List<TrackedApplication>> {
     );
     await _db.upsertApplication(app);
     await reload();
+    _changed();
     unawaited(checkForUpdates(force: true)); // its admit card may already be out
     return app;
   }
@@ -133,7 +125,10 @@ class TrackedAppsNotifier extends AsyncNotifier<List<TrackedApplication>> {
   Future<int> checkForUpdates({bool force = false}) async {
     try {
       final found = await runWatchAndNotify(_db, force: force);
-      if (found > 0) await reload();
+      if (found > 0) {
+        await reload();
+        _changed();
+      }
       return found;
     } catch (_) {
       return 0; // offline: the next run catches up
@@ -149,7 +144,9 @@ class TrackedAppsNotifier extends AsyncNotifier<List<TrackedApplication>> {
     }
     await _db.deleteApplication(id);
     await _secrets.deletePassword(id);
+    await BackupPrefs.addTombstone(id, DateTime.now()); // so the backup forgets it too
     await reload();
+    _changed();
   }
 
   Future<void> saveCredentials(String appId, CredentialsInput input) async {
@@ -158,12 +155,14 @@ class TrackedAppsNotifier extends AsyncNotifier<List<TrackedApplication>> {
     ref
       ..invalidate(vaultEntryProvider(appId))
       ..invalidate(hasPasswordProvider(appId));
+    _changed();
   }
 
   Future<void> setStatus(String id, ApplicationStatus status,
       {DateTime? examAt, String? admitCardUrl}) async {
     await _db.updateStatus(id, status, examAt: examAt, admitCardUrl: admitCardUrl);
     await reload();
+    _changed();
   }
 
   /// Optimistic so the Dismissible leaves the tree in the same frame.
@@ -176,6 +175,7 @@ class TrackedAppsNotifier extends AsyncNotifier<List<TrackedApplication>> {
     }
     await _db.setArchived(id, archived: archived);
     await reload();
+    _changed();
   }
 }
 

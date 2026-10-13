@@ -8,13 +8,12 @@
 #   ANDROID_KEYSTORE_BASE64   base64 of upload-keystore.jks   (base64 -w0 upload-keystore.jks)
 #   ANDROID_KEYSTORE_PASSWORD, ANDROID_KEY_PASSWORD, ANDROID_KEY_ALIAS
 # Repository variables (Settings → Secrets and variables → Actions → Variables):
-#   APP_API_BASE_URL             e.g. https://tracker.example.com
-#   GOOGLE_SERVER_CLIENT_ID      Web OAuth client ID (enables Google sign-in in the app)
+#   GOOGLE_SERVER_CLIENT_ID      optional; Web OAuth client ID overriding the one built in
 #   MIN_SUPPORTED_VERSION_CODE   optional; force-update anything older (default 1)
 #
-# Deliberately NOT embedded: API_KEY / USER_ID. Anything compiled into a public APK can be
-# extracted, and that key unlocks admin endpoints. Release builds use Google sign-in
-# (APP_ENV=prod also makes the app ignore any API_KEY that slips in).
+# Nothing secret goes into the APK (anything compiled into a public APK can be extracted):
+# jobs come from the public data branch, and the only account is the user's own Google
+# sign-in for the Drive backup.
 
 name: Android release
 
@@ -83,19 +82,20 @@ jobs:
 
       - name: Write build config
         env:
-          API_BASE_URL: ${{ vars.APP_API_BASE_URL }}
           GOOGLE_SERVER_CLIENT_ID: ${{ vars.GOOGLE_SERVER_CLIENT_ID }}
         run: |
           python3 - <<'PY'
           import json, os
           repo = os.environ["GITHUB_REPOSITORY"]
-          json.dump({
-              "APP_ENV": "prod",
-              "API_BASE_URL_PROD": os.environ.get("API_BASE_URL", ""),
-              "GOOGLE_SERVER_CLIENT_ID": os.environ.get("GOOGLE_SERVER_CLIENT_ID", ""),
+          config = {
+              "DATA_BASE_URL": f"https://raw.githubusercontent.com/{repo}/data",
               "RELEASE_MANIFEST_URL": f"https://github.com/{repo}/releases/latest/download/latest.json",
               "RELEASES_PAGE_URL": f"https://github.com/{repo}/releases/latest",
-          }, open("env.json", "w"))
+          }
+          # Only when set: an empty value would switch off the client ID built into the app.
+          if os.environ.get("GOOGLE_SERVER_CLIENT_ID"):
+              config["GOOGLE_SERVER_CLIENT_ID"] = os.environ["GOOGLE_SERVER_CLIENT_ID"]
+          json.dump(config, open("env.json", "w"))
           PY
 
       - run: flutter pub get

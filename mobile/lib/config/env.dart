@@ -1,53 +1,18 @@
 import 'package:flutter/services.dart' show appFlavor;
 
-enum AppEnv { dev, staging, prod }
-
-/// Build-time configuration, injected with `--dart-define-from-file=env.<name>.json`.
+/// Build-time configuration, injected with `--dart-define-from-file=env/<name>.json`
+/// (examples in `env/*.example.json`). Every value has a working default, so a plain
+/// `flutter build apk --flavor direct` produces a usable app.
 ///
-/// Pick the backend with `APP_ENV` (dev | staging | prod); each has its own URL key, and an
-/// explicit `API_BASE_URL` overrides all of them. Examples live in `env/*.example.json`.
-///
-/// Auth modes
-///  * Google sign-in (staging/prod and normal dev): needs `GOOGLE_SERVER_CLIENT_ID`.
-///  * Dev API-key mode: set `API_KEY` (and optionally `USER_ID`) to skip Google while
-///    testing against your own laptop. **Ignored when APP_ENV=prod**, so a key can never
-///    ship inside a public APK by accident.
+/// There is no server: jobs come from the data pipeline's files on GitHub, matching and
+/// the exam watcher run on the phone, and the only account is Google (for the Drive backup).
 abstract final class Env {
-  static const _envName = String.fromEnvironment('APP_ENV', defaultValue: 'prod');
-
-  static AppEnv get appEnv =>
-      AppEnv.values.firstWhere((e) => e.name == _envName, orElse: () => AppEnv.prod);
-
-  static const _override = String.fromEnvironment('API_BASE_URL');
-  // 10.0.2.2 is the host machine as seen from the Android emulator. On a real phone, use
-  // your laptop's LAN IP instead, e.g. http://192.168.1.20:8000.
-  static const _devUrl = String.fromEnvironment('API_BASE_URL_DEV', defaultValue: 'http://10.0.2.2:8000');
-  static const _stagingUrl = String.fromEnvironment('API_BASE_URL_STAGING');
-  static const _prodUrl = String.fromEnvironment('API_BASE_URL_PROD');
-
-  static String get apiBaseUrl {
-    final url = _override.isNotEmpty
-        ? _override
-        : switch (appEnv) {
-            AppEnv.dev => _devUrl,
-            AppEnv.staging => _stagingUrl,
-            AppEnv.prod => _prodUrl,
-          };
-    return url.endsWith('/') ? url.substring(0, url.length - 1) : url;
-  }
-
-  static const _apiKey = String.fromEnvironment('API_KEY');
-  static const _userId = String.fromEnvironment('USER_ID');
-
-  /// Shared-key testing mode (X-API-Key + profile id). Never active in prod builds.
-  static bool get devKeyMode => _apiKey.isNotEmpty && appEnv != AppEnv.prod;
-  static String get apiKey => devKeyMode ? _apiKey : '';
-  static String get presetUserId => devKeyMode ? _userId : '';
-
-  /// The *Web application* OAuth client ID (same value as the backend's GOOGLE_CLIENT_IDS).
+  /// The *Web application* OAuth client ID from Google Cloud ("serverClientId").
+  /// A public identifier, not a secret. Empty = this build has no Google sign-in,
+  /// so the app runs without backup.
   static const googleServerClientId = String.fromEnvironment('GOOGLE_SERVER_CLIENT_ID');
 
-  static bool get hasBackend => apiBaseUrl.isNotEmpty;
+  static bool get canSignIn => googleServerClientId.isNotEmpty;
 
   /// Where the data pipeline publishes jobs.json / notices.json (the repo's `data`
   /// branch). No server needed: the phone matches jobs itself.
@@ -58,13 +23,12 @@ abstract final class Env {
 
   static String get dataBaseUrl =>
       _dataBaseUrl.endsWith('/') ? _dataBaseUrl.substring(0, _dataBaseUrl.length - 1) : _dataBaseUrl;
-  static bool get canSignIn => hasBackend && !devKeyMode && googleServerClientId.isNotEmpty;
 
   /// Calendar events are written in this zone. The audience is India-only, so
   /// a fixed zone avoids a native timezone-lookup dependency.
   static const timeZone = String.fromEnvironment('TIME_ZONE', defaultValue: 'Asia/Kolkata');
 
-  /// Fallback when the server is unreachable, e.g.
+  /// The in-app updater's source, e.g.
   /// https://github.com/OWNER/REPO/releases/latest/download/latest.json
   static const releaseManifestUrl = String.fromEnvironment('RELEASE_MANIFEST_URL');
 

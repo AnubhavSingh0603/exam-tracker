@@ -113,6 +113,75 @@ class DatabaseService {
   Future<void> close() => _db.close();
 
   // ---------------------------------------------------------------------------
+  // Google Drive backup: raw rows out, merged rows back in
+  // ---------------------------------------------------------------------------
+
+  static const _appColumns = [
+    'id',
+    'exam_name',
+    'post_name',
+    'organization',
+    'status',
+    'deadline_timestamp',
+    'exam_timestamp',
+    'admit_card_url',
+    'portal_url',
+    'category',
+    'total_seats',
+    'ur_seats',
+    'quota_seats',
+    'archived',
+    'created_at',
+    'updated_at',
+    'job_post_id',
+    'timeline_json',
+    'server_id',
+    'server_status',
+    'updates_json',
+  ];
+  static const _vaultColumns = ['app_id', 'registration_id', 'roll_number', 'notes', 'updated_at'];
+
+  static Map<String, Object?> _only(Map<String, Object?> row, List<String> columns) => {
+        for (final c in columns)
+          if (row.containsKey(c)) c: row[c]
+      };
+
+  /// Every tracked application exactly as stored, plus `calendar_synced` (0/1).
+  Future<List<Map<String, Object?>>> exportApplicationRows() async =>
+      [for (final r in await _db.rawQuery('$_selectApps ORDER BY a.created_at')) Map.of(r)];
+
+  Future<List<Map<String, Object?>>> exportVaultRows() async =>
+      [for (final r in await _db.query('credentials_vault')) Map.of(r)];
+
+  /// Writes merged backup rows in one transaction: applications are updated in
+  /// place or inserted (never REPLACE, which would cascade-delete their vault rows
+  /// and calendar refs), vault rows replaced, and [removeIds] deleted.
+  Future<void> importBackupRows({
+    required Iterable<Map<String, Object?>> applications,
+    required Iterable<Map<String, Object?>> vault,
+    Iterable<String> removeIds = const [],
+  }) =>
+      _db.transaction((txn) async {
+        for (final id in removeIds) {
+          await txn.delete('tracked_applications', where: 'id = ?', whereArgs: [id]);
+        }
+        for (final row in applications) {
+          final data = _only(row, _appColumns);
+          final updated = await txn.update(
+            'tracked_applications',
+            Map.of(data)..remove('id'),
+            where: 'id = ?',
+            whereArgs: [data['id']],
+          );
+          if (updated == 0) await txn.insert('tracked_applications', data);
+        }
+        for (final row in vault) {
+          await txn.insert('credentials_vault', _only(row, _vaultColumns),
+              conflictAlgorithm: ConflictAlgorithm.replace);
+        }
+      });
+
+  // ---------------------------------------------------------------------------
   // tracked_applications
   // ---------------------------------------------------------------------------
 

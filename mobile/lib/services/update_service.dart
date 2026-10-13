@@ -124,7 +124,7 @@ class UpdateService {
     final installed = releaseNumberOf(int.tryParse(package.buildNumber) ?? 0);
     final abi = await _primaryAbi();
 
-    final remote = await _fromServer(installed, abi) ?? await _fromManifest(abi);
+    final remote = await _fromManifest(abi);
     await prefs.setInt(_kLastCheck, now);
     if (remote == null || !remote.isTrustworthy || remote.versionCode <= installed) return null;
 
@@ -174,22 +174,6 @@ class UpdateService {
         return const UpdateDownloading(null);
       default:
         return const UpdateFailed('The update could not be installed.', suggestSettings: true);
-    }
-  }
-
-  Future<UpdateInfo?> _fromServer(int installed, String? abi) async {
-    if (Env.apiBaseUrl.isEmpty) return null;
-    final base = Env.apiBaseUrl.endsWith('/') ? Env.apiBaseUrl.substring(0, Env.apiBaseUrl.length - 1) : Env.apiBaseUrl;
-    final uri = Uri.parse('$base/api/v1/app/version').replace(queryParameters: {
-      'current_version_code': '${installed < 1 ? 1 : installed}',
-      if (abi != null) 'abi': abi,
-    });
-    try {
-      final res = await _client.get(uri).timeout(_timeout);
-      if (res.statusCode != 200) return null;
-      return UpdateInfo.fromServer(jsonDecode(utf8.decode(res.bodyBytes)) as Map<String, dynamic>);
-    } catch (_) {
-      return null;
     }
   }
 

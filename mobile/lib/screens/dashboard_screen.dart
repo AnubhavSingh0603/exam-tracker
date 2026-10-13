@@ -12,6 +12,7 @@ import '../domain/urgency.dart';
 import '../models/feed.dart';
 import '../models/tracked_application.dart';
 import '../providers/account_providers.dart';
+import '../providers/backup_providers.dart';
 import '../providers/providers.dart';
 import '../services/auth_service.dart';
 import '../services/notification_service.dart';
@@ -21,6 +22,7 @@ import '../widgets/add_exam_sheet.dart';
 import '../widgets/application_tracker_sheet.dart';
 import '../widgets/hero_card.dart';
 import '../widgets/tracked_application_card.dart';
+import '../widgets/welcome_sheet.dart';
 import 'feed_screen.dart';
 import 'profile_setup_screen.dart';
 
@@ -86,10 +88,11 @@ class DashboardScreen extends ConsumerWidget {
       child: Scaffold(
         body: SafeArea(
           child: RefreshIndicator(
-            // New jobs from the data feed + the exam watcher for tracked exams.
+            // New jobs from the data feed, the exam watcher, and the Drive backup.
             onRefresh: () => Future.wait<Object?>([
               ref.read(feedProvider.notifier).refresh(),
               ref.read(trackedAppsProvider.notifier).checkForUpdates(force: true),
+              ref.read(backupControllerProvider.notifier).syncIfDue(),
             ]),
             child: CustomScrollView(
               physics: const AlwaysScrollableScrollPhysics(),
@@ -113,10 +116,9 @@ class DashboardScreen extends ConsumerWidget {
                   },
                   top: 16,
                 ),
-                if (account != AccountStatus.offline) ...[
+                ...[
                   _pad(const _SectionTitle('New for you'), top: 28),
                   ...switch (account) {
-                    AccountStatus.signedOut => [_pad(const _SignInCard(), top: 12)],
                     AccountStatus.needsProfile => [_pad(const _FinishProfileCard(), top: 12)],
                     AccountStatus.loading when snapshot == null => [
                         _pad(
@@ -262,22 +264,24 @@ class _HeroPlaceholder extends StatelessWidget {
 
 Future<void> _signIn(BuildContext context, WidgetRef ref) async {
   try {
-    await ref.read(authProvider.notifier).signIn();
+    final message = await signInAndRestore(ref);
+    if (message != null && context.mounted) showCalmSnack(context, message);
   } on AuthException catch (e) {
     if (!e.cancelled && context.mounted) showCalmSnack(context, e.message);
   } catch (_) {
-    if (context.mounted) showCalmSnack(context, 'Couldn’t reach the server. Try again in a moment.');
+    if (context.mounted) showCalmSnack(context, 'Couldn’t sign in right now. Try again in a moment.');
   }
 }
 
 Future<void> _openProfile(BuildContext context, WidgetRef ref) => showProfileSetupSheet(
       context,
       initial: ref.read(profileProvider).dataOrNull,
-      suggestedName: ref.read(authProvider).dataOrNull?.name,
+      suggestedName: ref.read(googleAccountProvider).dataOrNull?.name,
     );
 
-/// Opens the profile sheet once per app session when it's missing, and asks for
-/// notification permission once (Android 13+). Never blocks the dashboard.
+/// Start-up, in order and never blocking the dashboard: the one-time welcome
+/// (sign in to restore or start a backup), the profile sheet if it's missing,
+/// notification permission, then the exam watcher and backup catch up quietly.
 class _AccountGate extends ConsumerStatefulWidget {
   const _AccountGate({required this.child});
 
@@ -288,27 +292,97 @@ class _AccountGate extends ConsumerStatefulWidget {
 }
 
 class _AccountGateState extends ConsumerState<_AccountGate> {
+  static const _welcomeKey = 'welcome.seen';
+
+  bool _startupDone = false;
   bool _promptedThisSession = false;
+  bool _askingAccountChoice = false;
 
   @override
   void initState() {
     super.initState();
     ref.listenManual<AccountStatus>(accountStatusProvider, (_, status) {
-      if (status == AccountStatus.needsProfile && !_promptedThisSession) {
-        _promptedThisSession = true;
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (mounted) _openProfile(context, ref);
-        });
+      if (_startupDone && status == AccountStatus.needsProfile) _promptProfile();
+    });
+    ref.listenManual<BackupState>(backupControllerProvider, (_, backup) {
+      final to = backup.accountSwitchTo;
+      if (to != null && !_askingAccountChoice) {
+        WidgetsBinding.instance.addPostFrameCallback((_) => _askAccountChoice(to));
       }
-    }, fireImmediately: true);
+    });
+    WidgetsBinding.instance.addPostFrameCallback((_) => _startup());
+  }
+
+  Future<void> _startup() async {
+    await _welcomeOnce();
+    if (!mounted) return;
+    await ref.read(profileProvider.future);
+    if (!mounted) return;
+    _startupDone = true;
+    if (ref.read(accountStatusProvider) == AccountStatus.needsProfile) _promptProfile();
+    await _askNotificationsOnce();
+    unawaited(NotificationService.openLaunchLink()); // a notification tap opened the app
+    unawaited(ref.read(trackedAppsProvider.notifier).checkForUpdates()); // throttled
+    unawaited(ref.read(backupControllerProvider.notifier).syncIfDue());
+  }
+
+  /// Shown once per install to anyone not signed in (new phone, reinstall, or
+  /// an existing user meeting backups for the first time).
+  Future<void> _welcomeOnce() async {
+    if (!Env.canSignIn) return;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      if (prefs.getBool(_welcomeKey) ?? false) return;
+      await prefs.setBool(_welcomeKey, true);
+      final user = await ref.read(googleAccountProvider.future);
+      if (user != null || !mounted) return;
+      await showWelcomeSheet(context);
+    } catch (_) {
+      // The welcome is a convenience: never let it block start-up.
+    }
+  }
+
+  void _promptProfile() {
+    if (_promptedThisSession || !mounted) return;
+    _promptedThisSession = true;
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      _askNotificationsOnce();
-      unawaited(NotificationService.openLaunchLink()); // a notification tap opened the app
-      unawaited(ref.read(trackedAppsProvider.notifier).checkForUpdates()); // throttled
+      if (mounted) _openProfile(context, ref);
     });
   }
 
-  /// FCM pings need this on Android 13+. Asked once; the system dialog is the explanation.
+  /// Signed in with a different Google account than the one this phone's data
+  /// was backed up to: merge, or replace this phone's data with that account's.
+  Future<void> _askAccountChoice(String email) async {
+    if (_askingAccountChoice || !mounted) return;
+    _askingAccountChoice = true;
+    final merge = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) => AlertDialog(
+        backgroundColor: AppPalette.surface,
+        title: const Text('Different Google account'),
+        content: Text('The exams on this phone were backed up with another Google account. '
+            'What should happen now that you’re signed in as $email?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Start fresh from its backup'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('Merge into this account'),
+          ),
+        ],
+      ),
+    );
+    _askingAccountChoice = false;
+    if (merge == null || !mounted) return;
+    final outcome = await ref.read(backupControllerProvider.notifier).resolveAccountSwitch(merge: merge);
+    if (outcome != null && mounted) showCalmSnack(context, restoreMessage(outcome));
+  }
+
+  /// Notifications from the exam watcher need this on Android 13+. Asked once;
+  /// the system dialog is the explanation.
   Future<void> _askNotificationsOnce() async {
     const key = 'perm.notificationsAsked';
     try {
@@ -349,66 +423,85 @@ Future<void> _allowBackgroundChecks(BuildContext context) async {
   }
 }
 
+/// Avatar menu: who is signed in, the backup status, and the few account actions.
 class _AccountButton extends ConsumerWidget {
   const _AccountButton();
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final status = ref.watch(accountStatusProvider);
-    if (status == AccountStatus.offline) return const SizedBox.shrink();
-    if (status == AccountStatus.signedOut) {
-      return TextButton.icon(
-        onPressed: () => _signIn(context, ref),
-        icon: const Icon(Icons.login_rounded, size: 18),
-        label: const Text('Sign in'),
-      );
-    }
-    final session = ref.watch(authProvider).dataOrNull;
-    final who = [session?.name, session?.email].whereType<String>().map((s) => s.trim()).firstWhere(
-          (s) => s.isNotEmpty,
-          orElse: () => 'D',
-        );
-    final initial = who.characters.first.toUpperCase();
+    final user = ref.watch(googleAccountProvider).dataOrNull;
+    final backup = ref.watch(backupControllerProvider);
+    final now = ref.watch(nowProvider);
+    final text = Theme.of(context).textTheme;
+    final attention = backup.phase == BackupPhase.needsPermission || backup.phase == BackupPhase.error;
+
     return PopupMenuButton<String>(
-      tooltip: 'Account',
+      tooltip: 'Account and backup',
       onSelected: (v) async {
-        if (v == 'profile') await _openProfile(context, ref);
-        if (v == 'background' && context.mounted) await _allowBackgroundChecks(context);
-        if (v == 'signout') await ref.read(authProvider.notifier).signOut();
+        final backups = ref.read(backupControllerProvider.notifier);
+        switch (v) {
+          case 'signin':
+            await _signIn(context, ref);
+          case 'backup':
+            final outcome = await backups.sync();
+            if (!context.mounted) return;
+            showCalmSnack(
+              context,
+              outcome != null
+                  ? 'Backed up to your Google Drive.'
+                  : backupStatusLabel(ref.read(backupControllerProvider), DateTime.now()),
+            );
+          case 'drive':
+            try {
+              await backups.allowDrive();
+            } on AuthException catch (e) {
+              if (!e.cancelled && context.mounted) showCalmSnack(context, e.message);
+            }
+          case 'profile':
+            await _openProfile(context, ref);
+          case 'background':
+            if (context.mounted) await _allowBackgroundChecks(context);
+          case 'signout':
+            await ref.read(googleAccountProvider.notifier).signOut();
+            if (context.mounted) showCalmSnack(context, 'Signed out. Your data stays on this phone.');
+        }
       },
       itemBuilder: (_) => [
+        PopupMenuItem<String>(
+          enabled: false,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              if (user != null) Text(user.email, style: text.labelLarge),
+              Text(backupStatusLabel(backup, now), style: text.bodySmall),
+            ],
+          ),
+        ),
+        const PopupMenuDivider(),
+        if (Env.canSignIn && user == null)
+          const PopupMenuItem(value: 'signin', child: Text('Sign in with Google')),
+        if (user != null && backup.phase == BackupPhase.needsPermission)
+          const PopupMenuItem(value: 'drive', child: Text('Allow Drive backup')),
+        if (user != null && backup.phase != BackupPhase.needsPermission)
+          const PopupMenuItem(value: 'backup', child: Text('Back up now')),
         const PopupMenuItem(value: 'profile', child: Text('Edit profile')),
         const PopupMenuItem(value: 'background', child: Text('Allow background checks')),
-        if (session != null) const PopupMenuItem(value: 'signout', child: Text('Sign out')),
+        if (user != null) const PopupMenuItem(value: 'signout', child: Text('Sign out')),
       ],
       child: Padding(
         padding: const EdgeInsets.all(4),
-        child: CircleAvatar(
-          radius: 18,
-          backgroundColor: AppPalette.surfaceVariant,
-          child: Text(Env.devKeyMode ? 'D' : initial,
-              style: Theme.of(context).textTheme.labelLarge?.copyWith(color: AppPalette.periwinkle)),
+        child: Badge(
+          isLabelVisible: attention,
+          smallSize: 9,
+          backgroundColor: AppPalette.honey,
+          child: CircleAvatar(
+            radius: 18,
+            backgroundColor: AppPalette.surfaceVariant,
+            child: user != null
+                ? Text(user.initial, style: text.labelLarge?.copyWith(color: AppPalette.periwinkle))
+                : const Icon(Icons.person_outline_rounded, size: 20, color: AppPalette.periwinkle),
+          ),
         ),
-      ),
-    );
-  }
-}
-
-class _SignInCard extends ConsumerWidget {
-  const _SignInCard();
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final text = Theme.of(context).textTheme;
-    return _PromptCard(
-      icon: Icons.person_search_rounded,
-      title: 'See jobs you can actually apply for',
-      body: 'Sign in so we can match notifications to your age, category and degree. '
-          'Your tracked applications stay on this phone either way.',
-      action: FilledButton.icon(
-        onPressed: () => _signIn(context, ref),
-        icon: const Icon(Icons.login_rounded, size: 18),
-        label: Text('Sign in with Google', style: text.labelLarge),
       ),
     );
   }

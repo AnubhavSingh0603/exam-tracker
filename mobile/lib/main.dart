@@ -17,7 +17,7 @@ Future<void> main() async {
   tzdata.initializeTimeZones();
   final db = await DatabaseService.open();
   try {
-    await AuthService.initialize(); // Google sign-in; no-op if this build isn't configured for it
+    await GoogleAccountService.initialize(); // Google sign-in for the Drive backup; no-op if not set up
   } catch (_) {
     // A misconfigured OAuth client must not stop the offline app from starting.
   }

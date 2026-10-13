@@ -1,168 +1,76 @@
 import 'dart:async';
-import 'dart:convert';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
 import '../config/env.dart';
 import '../models/user_profile.dart';
 import '../services/auth_service.dart';
+import '../services/profile_store.dart';
+import 'backup_providers.dart';
 import 'providers.dart';
 
 // -----------------------------------------------------------------------------
-// Auth (Google sign-in -> backend tokens)
+// Google account (only used for the Drive backup)
 // -----------------------------------------------------------------------------
 
-final authServiceProvider = Provider<AuthService>((ref) {
-  final service = AuthService();
-  ref.onDispose(service.close);
-  return service;
-});
+final googleAccountServiceProvider = Provider<GoogleAccountService>((ref) => GoogleAccountService());
 
-class AuthNotifier extends AsyncNotifier<AuthSession?> {
-  Future<AuthSession?>? _refreshing;
-
-  AuthService get _service => ref.read(authServiceProvider);
+/// The signed-in Google account, or null. Signing in is a one-time step per
+/// phone; every start restores it silently.
+class GoogleAccountNotifier extends AsyncNotifier<GoogleUser?> {
+  GoogleAccountService get _service => ref.read(googleAccountServiceProvider);
 
   @override
-  Future<AuthSession?> build() async => Env.canSignIn ? _service.load() : null;
+  Future<GoogleUser?> build() async {
+    if (!Env.canSignIn) return null;
+    // Offline at start: still show who is signed in; backups retry the silent sign-in.
+    return await _service.restore() ?? await GoogleAccountService.remembered();
+  }
 
   /// Throws [AuthException]; `cancelled` is true when the user backed out.
-  Future<void> signIn() async {
-    final session = await _service.signInWithGoogle();
-    state = AsyncData(session);
+  Future<GoogleUser> signIn() async {
+    final user = await _service.signIn();
+    state = AsyncData(user);
+    return user;
   }
 
+  /// Signs out of Google in this app. The phone's data stays.
   Future<void> signOut() async {
-    await _service.signOut(state.dataOrNull);
-    await ref.read(databaseProvider).clearFeedCache(); // don't show the last user's jobs
-    await ProfileCache.clear();
+    await _service.signOut();
     state = const AsyncData(null);
   }
-
-  /// Valid access token or null. Concurrent callers share one refresh request,
-  /// which matters because each refresh rotates (invalidates) the refresh token.
-  Future<String?> accessToken({bool forceRefresh = false}) async {
-    final session = state.dataOrNull ?? await future;
-    if (session == null) return null;
-    if (!forceRefresh && session.accessValid) return session.accessToken;
-    _refreshing ??= _refresh(session);
-    try {
-      return (await _refreshing)?.accessToken;
-    } finally {
-      _refreshing = null;
-    }
-  }
-
-  Future<AuthSession?> _refresh(AuthSession session) async {
-    try {
-      final next = await _service.refresh(session);
-      state = AsyncData(next); // null => signed out (refresh token revoked/expired)
-      return next;
-    } catch (_) {
-      return null; // offline: keep the session, the next call retries
-    }
-  }
-
-  Future<void> rememberProfileId(String profileId) async {
-    final session = state.dataOrNull;
-    if (session != null && session.profileId != profileId) {
-      state = AsyncData(await _service.withProfileId(session, profileId));
-    }
-  }
 }
 
-final authProvider = AsyncNotifierProvider<AuthNotifier, AuthSession?>(AuthNotifier.new);
-
-// -----------------------------------------------------------------------------
-// Dev API-key mode: which profile id the feed uses
-// -----------------------------------------------------------------------------
-
-class DevProfileIdNotifier extends AsyncNotifier<String?> {
-  static const _key = 'dev.profileId';
-
-  @override
-  Future<String?> build() async {
-    if (!Env.devKeyMode) return null;
-    final prefs = await SharedPreferences.getInstance();
-    final saved = prefs.getString(_key);
-    if (saved != null && saved.isNotEmpty) return saved;
-    return Env.presetUserId.isEmpty ? null : Env.presetUserId;
-  }
-
-  Future<void> set(String id) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_key, id);
-    state = AsyncData(id);
-  }
-}
-
-final devProfileIdProvider = AsyncNotifierProvider<DevProfileIdNotifier, String?>(DevProfileIdNotifier.new);
+final googleAccountProvider =
+    AsyncNotifierProvider<GoogleAccountNotifier, GoogleUser?>(GoogleAccountNotifier.new);
 
 // -----------------------------------------------------------------------------
 // Eligibility profile
 // -----------------------------------------------------------------------------
 
-/// Last saved profile on this phone, so the form and account state work offline,
-/// plus a flag for a save that hasn't reached the server yet.
-abstract final class ProfileCache {
-  static const _key = 'profile.cache';
-  static const _pendingKey = 'profile.pendingSync';
-
-  static Future<UserProfileData?> read() async {
-    try {
-      final raw = (await SharedPreferences.getInstance()).getString(_key);
-      return raw == null ? null : UserProfileData.fromJson(jsonDecode(raw) as Map<String, dynamic>);
-    } catch (_) {
-      return null; // corrupt or from an older app version: the server copy wins
-    }
-  }
-
-  static Future<void> write(UserProfileData data, {required bool pendingSync}) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_key, jsonEncode(data.toJson()));
-    await prefs.setBool(_pendingKey, pendingSync);
-  }
-
-  static Future<bool> hasPendingSync() async =>
-      (await SharedPreferences.getInstance()).getBool(_pendingKey) ?? false;
-
-  static Future<void> clear() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.remove(_key);
-    await prefs.remove(_pendingKey);
-  }
-}
-
-/// The eligibility profile lives on this phone (matching runs here too).
-/// Step 3 adds a Google Drive backup so it survives a reinstall.
+/// The eligibility profile lives on this phone (matching runs here too) and is
+/// part of the Drive backup.
 class ProfileNotifier extends AsyncNotifier<UserProfileData?> {
   @override
-  Future<UserProfileData?> build() => ProfileCache.read();
+  Future<UserProfileData?> build() => ProfileStore.read();
 
-  /// Saves on the phone; the feed recomputes from it. Returns true (kept for
-  /// callers that used to wait for a server sync).
+  /// Saves on the phone; the feed recomputes from it and a backup follows.
   Future<bool> save(UserProfileData data) async {
-    await ProfileCache.write(data, pendingSync: false);
+    await ProfileStore.write(data);
     state = AsyncData(data);
     ref.invalidate(feedProvider);
+    ref.read(backupControllerProvider.notifier).markDirty();
     return true;
   }
 }
 
 final profileProvider = AsyncNotifierProvider<ProfileNotifier, UserProfileData?>(ProfileNotifier.new);
 
-enum AccountStatus {
-  offline, // no backend in this build, or sign-in not configured
-  signedOut,
-  loading,
-  unavailable, // backend unreachable right now; don't nag
-  needsProfile,
-  ready,
-}
+enum AccountStatus { loading, needsProfile, ready }
 
 final accountStatusProvider = Provider<AccountStatus>((ref) {
-  // No account needed: jobs come from the public data feed, matching runs on the phone.
+  // No account needed for jobs: they come from the public data feed and matching
+  // runs on the phone. Google is only for the backup.
   final profile = ref.watch(profileProvider);
   if (profile.isLoading && !profile.hasValue) return AccountStatus.loading;
   final data = profile.dataOrNull;

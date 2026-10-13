@@ -3,6 +3,7 @@ import 'package:timezone/data/latest.dart' as tzdata;
 import 'package:workmanager/workmanager.dart';
 
 import '../domain/exam_watcher.dart';
+import 'backup_service.dart';
 import 'calendar_sync_service.dart';
 import 'database_service.dart';
 import 'exam_watch_service.dart';
@@ -44,6 +45,9 @@ Future<int> runWatchAndNotify(DatabaseService db, {bool force = false}) async {
         } catch (_) {}
       }
     }
+    // New findings change the backup; it uploads next time the app is open
+    // (Google sign-in tokens need the foreground).
+    if (count > 0) await BackupPrefs.setDirty(true);
     return count;
   } finally {
     watcher.close();

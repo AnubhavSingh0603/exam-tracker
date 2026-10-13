@@ -6,7 +6,6 @@ import '../domain/qualification_taxonomy.dart';
 import '../domain/urgency.dart';
 import '../models/user_profile.dart';
 import '../providers/account_providers.dart';
-import '../services/api_client.dart';
 import '../theme/app_theme.dart';
 
 /// Opens the profile form as a near-full-height sheet. Returns true when saved.
@@ -98,7 +97,7 @@ class _ProfileSetupScreenState extends ConsumerState<ProfileSetupScreen> {
     });
     final tier = _isOthers ? _othersTier! : degreeByCode(_degree)!.level;
     try {
-      final synced = await ref.read(profileProvider.notifier).save(UserProfileData(
+      await ref.read(profileProvider.notifier).save(UserProfileData(
             displayName: widget.initial?.displayName ?? widget.suggestedName ?? 'Me',
             dateOfBirth: _dob!,
             category: _category!,
@@ -117,13 +116,7 @@ class _ProfileSetupScreenState extends ConsumerState<ProfileSetupScreen> {
       Navigator.of(context).pop(true);
       messenger
         ..hideCurrentSnackBar()
-        ..showSnackBar(SnackBar(
-          content: Text(synced
-              ? 'Saved. Finding jobs that fit you…'
-              : 'Saved on this phone. It will sync when you’re back online.'),
-        ));
-    } on ApiException catch (e) {
-      if (mounted) setState(() => _error = 'The server didn’t accept that: ${e.message}');
+        ..showSnackBar(const SnackBar(content: Text('Saved. Finding jobs that fit you…')));
     } catch (_) {
       if (mounted) setState(() => _error = 'Could not save right now. Please try again.');
     } finally {

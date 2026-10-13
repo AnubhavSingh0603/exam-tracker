@@ -1,59 +1,28 @@
-import 'dart:convert';
-
 import 'package:flutter/foundation.dart';
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:google_sign_in/google_sign_in.dart';
-import 'package:http/http.dart' as http;
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../config/env.dart';
 
-@immutable
-class AuthSession {
-  const AuthSession({
-    required this.accessToken,
-    required this.accessExpiresAt,
-    required this.refreshToken,
-    required this.refreshExpiresAt,
-    required this.userId,
-    required this.email,
-    this.name,
-    this.profileId,
-  });
+/// Read/write access to this app's own hidden folder in the user's Google Drive,
+/// and nothing else. A "non-sensitive" Google scope: no access to the user's files.
+const kDriveAppDataScope = 'https://www.googleapis.com/auth/drive.appdata';
 
-  final String accessToken;
-  final DateTime accessExpiresAt;
-  final String refreshToken;
-  final DateTime refreshExpiresAt;
-  final String userId;
+@immutable
+class GoogleUser {
+  const GoogleUser({required this.email, this.name, this.active = true});
+
   final String email;
   final String? name;
-  final String? profileId;
 
-  bool get accessValid => accessExpiresAt.isAfter(DateTime.now().add(const Duration(seconds: 60)));
-  bool get refreshValid => refreshExpiresAt.isAfter(DateTime.now());
+  /// false = remembered from an earlier session but not confirmed yet this run
+  /// (e.g. started offline). Backups retry the silent sign-in first.
+  final bool active;
 
-  /// Parses the backend's `TokenOut`.
-  factory AuthSession.fromTokenResponse(Map<String, dynamic> j) {
-    final user = j['user'] as Map<String, dynamic>;
-    return AuthSession(
-      accessToken: j['access_token'] as String,
-      accessExpiresAt: DateTime.parse(j['access_expires_at'] as String),
-      refreshToken: j['refresh_token'] as String,
-      refreshExpiresAt: DateTime.parse(j['refresh_expires_at'] as String),
-      userId: user['id'] as String,
-      email: user['email'] as String,
-      name: user['name'] as String?,
-      profileId: user['profile_id'] as String?,
-    );
+  String get initial {
+    final source = (name?.trim().isNotEmpty ?? false) ? name!.trim() : email;
+    return source.isEmpty ? '?' : String.fromCharCode(source.runes.first).toUpperCase();
   }
-
-  Map<String, Object?> toJson() => {
-        'access_token': accessToken,
-        'access_expires_at': accessExpiresAt.toIso8601String(),
-        'refresh_token': refreshToken,
-        'refresh_expires_at': refreshExpiresAt.toIso8601String(),
-        'user': {'id': userId, 'email': email, 'name': name, 'profile_id': profileId},
-      };
 }
 
 class AuthException implements Exception {
@@ -65,145 +34,132 @@ class AuthException implements Exception {
   String toString() => message;
 }
 
-/// Google sign-in -> our backend's access/refresh tokens.
-///
-/// The refresh token is long-lived and rotates on every use, so it lives in the
-/// Android Keystore (flutter_secure_storage), never in SQLite or SharedPreferences.
-class AuthService {
-  AuthService({FlutterSecureStorage? storage, http.Client? client})
-      : _storage = storage ??
-            const FlutterSecureStorage(aOptions: AndroidOptions(encryptedSharedPreferences: true)),
-        _client = client ?? http.Client();
+/// Google sign-in for the Drive backup. There is no other account: sign-in is a
+/// one-time step per phone, then [restore] silently brings it back on every start.
+class GoogleAccountService {
+  static bool _ready = false;
+  GoogleSignInAccount? _account;
 
-  final FlutterSecureStorage _storage;
-  final http.Client _client;
+  static const _emailKey = 'account.email';
+  static const _nameKey = 'account.name';
 
-  static const _key = 'auth.session';
-  static const _timeout = Duration(seconds: 15);
-  static bool _googleReady = false;
-
-  /// Call once from main(). No-op when Google sign-in isn't configured for this build.
+  /// Call once from main(). No-op when this build has no Google client ID.
   static Future<void> initialize() async {
-    if (!Env.canSignIn || _googleReady) return;
+    if (!Env.canSignIn || _ready) return;
     await GoogleSignIn.instance.initialize(serverClientId: Env.googleServerClientId);
-    _googleReady = true;
+    _ready = true;
   }
 
-  Future<AuthSession?> load() async {
+  bool get available => _ready;
+
+  /// Silent sign-in (no UI). Returns null when the user never signed in on this
+  /// phone, signed out, or Google can't be reached right now.
+  Future<GoogleUser?> restore() async {
+    if (!_ready) return null;
     try {
-      final raw = await _storage.read(key: _key);
-      if (raw == null) return null;
-      final session = AuthSession.fromTokenResponse(jsonDecode(raw) as Map<String, dynamic>);
-      return session.refreshValid ? session : null;
+      final attempt = GoogleSignIn.instance.attemptLightweightAuthentication();
+      final account = attempt == null ? null : await attempt;
+      if (account == null) return null;
+      _account = account;
+      return await _remember(account);
     } catch (_) {
-      return null; // corrupt or from an older format: just sign in again
+      return null;
     }
   }
 
-  Future<void> _save(AuthSession s) => _storage.write(key: _key, value: jsonEncode(s.toJson()));
+  /// The account remembered from an earlier session (for showing who is signed
+  /// in while offline), without contacting Google.
+  static Future<GoogleUser?> remembered() async {
+    final prefs = await SharedPreferences.getInstance();
+    final email = prefs.getString(_emailKey);
+    return email == null ? null : GoogleUser(email: email, name: prefs.getString(_nameKey), active: false);
+  }
 
-  Future<AuthSession> signInWithGoogle() async {
-    if (!_googleReady) {
-      throw const AuthException('Google sign-in is not configured in this build.');
-    }
+  /// Interactive: account picker, then the Drive-folder permission. Throws
+  /// [AuthException]; `cancelled` is true when the user backed out.
+  Future<GoogleUser> signIn() async {
+    if (!_ready) throw const AuthException('Google sign-in is not set up in this build.');
     if (!GoogleSignIn.instance.supportsAuthenticate()) {
       throw const AuthException('Google sign-in is not available on this device.');
     }
-    final String? idToken;
     try {
       final account = await GoogleSignIn.instance.authenticate();
-      idToken = account.authentication.idToken;
+      _account = account;
+      await account.authorizationClient.authorizeScopes([kDriveAppDataScope]);
+      return await _remember(account);
     } on GoogleSignInException catch (e) {
       if (e.code == GoogleSignInExceptionCode.canceled) {
         throw const AuthException('Sign-in cancelled.', cancelled: true);
       }
       throw AuthException(_googleHint(e));
     }
-    if (idToken == null) throw const AuthException('Google did not return an ID token.');
-
-    final res = await _post('/api/v1/auth/google', {'id_token': idToken});
-    if (res.statusCode != 200) {
-      throw AuthException(_detail(res) ?? 'The server rejected the sign-in (${res.statusCode}).');
-    }
-    final session = AuthSession.fromTokenResponse(_json(res));
-    await _save(session);
-    return session;
   }
 
-  /// Rotates the refresh token. Returns null when the session is gone (sign in again).
-  Future<AuthSession?> refresh(AuthSession current) async {
-    final res = await _post('/api/v1/auth/refresh', {'refresh_token': current.refreshToken});
-    if (res.statusCode == 401) {
-      await _storage.delete(key: _key);
-      return null;
-    }
-    if (res.statusCode != 200) {
-      throw AuthException('Could not refresh the session (${res.statusCode}).');
-    }
-    final session = AuthSession.fromTokenResponse(_json(res));
-    await _save(session);
-    return session;
-  }
-
-  Future<void> signOut(AuthSession? current) async {
-    if (current != null) {
-      try {
-        await _post('/api/v1/auth/logout', {'refresh_token': current.refreshToken});
-      } catch (_) {/* offline: the token simply expires */}
-    }
-    if (_googleReady) {
-      try {
-        await GoogleSignIn.instance.signOut();
-      } catch (_) {}
-    }
-    await _storage.delete(key: _key);
-  }
-
-  /// Keeps the cached profile id in sync after the profile is first created.
-  Future<AuthSession> withProfileId(AuthSession s, String profileId) async {
-    final updated = AuthSession(
-      accessToken: s.accessToken,
-      accessExpiresAt: s.accessExpiresAt,
-      refreshToken: s.refreshToken,
-      refreshExpiresAt: s.refreshExpiresAt,
-      userId: s.userId,
-      email: s.email,
-      name: s.name,
-      profileId: profileId,
-    );
-    await _save(updated);
-    return updated;
-  }
-
-  Future<http.Response> _post(String path, Map<String, Object?> body) => _client
-      .post(
-        Uri.parse('${Env.apiBaseUrl}$path'),
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode(body),
-      )
-      .timeout(_timeout);
-
-  static Map<String, dynamic> _json(http.Response r) =>
-      jsonDecode(utf8.decode(r.bodyBytes)) as Map<String, dynamic>;
-
-  static String? _detail(http.Response r) {
+  /// HTTP headers for Drive, or null when Drive access needs the user's OK
+  /// again (then call [authorizeDrive] from a button tap).
+  Future<Map<String, String>?> driveHeaders() async {
+    final account = _account ?? (await restore() == null ? null : _account);
+    if (account == null) return null;
     try {
-      final d = _json(r)['detail'];
-      return d is String ? d : null;
+      return await account.authorizationClient.authorizationHeaders([kDriveAppDataScope]);
     } catch (_) {
       return null;
     }
   }
 
+  /// Interactive Drive permission prompt (e.g. after the user revoked it).
+  Future<void> authorizeDrive() async {
+    final account = _account;
+    if (account == null) throw const AuthException('Sign in first.');
+    try {
+      await account.authorizationClient.authorizeScopes([kDriveAppDataScope]);
+    } on GoogleSignInException catch (e) {
+      if (e.code == GoogleSignInExceptionCode.canceled) {
+        throw const AuthException('Cancelled.', cancelled: true);
+      }
+      throw AuthException(_googleHint(e));
+    }
+  }
+
+  /// Drive rejected a token (401): drop it from Google's cache so the next
+  /// [driveHeaders] call fetches a fresh one.
+  Future<void> invalidate(String bearerHeader) async {
+    final token = bearerHeader.replaceFirst('Bearer ', '');
+    try {
+      await _account?.authorizationClient.clearAuthorizationToken(accessToken: token);
+    } catch (_) {}
+  }
+
+  /// Signs out of Google in this app. The phone's data stays.
+  Future<void> signOut() async {
+    _account = null;
+    if (_ready) {
+      try {
+        await GoogleSignIn.instance.signOut();
+      } catch (_) {}
+    }
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_emailKey);
+    await prefs.remove(_nameKey);
+  }
+
+  Future<GoogleUser> _remember(GoogleSignInAccount account) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_emailKey, account.email);
+    final name = account.displayName;
+    if (name != null) await prefs.setString(_nameKey, name);
+    return GoogleUser(email: account.email, name: name);
+  }
+
   static String _googleHint(GoogleSignInException e) {
     final text = '${e.code.name} ${e.description ?? ''}';
     // The usual cause on Android: no Android OAuth client for this package + signing SHA-1.
-    if (text.contains('configuration') || text.contains('clientConfiguration') || text.contains('developer')) {
-      return 'Google sign-in is misconfigured: add an Android OAuth client for this app\'s '
-          'package name and signing SHA-1 (see mobile/TESTING.md).';
+    if (text.contains('configuration') ||
+        text.contains('clientConfiguration') ||
+        text.contains('developer')) {
+      return 'Google sign-in is misconfigured: the Google Cloud project needs an Android client for this '
+          'app\'s package name and signing SHA-1.';
     }
     return 'Google sign-in failed (${e.code.name}).';
   }
-
-  void close() => _client.close();
 }

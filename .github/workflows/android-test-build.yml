@@ -12,11 +12,10 @@
 #     Without it, each run gets a fresh random debug key, so (1) a new test APK can't install
 #     over the previous one ("App not installed": uninstall first) and (2) Google sign-in
 #     fails, because Google checks the signing key's SHA-1.
-# Repository variables:
-#   APP_API_BASE_URL_STAGING (or APP_API_BASE_URL)  backend the test build talks to
-#   GOOGLE_SERVER_CLIENT_ID                         Web OAuth client ID
+# Optional repository variable:
+#   GOOGLE_SERVER_CLIENT_ID   Web OAuth client ID, overriding the one built into the app
 #
-# No API key is embedded: artifacts and pre-releases on a public repo are downloadable by anyone.
+# No secrets are embedded: artifacts and pre-releases on a public repo are downloadable by anyone.
 
 name: Android test build
 
@@ -82,16 +81,16 @@ jobs:
 
       - name: Write build config
         env:
-          API_BASE_URL: ${{ vars.APP_API_BASE_URL_STAGING || vars.APP_API_BASE_URL }}
           GOOGLE_SERVER_CLIENT_ID: ${{ vars.GOOGLE_SERVER_CLIENT_ID }}
         run: |
           python3 - <<'PY'
           import json, os
-          json.dump({
-              "APP_ENV": "staging",
-              "API_BASE_URL_STAGING": os.environ.get("API_BASE_URL", ""),
-              "GOOGLE_SERVER_CLIENT_ID": os.environ.get("GOOGLE_SERVER_CLIENT_ID", ""),
-          }, open("env/ci-test.json", "w"))
+          repo = os.environ["GITHUB_REPOSITORY"]
+          config = {"DATA_BASE_URL": f"https://raw.githubusercontent.com/{repo}/data"}
+          # Only when set: an empty value would switch off the client ID built into the app.
+          if os.environ.get("GOOGLE_SERVER_CLIENT_ID"):
+              config["GOOGLE_SERVER_CLIENT_ID"] = os.environ["GOOGLE_SERVER_CLIENT_ID"]
+          json.dump(config, open("env/ci-test.json", "w"))
           PY
 
       - run: flutter pub get
