@@ -45,6 +45,22 @@ SEEDS: tuple[Seed, ...] = (
         "https://www.freejobalert.com/latest-notifications/",
         ParserKey.FREE_JOB_ALERT,
     ),
+    # Unofficial copy of SarkariResult (its disclaimer: "a private website… not affiliated
+    # with any government institution"). Used only to *find* links: jobs are read from the
+    # official notification PDF it points to; notices link to its page for that exam.
+    *(
+        Seed(
+            f"SarkariResult.com.cm (unofficial) · {label}",
+            f"https://sarkariresult.com.cm/{path}/",
+            ParserKey.SARKARI_RESULT,
+        )
+        for label, path in (
+            ("Latest Jobs", "latest-jobs"),
+            ("Admit Cards", "admit-card"),
+            ("Answer Keys", "answer-key"),
+            ("Results", "result"),
+        )
+    ),
     Seed("SSC · Notice Board", SSC_NOTICE_BOARD_API, ParserKey.SSC_API),
     Seed("UPSC · What's New", "https://upsc.gov.in/", ParserKey.GENERIC),
     Seed("IBPS · Latest Updates", "https://www.ibps.in/", ParserKey.GENERIC),

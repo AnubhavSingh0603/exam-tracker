@@ -177,3 +177,28 @@ def test_next_check_time_jitter_and_backoff():
             timedelta(hours=4) - timedelta(minutes=30) <= delta <= timedelta(hours=4) + timedelta(minutes=30)
         )
     assert next_check_time(now, s, failures=10) - now <= timedelta(hours=24, minutes=30)
+
+
+CM_LIST = """
+<ul class="latest-posts-last-date">
+  <li><a href="https://sarkariresult.com.cm/upsssc-je-2026/">UPSSSC Junior Engineer JE Online Form 2026 (1156 Posts)</a> – Last Date: 25 November 2026</li>
+  <li><a href="https://sarkariresult.com.cm/ssc-gd-constable-2026/">SSC GD Constable Result 2026 – Out</a></li>
+  <li><a href="https://example.org/elsewhere/">Not this site</a></li>
+</ul>
+"""
+CM_DETAIL = """<title>SSC CGL 2026</title><table>
+ <tr><td>Download Exam Date Notice</td><td><a href="https://ssc.gov.in/notice.pdf">Click Here</a></td></tr>
+ <tr><td>Download Official Notification</td><td><a href="https://ssc.gov.in/Notice_of_adv_cgl_2026.pdf">Click Here</a></td></tr>
+ <tr><td>Official Sarkari Result Website</td><td><a href="https://sarkariresult.com.cm/">Click Here</a></td></tr>
+</table>"""
+
+
+def test_unofficial_sarkari_result_copy_is_parsed_like_the_original():
+    links = parse_sarkari_result_list(CM_LIST, "https://sarkariresult.com.cm/latest-jobs/")
+    assert [lk.url for lk in links] == [
+        "https://sarkariresult.com.cm/upsssc-je-2026/",
+        "https://sarkariresult.com.cm/ssc-gd-constable-2026/",
+    ]
+    assert kinds(links) == [ItemKind.DETAIL_PAGE, ItemKind.OTHER]
+    pdfs = parse_sarkari_result_detail(CM_DETAIL, "https://sarkariresult.com.cm/ssc-cgl-2026/")
+    assert [lk.url for lk in pdfs] == ["https://ssc.gov.in/Notice_of_adv_cgl_2026.pdf"]

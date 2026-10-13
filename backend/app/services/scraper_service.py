@@ -224,15 +224,24 @@ def parse_generic(html: bytes | str, base_url: str) -> list[Link]:
     return _anchor_links(_soup(html), base_url)
 
 
+# sarkariresult.com, and the unofficial copy sarkariresult.com.cm, which uses the same
+# detail-page tables and is reachable from GitHub's US runners (the original returns 403).
+SARKARI_RESULT_DOMAINS = ("sarkariresult.com", "sarkariresult.com.cm")
+
+
+def _is_sarkari_result(netloc: str) -> bool:
+    return netloc.endswith(SARKARI_RESULT_DOMAINS)
+
+
 def parse_sarkari_result_list(html: bytes | str, base_url: str) -> list[Link]:
     soup = _soup(html)
     links: list[Link] = []
-    for li in soup.select("ul.wp-block-list li, ul.sarkari-quick-list li"):
+    for li in soup.select("ul.wp-block-list li, ul.sarkari-quick-list li, ul.latest-posts-last-date li"):
         a = li.find("a", href=True)
         if a is None:
             continue
         url = canonical_url(urljoin(base_url, str(a["href"])))
-        if urlsplit(url).netloc.endswith("sarkariresult.com"):
+        if _is_sarkari_result(urlsplit(url).netloc):
             text = clean_text(li.get_text(" ", strip=True), 300)
             links.append(Link(url=url, title=text, context=text, detail_page=True))
     return links or parse_generic(html, base_url)
@@ -253,7 +262,7 @@ def parse_sarkari_result_detail(html: bytes | str, base_url: str) -> list[Link]:
         for a in tr.find_all("a", href=True):
             url = canonical_url(urljoin(base_url, str(a["href"])))
             parts = urlsplit(url)
-            own_site = parts.netloc.endswith("sarkariresult.com")
+            own_site = _is_sarkari_result(parts.netloc)
             if own_site and "/wp-content/uploads/" not in parts.path and not _looks_like_pdf_url(url):
                 continue  # links back into SarkariResult itself (home, categories)
             out.append(Link(url=url, title=page_title or label, context=label, pdf_hint=True))
