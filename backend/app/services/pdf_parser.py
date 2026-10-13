@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import asyncio
 import io
+import json
 import logging
 import re
 from datetime import date, datetime, time
@@ -52,6 +53,28 @@ _RETRYABLE_HTTP = {429, 500, 502, 503, 504}
 
 class ExtractionError(RuntimeError):
     """The PDF could not be turned into a usable notification."""
+
+
+class GeminiQuotaExhausted(ExtractionError):
+    """Every configured model is out of quota for today. Not the PDF's fault:
+    the caller should put it back in the queue and stop for this run."""
+
+
+# Models that ran out of daily quota (or don't exist for this key) during this
+# process: skipped until the next run. Quotas are per model, so a fallback helps.
+_unusable_models: set[str] = set()
+
+
+def _error_blob(exc: genai_errors.APIError) -> str:
+    try:
+        return f"{exc.message} {json.dumps(exc.details)}"
+    except (TypeError, ValueError):
+        return str(exc)
+
+
+def _is_daily_quota(exc: BaseException) -> bool:
+    """A 429 that names a per-day quota: retrying today is pointless."""
+    return isinstance(exc, genai_errors.APIError) and exc.code == 429 and "PerDay" in _error_blob(exc)
 
 
 SYSTEM_INSTRUCTION = """\
@@ -94,7 +117,15 @@ def _default_client() -> genai.Client:
 
 
 def _is_retryable(exc: BaseException) -> bool:
-    return isinstance(exc, genai_errors.APIError) and exc.code in _RETRYABLE_HTTP
+    return isinstance(exc, genai_errors.APIError) and exc.code in _RETRYABLE_HTTP and not _is_daily_quota(exc)
+
+
+def _models_to_try(explicit: str | None) -> list[str]:
+    if explicit:
+        return [explicit]
+    s = get_settings()
+    names = [s.gemini_model, *(m.strip() for m in s.gemini_fallback_models.split(","))]
+    return [m for m in dict.fromkeys(names) if m and m not in _unusable_models]
 
 
 # =============================================================================
@@ -125,12 +156,36 @@ async def extract_notification(
         selection = None
 
     payload = selection.data if selection is not None else data
-    raw = await _call_gemini(client or _default_client(), payload, model or settings.gemini_model)
+    raw, used_model = await _call_with_fallback(client or _default_client(), payload, model)
     parsed = normalize_extraction(raw, tz=ZoneInfo(settings.timezone))
+    parsed.extraction_model = used_model
     # Only worth a reviewer's attention when something else already looks off.
     if selection is not None and selection.sliced and parsed.review_notes:
         parsed.review_notes.append(selection.describe())
     return parsed
+
+
+async def _call_with_fallback(
+    client: genai.Client, data: bytes, explicit: str | None
+) -> tuple[NotificationExtraction, str]:
+    """First model with quota left wins. A model that is out of daily quota, or
+    unknown to this API key (404), is skipped for the rest of the run."""
+    last_error: ExtractionError | None = None
+    quota_hit = False
+    for name in _models_to_try(explicit):
+        try:
+            return await _call_gemini(client, data, name), name
+        except GeminiQuotaExhausted as exc:
+            quota_hit, last_error = True, exc
+        except ExtractionError as exc:
+            if not str(exc).startswith("Gemini API error 404"):
+                raise  # a problem with this PDF, not with the model
+            last_error = exc
+        log.warning("Gemini model %s unusable for this run: %s", name, last_error)
+        _unusable_models.add(name)
+    if quota_hit or last_error is None:
+        raise GeminiQuotaExhausted("All Gemini models are out of quota for today.")
+    raise last_error
 
 
 # =============================================================================
@@ -157,6 +212,9 @@ async def _call_gemini(client: genai.Client, data: bytes, model: str) -> Notific
             with attempt:
                 response = await _generate(client, data, model, config)
     except genai_errors.APIError as exc:
+        if exc.code == 429:
+            # Daily quota, or a per-minute limit that outlasted every retry.
+            raise GeminiQuotaExhausted(f"Gemini API error 429 ({model}): {exc.message}") from exc
         raise ExtractionError(f"Gemini API error {exc.code}: {exc.message}") from exc
 
     text = response.text

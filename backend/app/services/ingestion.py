@@ -99,7 +99,8 @@ async def ingest_notification(
     pdf_path = settings.upload_dir / f"{sha256}.pdf"
     await asyncio.to_thread(_write_atomic, pdf_path, data)
 
-    job = _to_orm(parsed, sha256=sha256, pdf_path=str(pdf_path), model=settings.gemini_model)
+    model = parsed.extraction_model or settings.gemini_model
+    job = _to_orm(parsed, sha256=sha256, pdf_path=str(pdf_path), model=model)
     session.add(job)
     try:
         await session.commit()

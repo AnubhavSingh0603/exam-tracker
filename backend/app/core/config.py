@@ -30,6 +30,8 @@ class Settings(BaseSettings):
     # Google's alias for the current Flash model: fixed names get retired
     # ("gemini-2.5-flash is no longer available to new users", Oct 2026).
     gemini_model: str = "gemini-flash-latest"
+    # Tried in order when the main model is out of daily quota (quotas are per model).
+    gemini_fallback_models: str = "gemini-3.5-flash-lite"
     gemini_timeout_s: int = 180
     gemini_max_attempts: int = 5
 

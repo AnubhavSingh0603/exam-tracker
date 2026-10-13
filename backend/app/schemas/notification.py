@@ -60,6 +60,7 @@ class ParsedNotification(BaseModel):
     posts: list[ParsedPost] = Field(min_length=1)
     timeline: ParsedTimeline = Field(default_factory=ParsedTimeline)
     review_notes: list[str] = Field(default_factory=list)
+    extraction_model: str | None = None  # the Gemini model that actually read it
 
     @property
     def needs_review(self) -> bool:

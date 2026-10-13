@@ -20,7 +20,7 @@ from app.domain.enums import ItemKind, ItemStatus
 from app.models import DiscoveredItem, Source
 from app.services.http_fetcher import Fetcher, FetchError, RetryableFetchError
 from app.services.ingestion import ingest_notification
-from app.services.pdf_parser import ExtractionError
+from app.services.pdf_parser import ExtractionError, GeminiQuotaExhausted
 from app.services.scraper_service import DETAIL_PARSERS, SourceCrawler, classify
 
 log = logging.getLogger(__name__)
@@ -168,6 +168,13 @@ async def ingest_pending_pdfs(
                 await _finish(session, item_id, ItemStatus.SKIPPED, error="Link is not a PDF")
                 continue
             job, created = await ingest_notification(session, res.body)
+        except GeminiQuotaExhausted:
+            # Not this PDF's fault: back in the queue untouched, and stop for this run.
+            item = await session.get(DiscoveredItem, item_id)
+            if item is not None:
+                return_to_queue(item)
+                await session.commit()
+            raise
         except ExtractionError as exc:
             await _finish(session, item_id, ItemStatus.FAILED, error=f"Extraction: {exc}")
             continue
@@ -182,6 +189,13 @@ async def ingest_pending_pdfs(
         done += 1
         log.info("Ingested %s -> %s (%s)", url, job.exam_name, "new" if created else "duplicate")
     return done
+
+
+def return_to_queue(item: DiscoveredItem) -> None:
+    """Undo an attempt that failed for reasons outside the item (e.g. Gemini quota)."""
+    item.status = ItemStatus.PENDING
+    item.attempts = max(0, item.attempts - 1)
+    item.error = None
 
 
 def _record_failure(item: DiscoveredItem, exc: Exception, *, retryable: bool) -> None:

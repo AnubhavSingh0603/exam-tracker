@@ -38,6 +38,7 @@ from app.services.discovery_pipeline import (  # noqa: E402
     run_due_crawls,
 )
 from app.services.http_fetcher import Fetcher  # noqa: E402
+from app.services.pdf_parser import GeminiQuotaExhausted  # noqa: E402
 from app.services.publish import SCHEMA_VERSION, build_jobs_file, build_notices_file  # noqa: E402
 from app.services.seeds import ensure_seed_sources  # noqa: E402
 
@@ -130,14 +131,20 @@ async def run(out: Path, ingest_rounds: int) -> dict[str, object]:
             stats["detail_pages"] = await follow_detail_pages(session, fetcher, settings)
 
         ingested = 0
+        stats["gemini_quota_exhausted"] = False
         if gemini_configured():
             stats["pdfs_requeued"] = await requeue_setup_failures()
             # Small batches (Gemini free tier); stop early once nothing is waiting.
             for _ in range(ingest_rounds):
                 if await pending_pdfs() == 0:
                     break
-                async with SessionLocal() as session:
-                    ingested += await ingest_pending_pdfs(session, fetcher, settings)
+                try:
+                    async with SessionLocal() as session:
+                        ingested += await ingest_pending_pdfs(session, fetcher, settings)
+                except GeminiQuotaExhausted:
+                    log.warning("Gemini quota used up for today; remaining PDFs wait for the next run")
+                    stats["gemini_quota_exhausted"] = True
+                    break
         else:
             log.warning("GEMINI_API_KEY not set: skipping PDF extraction this run")
         stats["pdfs_ingested"] = ingested

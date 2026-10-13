@@ -43,6 +43,8 @@ jobs:
       GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY || 'unset' }}
       # Override with a repository variable if Google renames things again.
       GEMINI_MODEL: ${{ vars.GEMINI_MODEL || 'gemini-flash-latest' }}
+      # Used when the main model is out of daily quota (each model has its own quota).
+      GEMINI_FALLBACK_MODELS: ${{ vars.GEMINI_FALLBACK_MODELS || 'gemini-3.5-flash-lite' }}
       UPLOAD_DIR: /tmp/notifications
       # The server-only settings still need values to load the shared config.
       API_KEY: not-used-in-pipeline
@@ -53,6 +55,8 @@ jobs:
       CRAWL_JITTER_MINUTES: "10"
       # A source's first visit reads its newest 15 posts (the rest count as already seen).
       SEED_BACKFILL_PER_SOURCE: "15"
+      # Job pages are cheap to open (no Gemini), so clear the queue faster.
+      AGGREGATOR_DETAIL_PAGES_PER_RUN: "40"
     steps:
       - uses: actions/checkout@v5
 
