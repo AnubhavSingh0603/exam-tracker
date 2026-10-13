@@ -192,7 +192,8 @@ class _TrackedApplicationCardState extends ConsumerState<TrackedApplicationCard>
                     value: _MenuAction.delete,
                     child: Row(
                       children: [
-                        Icon(Icons.delete_outline_rounded, size: 20, color: Theme.of(context).colorScheme.error),
+                        Icon(Icons.delete_outline_rounded,
+                            size: 20, color: Theme.of(context).colorScheme.error),
                         const SizedBox(width: 8),
                         Text('Delete', style: TextStyle(color: Theme.of(context).colorScheme.error)),
                       ],

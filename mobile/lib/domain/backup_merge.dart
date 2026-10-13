@@ -59,6 +59,24 @@ BackupSnapshot mergeSnapshots(BackupSnapshot local, BackupSnapshot remote, {requ
     if (pw != null && pw.isNotEmpty) passwords[id] = pw;
   }
 
+  // Decisions: the later one per job, unless it was undone afterwards.
+  final decisions = <String, Map<String, Object?>>{};
+  for (final id in {...local.decisions.keys, ...remote.decisions.keys}) {
+    final a = local.decisions[id];
+    final b = remote.decisions[id];
+    final row = a == null ? b! : (b == null || _ms(a['decided_at']) >= _ms(b['decided_at']) ? a : b);
+    final undoneAt = tombstones['decision:$id'];
+    if (undoneAt != null && _ms(row['decided_at']) <= undoneAt.millisecondsSinceEpoch) continue;
+    decisions[id] = row;
+  }
+
+  // Job preferences: the most recently saved.
+  DateTime? savedAt(Map<String, dynamic>? p) => DateTime.tryParse('${p?['saved_at'] ?? ''}');
+  final lp = local.jobPreferences;
+  final rp = remote.jobPreferences;
+  final remotePrefsNewer =
+      lp == null || (rp != null && (savedAt(lp) == null || (savedAt(rp)?.isAfter(savedAt(lp)!) ?? false)));
+
   return BackupSnapshot(
     savedAt: now,
     deviceId: local.deviceId,
@@ -68,6 +86,8 @@ BackupSnapshot mergeSnapshots(BackupSnapshot local, BackupSnapshot remote, {requ
     vault: vault,
     passwords: passwords,
     tombstones: tombstones,
+    decisions: decisions,
+    jobPreferences: remotePrefsNewer ? rp : lp,
   );
 }
 

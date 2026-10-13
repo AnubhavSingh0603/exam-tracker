@@ -64,7 +64,8 @@ void main() {
   test('archived, past and undated items are ignored', () {
     final step = computeNextStep(
       tracked: [
-        app('arch', ApplicationStatus.examScheduled, examAt: now.add(const Duration(hours: 2)), archived: true),
+        app('arch', ApplicationStatus.examScheduled,
+            examAt: now.add(const Duration(hours: 2)), archived: true),
         app('past', ApplicationStatus.examScheduled, examAt: now.subtract(const Duration(hours: 1))),
         app('nodate', ApplicationStatus.applied),
       ],

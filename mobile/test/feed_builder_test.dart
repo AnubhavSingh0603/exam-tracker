@@ -75,14 +75,14 @@ void main() {
     expect(snap.suggested.single.nextStep, startsWith('Check if you fit'));
   });
 
-  test('applied posts are hidden and the Paralysis Shield caps at 5', () {
+  test('applied posts are hidden; everything else is listed (Today shows only the top few)', () {
     final jobs = [
       for (var i = 0; i < 8; i++) job('j$i', Duration(days: i + 1), [post('p$i')])
     ];
     final snap = build(jobs, applied: {'p0'});
-    expect(snap.items.length, 5);
+    expect(snap.items.length, 7);
     expect(snap.items.first.jobPostId, 'j1');
-    expect(snap.hiddenCount, 2);
+    expect(snap.items.first.job?.id, 'j1'); // the whole notification, for the details panel
   });
 
   test('newer pipeline schema is refused, not misread', () {

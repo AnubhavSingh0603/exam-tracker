@@ -20,6 +20,8 @@ class BackupSnapshot {
     this.vault = const {},
     this.passwords = const {},
     this.tombstones = const {},
+    this.decisions = const {},
+    this.jobPreferences,
   });
 
   final DateTime savedAt;
@@ -42,7 +44,14 @@ class BackupSnapshot {
   final Map<String, String> passwords;
 
   /// Application id -> when it was removed, so a removal also reaches other phones.
+  /// `decision:<job id>` marks an undone "applied" / "not for me".
   final Map<String, DateTime> tombstones;
+
+  /// Job id -> `job_decisions` row (applied / not for me + the job's features).
+  final Map<String, Map<String, Object?>> decisions;
+
+  /// `JobPreferences.toJson()` (with its own `saved_at`), null if never set.
+  final Map<String, dynamic>? jobPreferences;
 
   bool get isEmpty => profile == null && applications.isEmpty;
 
@@ -56,6 +65,8 @@ class BackupSnapshot {
         'vault': vault.values.toList(),
         'passwords': passwords,
         'tombstones': {for (final e in tombstones.entries) e.key: e.value.toUtc().toIso8601String()},
+        'decisions': decisions.values.toList(),
+        'job_preferences': jobPreferences,
       };
 
   /// Throws [FormatException] for a backup from a newer app version.
@@ -83,6 +94,8 @@ class BackupSnapshot {
         for (final e in ((j['tombstones'] as Map<String, dynamic>?) ?? const {}).entries)
           if (DateTime.tryParse('${e.value}') != null) e.key: DateTime.parse('${e.value}'),
       },
+      decisions: rows(j['decisions'], 'job_post_id'),
+      jobPreferences: j['job_preferences'] as Map<String, dynamic>?,
     );
   }
 }

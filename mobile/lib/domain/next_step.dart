@@ -50,7 +50,10 @@ NextStep? computeNextStep({
     if (exam == null || !exam.isAfter(now)) continue;
 
     final (kind, title) = switch (app.status) {
-      ApplicationStatus.admitCardLive => (NextStepKind.downloadAdmitCard, 'Download admit card for ${app.examName}'),
+      ApplicationStatus.admitCardLive => (
+          NextStepKind.downloadAdmitCard,
+          'Download admit card for ${app.examName}'
+        ),
       ApplicationStatus.examScheduled => (NextStepKind.attendExam, 'Exam: ${app.examName}'),
       ApplicationStatus.applied => (NextStepKind.prepareForExam, 'Prepare for ${app.examName}'),
     };

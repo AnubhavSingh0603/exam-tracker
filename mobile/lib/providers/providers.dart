@@ -17,6 +17,7 @@ import '../services/secret_store.dart';
 import '../services/update_service.dart';
 import 'account_providers.dart';
 import 'backup_providers.dart';
+import 'jobs_providers.dart';
 
 // -----------------------------------------------------------------------------
 // Infrastructure
@@ -94,6 +95,7 @@ class TrackedAppsNotifier extends AsyncNotifier<List<TrackedApplication>> {
       jobPostId: item.jobPostId,
     );
     await _db.upsertApplication(app);
+    await ref.read(decisionsProvider.notifier).record(item, applied: true); // learns what you like
     final timeline = item.timelineJson;
     if (timeline != null) await _db.saveTimeline(item.jobPostId, jsonEncode(timeline));
     await reload();
@@ -259,42 +261,13 @@ class FeedNotifier extends AsyncNotifier<FeedSnapshot> {
 
 final feedProvider = AsyncNotifierProvider<FeedNotifier, FeedSnapshot>(FeedNotifier.new);
 
-/// Paralysis Shield: unapplied, still-open items only, never more than 5.
-const feedCap = 5;
-
-final visibleFeedProvider = Provider<List<FeedItem>>((ref) {
-  final snapshot = ref.watch(feedProvider).dataOrNull;
-  if (snapshot == null) return const [];
-  final trackedIds = {
-    for (final a in ref.watch(trackedAppsProvider).dataOrNull ?? const <TrackedApplication>[]) a.id
-  };
-  final now = ref.watch(nowProvider);
-  return [
-    for (final item in snapshot.items)
-      if (!trackedIds.contains(item.bestPost.postDetailId) && item.deadline.isAfter(now)) item,
-  ].take(feedCap).toList(growable: false);
-});
-
-/// "💡 Suggested" tab: same Paralysis Shield rules as the main feed.
-final visibleSuggestedProvider = Provider<List<FeedItem>>((ref) {
-  final snapshot = ref.watch(feedProvider).dataOrNull;
-  if (snapshot == null) return const [];
-  final trackedIds = {
-    for (final a in ref.watch(trackedAppsProvider).dataOrNull ?? const <TrackedApplication>[]) a.id
-  };
-  final now = ref.watch(nowProvider);
-  return [
-    for (final item in snapshot.suggested)
-      if (!trackedIds.contains(item.bestPost.postDetailId) && item.deadline.isAfter(now)) item,
-  ].take(feedCap).toList(growable: false);
-});
-
 // -----------------------------------------------------------------------------
 // One Next Step
 // -----------------------------------------------------------------------------
 
+/// The most urgent of what you track and the best few jobs for you.
 final nextStepProvider = Provider<NextStep?>((ref) => computeNextStep(
       tracked: ref.watch(activeAppsProvider),
-      feed: ref.watch(visibleFeedProvider),
+      feed: [for (final r in ref.watch(rankedJobsProvider).take(5)) r.item],
       now: ref.watch(nowProvider),
     ));

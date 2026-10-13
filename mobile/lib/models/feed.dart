@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 
 import '../domain/urgency.dart';
+import 'jobs_data.dart';
 import 'links.dart';
 
 /// Backend `MatchKind`: direct matches fill the main feed, suggestions their own tab.
@@ -79,6 +80,8 @@ class FeedItem {
     this.applyUrl,
     this.matchKind = MatchKind.direct,
     this.timelineJson,
+    this.job,
+    this.posts = const [],
   });
 
   final String jobPostId;
@@ -99,6 +102,35 @@ class FeedItem {
 
   /// Raw `timeline` object, stored as-is when the user marks the job Applied.
   final Map<String, dynamic>? timelineJson;
+
+  /// The whole notification, for the expanded details (null for old cached feeds).
+  final PublishedJob? job;
+
+  /// Every post of [job] you qualify for, most seats first ([bestPost] is the first).
+  final List<FeedPost> posts;
+
+  /// The published post behind [bestPost].
+  PublishedPost? get bestPublishedPost {
+    for (final p in job?.posts ?? const <PublishedPost>[]) {
+      if (p.id == bestPost.postDetailId) return p;
+    }
+    return null;
+  }
+
+  String get category => job?.category ?? 'other';
+
+  /// Highest entry pay among the posts you qualify for.
+  int? get monthlyPay {
+    final ids = {
+      for (final p in posts.isEmpty ? [bestPost] : posts) p.postDetailId
+    };
+    int? best;
+    for (final p in job?.posts ?? const <PublishedPost>[]) {
+      final pay = p.monthlyPayMin;
+      if (ids.contains(p.id) && pay != null && (best == null || pay > best)) best = pay;
+    }
+    return best;
+  }
 
   factory FeedItem.fromJson(Map<String, dynamic> j) => FeedItem(
         jobPostId: j['job_post_id'] as String,

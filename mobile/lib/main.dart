@@ -4,7 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:timezone/data/latest.dart' as tzdata;
 
 import 'providers/providers.dart';
-import 'screens/dashboard_screen.dart';
+import 'screens/home_shell.dart';
 import 'services/auth_service.dart';
 import 'services/background_watch.dart';
 import 'services/database_service.dart';
@@ -37,23 +37,23 @@ Future<void> main() async {
 
   runApp(ProviderScope(
     overrides: [databaseProvider.overrideWithValue(db)],
-    child: const ExamTrackerApp(),
+    child: const ApplyTrackApp(),
   ));
 }
 
-class ExamTrackerApp extends StatelessWidget {
-  const ExamTrackerApp({super.key});
+class ApplyTrackApp extends StatelessWidget {
+  const ApplyTrackApp({super.key});
 
   @override
   Widget build(BuildContext context) {
     final theme = AppTheme.darkPastel();
     return MaterialApp(
-      title: 'Exam Tracker',
+      title: 'ApplyTrack',
       debugShowCheckedModeBanner: false,
       theme: theme,
       darkTheme: theme,
       themeMode: ThemeMode.dark,
-      home: const UpdateGate(child: DashboardScreen()),
+      home: const UpdateGate(child: HomeShell()),
     );
   }
 }

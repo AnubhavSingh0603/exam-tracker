@@ -31,14 +31,15 @@ void main() {
   });
 
   test('GitHub Pages not switched on yet (404) is skipped as well', () async {
-    final client = MockClient(
-        (req) async => req.url.host == pagesHost ? http.Response('Not Found', 404) : http.Response('{}', 200));
+    final client = MockClient((req) async =>
+        req.url.host == pagesHost ? http.Response('Not Found', 404) : http.Response('{}', 200));
     expect((await DataSource(client, bases: [pages, raw]).get('jobs.json')).base, raw);
   });
 
   test('when both are unreachable the error comes through', () async {
     final client = MockClient((_) async => throw const SocketException('offline'));
-    await expectLater(DataSource(client, bases: [pages, raw]).get('jobs.json'), throwsA(isA<SocketException>()));
+    await expectLater(
+        DataSource(client, bases: [pages, raw]).get('jobs.json'), throwsA(isA<SocketException>()));
   });
 
   group('jobs.json', () {

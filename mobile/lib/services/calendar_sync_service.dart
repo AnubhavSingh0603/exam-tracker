@@ -189,7 +189,7 @@ class CalendarSyncService {
       app.postName,
       if (app.organization != null) app.organization!,
       if (app.actionUrl != null) '\nApply / log in: ${app.actionUrl}',
-      '\nAdded by Exam Tracker',
+      '\nAdded by ApplyTrack',
     ];
     return lines.join('\n');
   }

@@ -142,4 +142,42 @@ void main() {
     expect(round.tombstones['z'], t2);
     expect(round.profileSavedAt, t1);
   });
+
+  test('job decisions and preferences travel too; an undo on one phone wins over the older decision', () {
+    Map<String, Object?> decision(String id, DateTime at, String kind) => {
+          'job_post_id': id,
+          'decision': kind,
+          'features': '["cat:bank"]',
+          'title': 'PO',
+          'organization': 'SBI',
+          'deadline': null,
+          'decided_at': ms(at),
+        };
+    final local = BackupSnapshot(
+      savedAt: now,
+      deviceId: 'a',
+      decisions: {'j1': decision('j1', t1, 'rejected')},
+      tombstones: {'decision:j2': t3}, // undone here after the other phone decided
+      jobPreferences: {
+        'preferred': ['bank'],
+        'saved_at': t1.toIso8601String()
+      },
+    );
+    final remote = BackupSnapshot(
+      savedAt: now,
+      deviceId: 'b',
+      decisions: {'j1': decision('j1', t2, 'applied'), 'j2': decision('j2', t2, 'rejected')},
+      jobPreferences: {
+        'preferred': ['psu'],
+        'saved_at': t2.toIso8601String()
+      },
+    );
+    final m = mergeSnapshots(local, remote, now: now);
+    expect(m.decisions.keys, ['j1']);
+    expect(m.decisions['j1']?['decision'], 'applied'); // the later decision
+    expect(m.jobPreferences?['preferred'], ['psu']); // the later save
+    final round = BackupSnapshot.fromJson(jsonDecode(jsonEncode(m.toJson())) as Map<String, dynamic>);
+    expect(round.decisions['j1']?['title'], 'PO');
+    expect(round.jobPreferences?['preferred'], ['psu']);
+  });
 }

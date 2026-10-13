@@ -73,6 +73,8 @@ class PublishedPost {
     this.minExperienceYears = 0,
     this.ageRelaxationOverrides = const {},
     this.vacancy,
+    this.payScale,
+    this.monthlyPayMin,
   });
 
   final String id;
@@ -91,6 +93,12 @@ class PublishedPost {
   final double minExperienceYears;
   final Map<String, int> ageRelaxationOverrides;
   final PublishedVacancy? vacancy;
+
+  /// As printed: "Level 6 (Rs 35,400-1,12,400)", "Rs 37,000 per month".
+  final String? payScale;
+
+  /// Entry monthly pay in rupees, when known.
+  final int? monthlyPayMin;
 
   factory PublishedPost.fromJson(Map<String, dynamic> j) => PublishedPost(
         id: j['id'] as String,
@@ -116,6 +124,8 @@ class PublishedPost {
         vacancy: j['vacancy'] is Map<String, dynamic>
             ? PublishedVacancy.fromJson(j['vacancy'] as Map<String, dynamic>)
             : null,
+        payScale: j['pay_scale'] as String?,
+        monthlyPayMin: _int(j['monthly_pay_min']),
       );
 }
 
@@ -134,6 +144,8 @@ class PublishedJob {
     this.applicationDeadline,
     this.examDate,
     this.timelineJson,
+    this.category = 'other',
+    this.employmentType,
   });
 
   final String id;
@@ -151,6 +163,12 @@ class PublishedJob {
   final DateTime? examDate;
   final List<PublishedPost> posts;
 
+  /// railway, bank, ssc, upsc, psu, research, defence, state, teaching, medical, court, other.
+  final String category;
+
+  /// permanent, contract, apprenticeship, fellowship, internship (null: not stated).
+  final String? employmentType;
+
   /// Raw 5-stage timeline, stored as-is when the user marks a post Applied.
   final Map<String, dynamic>? timelineJson;
 
@@ -165,6 +183,8 @@ class PublishedJob {
         applicationDeadline: _dateTime(j['application_deadline']),
         examDate: _date(j['exam_date']),
         timelineJson: j['timeline'] as Map<String, dynamic>?,
+        category: j['category'] as String? ?? 'other',
+        employmentType: j['employment_type'] as String?,
         posts: [
           for (final p in (j['posts'] as List<dynamic>? ?? const []))
             PublishedPost.fromJson(p as Map<String, dynamic>),

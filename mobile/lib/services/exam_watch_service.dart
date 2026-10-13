@@ -36,7 +36,7 @@ class ExamWatchService {
   static const _keepUpdates = 30;
   // Results can arrive more than a year after applying; after that, stop watching.
   static const _watchWindow = Duration(days: 548);
-  static const _userAgent = 'Mozilla/5.0 (Linux; Android) ExamTracker/0.5 (personal exam tracker)';
+  static const _userAgent = 'Mozilla/5.0 (Linux; Android) ApplyTrack/0.7 (personal exam tracker)';
 
   Future<List<WatchFinding>> run({DateTime? now}) async {
     final at = now ?? DateTime.now();

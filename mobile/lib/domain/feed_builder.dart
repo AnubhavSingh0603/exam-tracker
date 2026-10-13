@@ -1,6 +1,6 @@
 /// Builds the feed on the phone from jobs.json + the local profile: a port of
-/// backend/app/services/feed.py. Strict deadline order, direct matches and
-/// 💡 suggestions in separate lists, each capped by the Paralysis Shield.
+/// backend/app/services/feed.py. Deadline order, direct matches and 💡
+/// suggestions in separate lists.
 library;
 
 import '../models/feed.dart';
@@ -8,8 +8,6 @@ import '../models/jobs_data.dart';
 import '../models/user_profile.dart';
 import 'eligibility.dart';
 import 'urgency.dart';
-
-const kFeedMaxItems = 5;
 
 FeedPost _feedPost(PublishedPost post, EligibilityResult r) => FeedPost(
       postDetailId: post.id,
@@ -42,6 +40,8 @@ FeedItem _feedItem(PublishedJob job, List<FeedPost> posts, MatchKind kind) {
     bestPost: best,
     matchKind: kind,
     timelineJson: job.timelineJson,
+    job: job,
+    posts: List.unmodifiable(posts),
   );
 }
 
@@ -93,11 +93,13 @@ FeedSnapshot buildFeed({
     }
   }
 
+  // Everything you qualify for: the Jobs tab lists it all, ranked on the phone
+  // (domain/relevance.dart); Today still shows only the top few.
   return FeedSnapshot(
-    items: direct.take(kFeedMaxItems).toList(growable: false),
-    hiddenCount: direct.length > kFeedMaxItems ? direct.length - kFeedMaxItems : 0,
-    suggested: suggested.take(kFeedMaxItems).toList(growable: false),
-    suggestedHiddenCount: suggested.length > kFeedMaxItems ? suggested.length - kFeedMaxItems : 0,
+    items: List.unmodifiable(direct),
+    hiddenCount: 0,
+    suggested: List.unmodifiable(suggested),
+    suggestedHiddenCount: 0,
     category: profile.category.wire,
     fetchedAt: fetchedAt,
     fromCache: fromCache,

@@ -6,6 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../domain/backup_merge.dart';
 import '../models/backup_snapshot.dart';
+import '../models/job_preferences.dart';
 import '../models/user_profile.dart';
 import 'database_service.dart';
 import 'drive_backup_client.dart';
@@ -133,6 +134,11 @@ class BackupService {
       vault: {for (final r in await _db.exportVaultRows()) r['app_id']! as String: r},
       passwords: passwords,
       tombstones: await BackupPrefs.tombstones(),
+      decisions: {for (final r in await _db.listDecisions()) r['job_post_id']! as String: r},
+      jobPreferences: switch (await JobPreferencesStore.read()) {
+        final p when p.savedAt != null => p.toJson(),
+        _ => null,
+      },
     );
   }
 
@@ -157,6 +163,8 @@ class BackupService {
             vault: local.vault,
             passwords: local.passwords,
             tombstones: local.tombstones,
+            decisions: local.decisions,
+            jobPreferences: local.jobPreferences,
           )
         : mergeSnapshots(local, remote, now: at);
 
@@ -204,6 +212,11 @@ class BackupService {
           local.profile == null || replaceLocal || jsonEncode(profile) != jsonEncode(local.profile);
     }
     await BackupPrefs.setTombstones(merged.tombstones);
+    await _db.replaceDecisions(merged.decisions.values);
+    final prefs = merged.jobPreferences;
+    if (prefs != null && jsonEncode(prefs) != jsonEncode(local.jobPreferences)) {
+      await JobPreferencesStore.write(JobPreferences.fromJson(prefs));
+    }
 
     return BackupOutcome(
       restoredIds: restored,

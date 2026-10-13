@@ -9,6 +9,7 @@ import '../config/env.dart';
 import '../services/backup_service.dart';
 import '../services/drive_backup_client.dart';
 import 'account_providers.dart';
+import 'jobs_providers.dart';
 import 'providers.dart';
 
 enum BackupPhase {
@@ -159,6 +160,9 @@ class BackupController extends Notifier<BackupState> {
     }
     await ref.read(trackedAppsProvider.notifier).reload();
     if (outcome.profileRestored) ref.invalidate(profileProvider);
+    ref
+      ..invalidate(decisionsProvider)
+      ..invalidate(jobPreferencesProvider);
     final db = ref.read(databaseProvider);
     for (final id in outcome.calendarWanted) {
       final app = await db.getApplication(id);

@@ -100,7 +100,8 @@ class _UpdateDialogState extends State<_UpdateDialog> {
                       color: AppPalette.surfaceVariant,
                       borderRadius: BorderRadius.circular(AppRadii.control),
                     ),
-                    child: SingleChildScrollView(child: Text(info.releaseNotes.trim(), style: text.bodyMedium)),
+                    child:
+                        SingleChildScrollView(child: Text(info.releaseNotes.trim(), style: text.bodyMedium)),
                   ),
                 ),
               ],
@@ -142,7 +143,8 @@ class _UpdateDialogState extends State<_UpdateDialog> {
             ),
           ),
           const SizedBox(height: 8),
-          Text(fraction == null ? 'Downloading…' : 'Downloading… ${(fraction * 100).round()}%', style: text.bodySmall),
+          Text(fraction == null ? 'Downloading…' : 'Downloading… ${(fraction * 100).round()}%',
+              style: text.bodySmall),
           const SizedBox(height: 8),
         ];
       case UpdateInstalling():
@@ -160,7 +162,7 @@ class _UpdateDialogState extends State<_UpdateDialog> {
           if (suggestSettings) ...[
             const SizedBox(height: 8),
             Text(
-              'Settings → Apps → Exam Tracker → Install unknown apps → Allow.\n'
+              'Settings → Apps → ApplyTrack → Install unknown apps → Allow.\n'
               'On Samsung phones also check Settings → Security and privacy → Auto Blocker.',
               style: text.bodySmall,
             ),

@@ -74,7 +74,8 @@ class CredentialDrawer extends ConsumerWidget {
               child: OutlinedButton.icon(
                 onPressed: () => openExternal(context, app.actionUrl),
                 icon: const Icon(Icons.login_rounded, size: 18),
-                label: Text(app.status == ApplicationStatus.admitCardLive ? 'Admit card' : 'Application login'),
+                label:
+                    Text(app.status == ApplicationStatus.admitCardLive ? 'Admit card' : 'Application login'),
               ),
             ),
             const SizedBox(width: 8),

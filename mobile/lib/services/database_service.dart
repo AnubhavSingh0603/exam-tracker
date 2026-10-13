@@ -26,7 +26,7 @@ class DatabaseService {
   final Database _db;
 
   static const _fileName = 'exam_tracker.db';
-  static const _version = 3;
+  static const _version = 4;
 
   /// [factory]/[path] are injectable so tests can use sqflite_common_ffi in memory.
   static Future<DatabaseService> open({DatabaseFactory? factory, String? path}) async {
@@ -99,8 +99,21 @@ class DatabaseService {
           body       TEXT NOT NULL,
           fetched_at INTEGER NOT NULL
         )''');
+    _createDecisions(batch);
     await batch.commit(noResult: true);
   }
+
+  /// v4: "applied" / "not for me" per job, with the job's features for learning.
+  static void _createDecisions(Batch batch) => batch.execute('''
+        CREATE TABLE IF NOT EXISTS job_decisions (
+          job_post_id  TEXT PRIMARY KEY,
+          decision     TEXT NOT NULL CHECK (decision IN ('applied','rejected')),
+          features     TEXT NOT NULL,
+          title        TEXT NOT NULL,
+          organization TEXT NOT NULL,
+          deadline     INTEGER,
+          decided_at   INTEGER NOT NULL
+        )''');
 
   /// v2: notification id, cached 5-stage timeline and exam-watcher state.
   /// v3: the application page ("Apply online" link).
@@ -112,6 +125,11 @@ class DatabaseService {
     }
     if (from < 3) {
       await db.execute('ALTER TABLE tracked_applications ADD COLUMN apply_url TEXT');
+    }
+    if (from < 4) {
+      final batch = db.batch();
+      _createDecisions(batch);
+      await batch.commit(noResult: true);
     }
   }
 
@@ -351,4 +369,26 @@ class DatabaseService {
       DateTime.fromMillisecondsSinceEpoch(rows.first['fetched_at']! as int, isUtc: true),
     );
   }
+
+  // ---------------------------------------------------------------------------
+  // job_decisions (swipe right = applied, left = not for me)
+  // ---------------------------------------------------------------------------
+
+  Future<void> saveDecision(Map<String, Object?> row) =>
+      _db.insert('job_decisions', row, conflictAlgorithm: ConflictAlgorithm.replace);
+
+  Future<void> deleteDecision(String jobPostId) =>
+      _db.delete('job_decisions', where: 'job_post_id = ?', whereArgs: [jobPostId]);
+
+  /// Newest first.
+  Future<List<Map<String, Object?>>> listDecisions() async =>
+      [for (final r in await _db.query('job_decisions', orderBy: 'decided_at DESC')) Map.of(r)];
+
+  /// Backup restore: the merged set replaces what's here.
+  Future<void> replaceDecisions(Iterable<Map<String, Object?>> rows) => _db.transaction((txn) async {
+        await txn.delete('job_decisions');
+        for (final r in rows) {
+          await txn.insert('job_decisions', r, conflictAlgorithm: ConflictAlgorithm.replace);
+        }
+      });
 }
