@@ -133,9 +133,10 @@ def _is_daily_quota(exc: BaseException) -> bool:
 
 SYSTEM_INSTRUCTION = """\
 You are a meticulous data-entry clerk for Indian Government / PSU recruitment notifications.
-Extract facts ONLY from the attached PDF. Never guess or use outside knowledge.
-When several PDFs are attached, each is a separate notification: read each one on its own
-and never carry a fact from one document into another.
+Extract facts ONLY from the attached PDF (or, when the PDF couldn't be fetched, the text of a
+job website's page about the recruitment). Never guess or use outside knowledge.
+When several documents are attached, each is a separate notification: read each one on its
+own and never carry a fact from one document into another.
 
 Rules:
 - If a value is not printed, return null (or an empty list). Do not infer.
@@ -157,6 +158,12 @@ Rules:
 - `eligibility_text`: the essential-qualification paragraph exactly as printed (English).
 - Schedule dates (fee, correction window, admit card, exam end, answer key, result):
   only from an explicit schedule/important-dates table; "tentative" dates are fine.
+- `pay_scale`: copy the pay level / scale / fixed pay as printed. `monthly_pay_min`: the entry
+  basic pay in rupees per month (7th CPC Level 1 = 18000, L2 = 19900, L3 = 21700, L4 = 25500,
+  L5 = 29200, L6 = 35400, L7 = 44900, L8 = 47600, L9 = 53100, L10 = 56100), or the fixed monthly
+  pay / stipend; null when nothing is printed.
+- `employment_type`: permanent (regular posts), contract (fixed-term / consolidated pay),
+  apprenticeship, fellowship (JRF/SRF), or internship.
 - Bilingual (Hindi/English) PDFs: use the English text.
 """
 
@@ -207,7 +214,7 @@ def _models_to_try(explicit: str | None) -> list[str]:
 
 @dataclass(frozen=True, slots=True)
 class _Doc:
-    data: bytes  # what Gemini reads: the relevant pages of a long PDF
+    data: bytes | str  # the relevant pages of a long PDF, or a job page's text
     pages: int | None  # None when the PDF can't be opened here (Gemini may still manage)
     selection: PageSelection | None
 
@@ -225,12 +232,12 @@ async def extract_notification(
 
 
 async def extract_notifications(
-    pdfs: Sequence[bytes],
+    pdfs: Sequence[bytes | str],
     *,
     client: genai.Client | None = None,
     model: str | None = None,
 ) -> list[ParsedNotification | ExtractionError]:
-    """Reads several PDFs with as few Gemini requests as possible: up to
+    """Reads several PDFs (``str``: a job page's text) with as few Gemini requests as possible: up to
     ``gemini_batch_docs`` PDFs (``gemini_batch_pages`` pages) share one request.
 
     One outcome per PDF, in order: the notification, or that PDF's error.
@@ -250,7 +257,9 @@ async def extract_notifications(
     return [outcomes[i] for i in range(len(pdfs))]
 
 
-async def _prepare(data: bytes) -> _Doc:
+async def _prepare(data: bytes | str) -> _Doc:
+    if isinstance(data, str):
+        return _Doc(data, max(1, len(data) // 3000), None)  # ~a page per 3000 characters
     if not data.startswith(b"%PDF-"):
         raise ExtractionError("Input is not a PDF file.")
     settings = get_settings()
@@ -371,7 +380,7 @@ def _to_notification(raw: NotificationExtraction, doc: _Doc, model: str) -> Pars
 
 
 async def _call_with_fallback(
-    client: genai.Client, pdfs: list[bytes], explicit: str | None
+    client: genai.Client, pdfs: list[bytes | str], explicit: str | None
 ) -> tuple[str, str]:
     """First model with quota left wins. A model that is out of daily quota, or
     unknown to this API key (404), is skipped for the rest of the run."""
@@ -398,7 +407,7 @@ async def _call_with_fallback(
 # =============================================================================
 
 
-async def _call_gemini(client: genai.Client, pdfs: list[bytes], model: str) -> str:
+async def _call_gemini(client: genai.Client, pdfs: list[bytes | str], model: str) -> str:
     """The model's JSON answer: one ``NotificationExtraction``, or a ``BatchExtraction``
     when several PDFs share the request."""
     shared = len(pdfs) > 1
@@ -443,7 +452,7 @@ async def _call_gemini(client: genai.Client, pdfs: list[bytes], model: str) -> s
 
 
 async def _generate(
-    client: genai.Client, pdfs: list[bytes], model: str, config: types.GenerateContentConfig
+    client: genai.Client, pdfs: list[bytes | str], model: str, config: types.GenerateContentConfig
 ) -> types.GenerateContentResponse:
     uploaded: list[types.File] = []
     try:
@@ -451,7 +460,9 @@ async def _generate(
         for n, data in enumerate(pdfs, start=1):
             if len(pdfs) > 1:
                 contents.append(f"Document {n}:")
-            if len(data) <= INLINE_PDF_LIMIT:
+            if isinstance(data, str):
+                contents.append(data)  # a job page's text
+            elif len(data) <= INLINE_PDF_LIMIT:
                 contents.append(types.Part.from_bytes(data=data, mime_type="application/pdf"))
             else:
                 file = await client.aio.files.upload(
@@ -598,6 +609,32 @@ def _experience(value: float | None, label: str, notes: list[str]) -> float:
     return round(float(value), 2)
 
 
+def _monthly_pay(value: int | None, label: str, notes: list[str]) -> int | None:
+    if value is None or value <= 0:
+        return None
+    if not 1000 <= value <= 1_000_000:
+        notes.append(f"{label}: implausible monthly pay {value} ignored")
+        return None
+    return int(value)
+
+
+_EMPLOYMENT_TYPES = {
+    "permanent": "permanent",
+    "regular": "permanent",
+    "contract": "contract",
+    "contractual": "contract",
+    "temporary": "contract",
+    "apprentice": "apprenticeship",
+    "apprenticeship": "apprenticeship",
+    "fellowship": "fellowship",
+    "internship": "internship",
+}
+
+
+def _employment_type(raw: str | None) -> str | None:
+    return _EMPLOYMENT_TYPES.get((raw or "").strip().lower())
+
+
 def _dedupe(items: list[str]) -> list[str]:
     seen: set[str] = set()
     out: list[str] = []
@@ -656,6 +693,8 @@ def normalize_extraction(raw: NotificationExtraction, *, tz: ZoneInfo) -> Parsed
                 is_open_to_any_post_graduate=bool(p.open_to_any_post_graduate)
                 or inferred.open_to_any_post_graduate,
                 min_experience_years=_experience(p.min_experience_years, label, notes),
+                pay_scale=(p.pay_scale or "").strip()[:300] or None,
+                monthly_pay_min=_monthly_pay(p.monthly_pay_min, label, notes),
                 vacancy=_vacancy(p.vacancies, label, notes),
             )
         )
@@ -685,5 +724,6 @@ def normalize_extraction(raw: NotificationExtraction, *, tz: ZoneInfo) -> Parsed
         exam_date=exam_date,
         posts=posts,
         timeline=timeline,
+        employment_type=_employment_type(raw.employment_type),
         review_notes=notes,
     )

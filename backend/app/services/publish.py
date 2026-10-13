@@ -12,6 +12,7 @@ except the "Others" keyword search.
 
 from __future__ import annotations
 
+import re
 from datetime import UTC, date, datetime, timedelta
 from typing import Any
 
@@ -68,11 +69,57 @@ def post_json(post: PostDetail) -> dict[str, Any]:
         "raw_eligibility_text": post.raw_eligibility_text,
         **merged_requirement(post),
         "min_experience_years": float(post.min_experience_years or 0),
+        "pay_scale": post.pay_scale,
+        "monthly_pay_min": post.monthly_pay_min,
         "age_relaxation_overrides": dict(post.age_relaxation_overrides or {}),
         "vacancy": None
         if vac is None
         else {"ur": vac.ur, "sc": vac.sc, "st": vac.st, "obc": vac.obc, "ews": vac.ews, "total": vac.total},
     }
+
+
+# First match wins: a railway PSU is "railway", a bank's research post is "bank".
+_CATEGORIES: tuple[tuple[str, re.Pattern[str]], ...] = tuple(
+    (name, re.compile(pattern, re.IGNORECASE))
+    for name, pattern in (
+        ("railway", r"\b(?:rrb|rrc|railway|ntpc graduate|ntpc ug|metro rail|ircon|rites|konkan)\b"),
+        ("bank", r"\b(?:bank|banking|crp|ibps|sbi|rbi|nabard|sidbi|exim|lic|insurance|niacl|gic|sebi|ippb)\b"),
+        ("ssc", r"\b(?:ssc|staff selection commission)\b"),
+        ("upsc", r"\b(?:upsc|union public service commission)\b"),
+        (
+            "research",
+            r"\b(?:jrf|srf|research (?:fellow|associate|assistant)|project (?:associate|assistant|scientist|"
+            r"staff|technical)|post[- ]?doctoral|fellow)\b",
+        ),
+        (
+            "defence",
+            r"\b(?:army|navy|air force|coast guard|bsf|crpf|cisf|itbp|ssb|assam rifles|police|"
+            r"constable|agniveer|defence|ordnance)\b",
+        ),
+        (
+            "psu",
+            r"\b(?:limited|ltd|corporation|ongc|bhel|bel|gail|iocl|hpcl|bpcl|sail|hal|nhpc|ntpc|powergrid|"
+            r"coal india|nlc|npcil|drdo|isro|barc|aai|bsnl|nmdc|psu)\b",
+        ),
+        ("teaching", r"\b(?:teacher|tgt|pgt|prt|lecturer|professor|faculty|school|kvs|nvs|education)\b"),
+        (
+            "medical",
+            r"\b(?:aiims|nurs\w*|medical|doctors?|hospital|health|pharmac\w*|paramedical|resident)\b",
+        ),
+        ("court", r"\b(?:court|judicial|judge|legal)\b"),
+        (
+            "state",
+            r"\b(?:psc|sssc|subordinate|dsssb|osssc|hssc|bpsc|uppsc|mpesb|rsmssb|jssc|wbpsc|tnpsc|kpsc|"
+            r"appsc|tspsc|opsc|gpsc|mpsc|state|district|zila|municipal|nagar)\b",
+        ),
+    )
+)
+
+
+def job_category(organization: str, exam_name: str) -> str:
+    """A coarse group the app filters and ranks by (keywords, so older jobs get one too)."""
+    text = f"{organization} {exam_name}"
+    return next((name for name, pattern in _CATEGORIES if pattern.search(text)), "other")
 
 
 def job_json(job: JobPost) -> dict[str, Any]:
@@ -83,6 +130,8 @@ def job_json(job: JobPost) -> dict[str, Any]:
         "advertisement_no": job.advertisement_no,
         "portal_url": job.portal_url,
         "apply_url": job.apply_url,  # the registration page itself, when a job site links it
+        "category": job_category(job.organization, job.exam_name),
+        "employment_type": job.employment_type,
         "application_start": _iso(job.application_start),
         "application_deadline": _iso(job.application_deadline),
         "exam_date": _iso(job.exam_date),

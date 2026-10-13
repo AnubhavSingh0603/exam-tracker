@@ -33,6 +33,8 @@ class ParsedPost(BaseModel):
     is_open_to_any_graduate: bool = False
     is_open_to_any_post_graduate: bool = False
     min_experience_years: float = Field(0.0, ge=0, le=40)
+    pay_scale: str | None = Field(None, max_length=300)
+    monthly_pay_min: int | None = Field(None, ge=0)
     vacancy: ParsedVacancy
 
 
@@ -59,6 +61,7 @@ class ParsedNotification(BaseModel):
     exam_date: date | None = None
     posts: list[ParsedPost] = Field(min_length=1)
     timeline: ParsedTimeline = Field(default_factory=ParsedTimeline)
+    employment_type: str | None = None  # permanent | contract | apprenticeship | fellowship | internship
     review_notes: list[str] = Field(default_factory=list)
     extraction_model: str | None = None  # the Gemini model that actually read it
 

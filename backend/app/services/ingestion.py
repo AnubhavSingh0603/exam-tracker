@@ -50,6 +50,7 @@ def _to_orm(
         advertisement_no=parsed.advertisement_no,
         portal_url=parsed.portal_url,
         apply_url=apply_url[:1000] if apply_url else None,
+        employment_type=parsed.employment_type,
         application_start=parsed.application_start,
         application_deadline=parsed.application_deadline,
         exam_date=parsed.exam_date,
@@ -74,6 +75,8 @@ def _to_orm(
                 is_open_to_any_graduate=p.is_open_to_any_graduate,
                 is_open_to_any_post_graduate=p.is_open_to_any_post_graduate,
                 min_experience_years=p.min_experience_years,
+                pay_scale=p.pay_scale,
+                monthly_pay_min=p.monthly_pay_min,
                 vacancy=VacancyMatrix(**p.vacancy.model_dump()),
             )
             for p in parsed.posts
@@ -124,7 +127,8 @@ async def save_notification(
         await remember_apply_url(session, existing, apply_url)
         return existing, False
 
-    pdf_path = settings.upload_dir / f"{sha256}.pdf"
+    suffix = "pdf" if data.startswith(b"%PDF-") else "txt"  # a job page's text, when the PDF was out of reach
+    pdf_path = settings.upload_dir / f"{sha256}.{suffix}"
     await asyncio.to_thread(_write_atomic, pdf_path, data)
 
     model = parsed.extraction_model or settings.gemini_model

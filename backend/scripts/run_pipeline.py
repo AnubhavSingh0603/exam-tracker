@@ -23,7 +23,8 @@ from pathlib import Path
 BACKEND = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(BACKEND))
 
-from sqlalchemy import delete, func, or_, select, text, update  # noqa: E402
+from sqlalchemy import delete, exists, func, or_, select, text, update  # noqa: E402
+from sqlalchemy.orm import aliased  # noqa: E402
 
 import app.models  # noqa: E402,F401  (registers tables)
 from app.core.config import get_settings  # noqa: E402
@@ -40,6 +41,7 @@ from app.services.discovery_pipeline import (  # noqa: E402
 from app.services.http_fetcher import Fetcher  # noqa: E402
 from app.services.pdf_parser import quota_left, usage  # noqa: E402
 from app.services.publish import SCHEMA_VERSION, build_jobs_file, build_notices_file  # noqa: E402
+from app.services.scraper_service import closing_date, local_today  # noqa: E402
 from app.services.seeds import ensure_seed_sources  # noqa: E402
 
 log = logging.getLogger("pipeline")
@@ -47,12 +49,18 @@ log = logging.getLogger("pipeline")
 # Kept long enough that a link seen once is never "new" again on its source.
 KEEP_ITEMS = timedelta(days=365)
 KEEP_JOBS = timedelta(days=400)
+# Undated links seen this recently may still be open: worth (re)reading.
+REOPEN_UNDATED = timedelta(days=45)
 
 # Columns added after the saved state was first created: create_all() makes new
 # tables but never alters existing ones, and a fresh start would forget every link.
 ADDED_COLUMNS = (
     "ALTER TABLE discovered_items ADD COLUMN IF NOT EXISTS apply_url VARCHAR(2000)",
     "ALTER TABLE job_posts ADD COLUMN IF NOT EXISTS apply_url VARCHAR(1000)",
+    "ALTER TABLE discovered_items ADD COLUMN IF NOT EXISTS page_url VARCHAR(2000)",
+    "ALTER TABLE job_posts ADD COLUMN IF NOT EXISTS employment_type VARCHAR(20)",
+    "ALTER TABLE post_details ADD COLUMN IF NOT EXISTS pay_scale VARCHAR(300)",
+    "ALTER TABLE post_details ADD COLUMN IF NOT EXISTS monthly_pay_min INTEGER",
 )
 
 
@@ -83,7 +91,49 @@ SETUP_ERRORS = (
     "Extraction: Gemini API error 403%",
     "Extraction: Gemini API error 404%",
     "Extraction: Gemini API error 429%",
+    # Official sites that time out from GitHub's US runners: retried, now with the
+    # job page's text as a fallback.
+    "%Timeout%",
+    "%ConnectError%",
 )
+
+
+async def reopen_open_jobs(now: datetime) -> int:
+    """Open jobs that an earlier version filed as "already seen" on a source's first
+    visit (RRB NTPC, IBPS PO...) go back in the queue. Also re-opens job pages whose
+    PDFs were queued before pages were remembered, so those PDFs learn their page."""
+    today = local_today(get_settings(), now)
+    reopened = 0
+    async with SessionLocal() as session:
+        baseline = await session.scalars(
+            select(DiscoveredItem).where(
+                DiscoveredItem.kind.in_([ItemKind.DETAIL_PAGE, ItemKind.NOTIFICATION_PDF]),
+                DiscoveredItem.status == ItemStatus.BASELINE,
+            )
+        )
+        for item in baseline:
+            closes = closing_date(item.title or "")
+            recent = item.published_at is not None and item.published_at >= now - REOPEN_UNDATED
+            if (closes is not None and closes >= today) or (closes is None and recent):
+                item.status, item.error = ItemStatus.PENDING, None
+                reopened += 1
+        child = aliased(DiscoveredItem)
+        pages = await session.scalars(
+            select(DiscoveredItem).where(
+                DiscoveredItem.kind == ItemKind.DETAIL_PAGE,
+                DiscoveredItem.status == ItemStatus.DONE,
+                DiscoveredItem.error.is_(None),
+                DiscoveredItem.created_at >= now - REOPEN_UNDATED,
+                ~exists().where(child.page_url == DiscoveredItem.url),
+            )
+        )
+        for page in pages:
+            closes = closing_date(page.title or "")
+            if closes is None or closes >= today:
+                page.status = ItemStatus.PENDING
+                reopened += 1
+        await session.commit()
+    return reopened
 
 
 async def requeue_setup_failures() -> int:
@@ -135,6 +185,7 @@ async def run(out: Path, ingest_rounds: int) -> dict[str, object]:
     )
     stats: dict[str, object] = {"schema": SCHEMA_VERSION, "started_at": started.isoformat()}
     try:
+        stats["jobs_reopened"] = await reopen_open_jobs(started)
         stats["sources_crawled"] = await run_due_crawls(SessionLocal, fetcher, settings)
         async with SessionLocal() as session:
             stats["detail_pages"] = await follow_detail_pages(session, fetcher, settings)

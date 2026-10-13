@@ -80,7 +80,6 @@ class Settings(BaseSettings):
     respect_robots_txt: bool = True
     playwright_enabled: bool = False  # needs the image built with WITH_CHROMIUM=1
     aggregator_detail_pages_per_run: int = 15  # SarkariResult/FJA follow-ups per crawl
-    seed_backfill_per_source: int = 3  # on first crawl, ingest only the newest N
     ingest_batch_size: int = 6  # PDFs per ingest round (read gemini_batch_docs per request)
     ingest_interval_minutes: int = 15
     max_custom_sources_per_user: int = 20

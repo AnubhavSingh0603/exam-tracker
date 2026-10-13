@@ -43,6 +43,7 @@ EXTRACTION = {
     "exam_end_date": None,
     "answer_key_date": None,
     "result_date": None,
+    "employment_type": None,
     "general_age_relaxations": [],
     "posts": [
         {
@@ -58,6 +59,8 @@ EXTRACTION = {
             "open_to_any_graduate": None,
             "open_to_any_post_graduate": None,
             "min_experience_years": None,
+            "pay_scale": None,
+            "monthly_pay_min": None,
             "vacancies": {
                 "ur": 10,
                 "sc": 3,
@@ -321,3 +324,23 @@ def test_quota_failure_puts_the_pdf_back_in_the_queue():
     )
     return_to_queue(item)
     assert (item.status, item.attempts, item.error) == (ItemStatus.PENDING, 0, None)
+
+
+async def test_a_job_page_text_is_read_when_the_pdf_was_out_of_reach():
+    seen: list[list] = []
+
+    def answer(names):
+        return _answer(names) if names else _extraction("RRB NTPC")
+
+    client = FakeClient({"main-model": answer})
+    original = client._generate
+
+    async def spy(*, model, contents, config):
+        seen.append(contents)
+        return await original(model=model, contents=contents, config=config)
+
+    client.aio.models.generate_content = spy
+    page = "Job page: https://sarkariresult.com.cm/rrb-ntpc/\nTitle: RRB NTPC\n\n" + "Important dates " * 50
+    out = await extract_notifications([page], client=client)
+    assert out[0].exam_name == "RRB NTPC"
+    assert page in seen[0]  # sent as text, not as a PDF part

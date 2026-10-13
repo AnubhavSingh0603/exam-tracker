@@ -14,7 +14,8 @@ from collections.abc import Callable
 from datetime import UTC, datetime
 from urllib.parse import urlsplit
 
-from sqlalchemy import or_, select
+from bs4 import BeautifulSoup
+from sqlalchemy import func, or_, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -33,8 +34,10 @@ from app.services.scraper_service import (
     DETAIL_PARSERS,
     SourceCrawler,
     classify,
+    clean_text,
     closed_note,
     find_apply_link,
+    job_priority,
     local_today,
 )
 
@@ -99,10 +102,10 @@ async def follow_detail_pages(
             select(DiscoveredItem)
             .join(Source)
             .where(DiscoveredItem.kind == ItemKind.DETAIL_PAGE, DiscoveredItem.status == ItemStatus.PENDING)
-            .order_by(DiscoveredItem.created_at)
-            .limit(settings.aggregator_detail_pages_per_run)
+            .limit(QUEUE_SCAN)
         )
     )
+    items = by_priority(items)[: settings.aggregator_detail_pages_per_run]
     processed = 0
     today = local_today(settings)
     for item in items:
@@ -140,6 +143,7 @@ async def follow_detail_pages(
                     "keywords": flags,
                     "published_at": item.published_at,
                     "apply_url": apply_url,
+                    "page_url": item.url[:2000],
                 }
             )
         if rows:
@@ -147,6 +151,18 @@ async def follow_detail_pages(
                 pg_insert(DiscoveredItem)
                 .values(rows)
                 .on_conflict_do_nothing(index_elements=["source_id", "url"])
+            )
+            # PDFs queued before pages were remembered: link them up now.
+            await session.execute(
+                update(DiscoveredItem)
+                .where(
+                    DiscoveredItem.source_id == item.source_id,
+                    DiscoveredItem.url.in_([r["url"] for r in rows]),
+                    DiscoveredItem.page_url.is_(None),
+                )
+                .values(
+                    page_url=item.url[:2000], apply_url=func.coalesce(DiscoveredItem.apply_url, apply_url)
+                )
             )
         item.status = ItemStatus.DONE
         item.error = None if rows else "No notification link found on page"
@@ -176,40 +192,64 @@ async def ingest_pending_pdfs(
                 DiscoveredItem.status == ItemStatus.PENDING,
                 DiscoveredItem.attempts < MAX_ATTEMPTS,
             )
-            .order_by(DiscoveredItem.published_at.desc().nulls_last(), DiscoveredItem.created_at.desc())
-            .limit(settings.ingest_batch_size)
+            .limit(QUEUE_SCAN)
         )
     )
-    done = 0
-    to_read: list[tuple[uuid.UUID, str, str | None, str, bytes]] = []  # id, url, apply url, sha256, pdf
+    today = local_today(settings)
     for item in items:
-        item_id, url, apply_url = item.id, item.url, item.apply_url
+        if note := closed_note(item.title, today):
+            item.status, item.error = ItemStatus.SKIPPED, note
+    await session.commit()
+    items = by_priority([i for i in items if i.status == ItemStatus.PENDING])[: settings.ingest_batch_size]
+    done = 0
+    to_read: list[tuple[uuid.UUID, str, str | None, str, bytes]] = []  # id, url, apply url, sha256, doc
+    for item in items:
+        item_id, url, apply_url, page_url = item.id, item.url, item.apply_url, item.page_url
         item.attempts += 1
         await session.commit()
+        problem: Exception | None = None
+        body: bytes | None = None
         try:
             res = await fetcher.get(url, max_bytes=settings.max_upload_bytes)
+            if res.is_pdf:
+                body = res.body
+            else:
+                problem = FetchError("Link is not a PDF")
         except FetchError as exc:
+            problem = exc
+        if body is None and page_url:
+            # The official site is unreachable from here, or the link is a web page:
+            # the job site's own page lists the dates, posts, fees and eligibility.
+            text = await page_text(fetcher, page_url, settings)
+            if text is not None:
+                body = text.encode("utf-8")
+                log.info("Reading %s from its job page %s (%s)", url, page_url, problem)
+        if body is None:
             item = await session.get(DiscoveredItem, item_id)
             if item is not None:
-                _record_failure(item, exc, retryable=isinstance(exc, RetryableFetchError))
+                if isinstance(problem, FetchError) and str(problem) == "Link is not a PDF":
+                    item.status, item.error = ItemStatus.SKIPPED, str(problem)
+                else:
+                    _record_failure(
+                        item, problem or FetchError("?"), retryable=isinstance(problem, RetryableFetchError)
+                    )
                 await session.commit()
             continue
-        if not res.is_pdf:
-            await _finish(session, item_id, ItemStatus.SKIPPED, error="Link is not a PDF")
-            continue
-        sha256 = pdf_sha256(res.body)
+        res_body = body
+        sha256 = pdf_sha256(res_body)
         if known := await find_by_pdf(session, sha256):  # read before, e.g. via another source
             await remember_apply_url(session, known, apply_url)
             await _finish(session, item_id, ItemStatus.DONE, job_post_id=known.id)
             done += 1
             log.info("Ingested %s -> %s (duplicate)", url, known.exam_name)
             continue
-        to_read.append((item_id, url, apply_url, sha256, res.body))
+        to_read.append((item_id, url, apply_url, sha256, res_body))
     if not to_read:
         return done
 
-    pdfs = {sha256: data for *_, sha256, data in to_read}  # the same PDF twice is read once
-    outcomes = dict(zip(pdfs, await extract_notifications(list(pdfs.values())), strict=True))
+    docs = {sha256: data for *_, sha256, data in to_read}  # the same PDF twice is read once
+    readable = [d if d.startswith(b"%PDF-") else d.decode("utf-8") for d in docs.values()]
+    outcomes = dict(zip(docs, await extract_notifications(readable), strict=True))
     for item_id, url, apply_url, sha256, data in to_read:
         outcome = outcomes[sha256]
         if isinstance(outcome, GeminiQuotaExhausted | GeminiUnavailable):
@@ -229,6 +269,36 @@ async def ingest_pending_pdfs(
         done += 1
         log.info("Ingested %s -> %s (%s)", url, job.exam_name, "new" if created else "duplicate")
     return done
+
+
+# Queues are small (hundreds); sorting in Python keeps the priority rules in one place.
+QUEUE_SCAN = 3000
+
+
+def by_priority(items: list[DiscoveredItem]) -> list[DiscoveredItem]:
+    """Big recruitments (railways, banks, SSC, PSUs...) first, then the newest."""
+    return sorted(
+        items,
+        key=lambda i: (-job_priority(i.title or ""), -(i.published_at.timestamp() if i.published_at else 0)),
+    )
+
+
+async def page_text(fetcher: Fetcher, url: str, settings: Settings) -> str | None:
+    """The readable text of a job page, without menus, ads and scripts."""
+    try:
+        res = await fetcher.get(url, max_bytes=settings.max_page_bytes)
+    except FetchError:
+        return None
+    soup = BeautifulSoup(res.body, "lxml")
+    for tag in soup(["script", "style", "noscript", "nav", "header", "footer", "aside", "form", "iframe"]):
+        tag.decompose()
+    main = soup.find("article") or soup.find("main") or soup.body or soup
+    lines = [clean_text(line, 400) for line in main.get_text("\n").splitlines()]
+    text = "\n".join(line for line in lines if line)
+    if len(text) < 500:
+        return None  # nothing useful (an error page, a login wall)
+    title = clean_text(soup.title.get_text() if soup.title else "", 200)
+    return f"Job page: {url}\nTitle: {title}\n\n{text[:40000]}"
 
 
 def return_to_queue(item: DiscoveredItem) -> None:

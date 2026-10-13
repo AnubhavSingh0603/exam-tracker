@@ -31,6 +31,7 @@ class JobPost(UUIDPkMixin, TimestampMixin, Base):
     # The registration / application page itself (from the job site's "Apply Online"
     # link); portal_url is the website the exam watcher checks for notices.
     apply_url: Mapped[str | None] = mapped_column(String(1000))
+    employment_type: Mapped[str | None] = mapped_column(String(20))
     application_start: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     application_deadline: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), index=True)
     exam_date: Mapped[date | None]
@@ -76,6 +77,8 @@ class PostDetail(UUIDPkMixin, Base):
     is_open_to_any_graduate: Mapped[bool] = mapped_column(default=False, server_default="false")
     is_open_to_any_post_graduate: Mapped[bool] = mapped_column(default=False, server_default="false")
     min_experience_years: Mapped[float] = mapped_column(Float, default=0.0, server_default="0")
+    pay_scale: Mapped[str | None] = mapped_column(String(300))
+    monthly_pay_min: Mapped[int | None] = mapped_column(Integer)
     # Notification-specific relaxations that override defaults: {"OBC": 3, "PWBD": 10, ...}
     age_relaxation_overrides: Mapped[dict[str, int]] = mapped_column(JSONB, default=dict)
 

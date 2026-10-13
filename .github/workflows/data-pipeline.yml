@@ -59,10 +59,8 @@ jobs:
       # Runs are 4 h apart; slightly shorter so every source is due on every run.
       CRAWL_INTERVAL_HOURS: "3.5"
       CRAWL_JITTER_MINUTES: "10"
-      # A source's first visit reads its newest 15 posts (the rest count as already seen).
-      SEED_BACKFILL_PER_SOURCE: "15"
       # Job pages are cheap to open (no Gemini), so clear the queue faster.
-      AGGREGATOR_DETAIL_PAGES_PER_RUN: "40"
+      AGGREGATOR_DETAIL_PAGES_PER_RUN: "80"
     steps:
       - uses: actions/checkout@v5
 

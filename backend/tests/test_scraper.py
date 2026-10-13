@@ -262,3 +262,21 @@ def test_apply_online_link_is_the_registration_page_not_the_portal():
     assert find_apply_link(soon, "https://sarkariresult.com.cm/x/") is None
     ad = "<p><a href='https://mocktests.example.com/'>Free Mock Test – Register Now</a></p>"
     assert find_apply_link(ad, "https://sarkariresult.com.cm/x/") is None
+
+
+def test_big_recruitments_are_read_before_walk_ins():
+    from app.services.scraper_service import is_social_link, job_priority
+
+    titles = [
+        "Tata Memorial Centre- ACTREC Gardener",
+        "IIIT Sri City Junior Research Fellow Recruitment 2026",
+        "RRB NTPC Graduate Level Online Form 2026 (3548 Posts) – Last Date: 06 November 2026",
+        "Notification for Common Recruitment Process for CRP- PO/MTs-XVI",
+        "NHM Sukma Recruitment 2026 – Walkin for 53 Nursing Officer",
+    ]
+    ranked = sorted(titles, key=job_priority, reverse=True)
+    assert set(ranked[:2]) == {titles[2], titles[3]}
+    assert ranked[-1] == titles[0]
+    assert is_social_link("https://whatsapp.com/channel/0029VaAb")
+    assert is_social_link("https://t.me/sarkari")
+    assert not is_social_link("https://rrb.indianrailways.gov.in/notice.pdf")

@@ -56,5 +56,8 @@ class DiscoveredItem(UUIDPkMixin, TimestampMixin, Base):
     job_post_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("job_posts.id", ondelete="SET NULL"))
     # "Apply Online" link from the job page this PDF was found on; copied to the job.
     apply_url: Mapped[str | None] = mapped_column(String(2000))
+    # The job page this PDF was found on: its text is read instead when the official
+    # site can't be reached from the pipeline (e.g. RRB sites time out from abroad).
+    page_url: Mapped[str | None] = mapped_column(String(2000))
 
     source: Mapped[Source] = relationship(back_populates="items")

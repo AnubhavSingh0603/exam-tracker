@@ -72,3 +72,14 @@ def test_job_json_is_plain_json_with_timeline():
     assert p["is_open_to_any_graduate"] and p["min_qualification_level"] == "UG"
     assert p["vacancy"] == {"ur": 10, "sc": 3, "st": 1, "obc": 5, "ews": 2, "total": 21}
     assert p["age_as_on"] == "2026-08-01"
+
+
+def test_jobs_get_a_category_for_filtering():
+    from app.services.publish import job_category
+
+    assert job_category("Railway Recruitment Board", "RRB NTPC Graduate Level 2026") == "railway"
+    assert job_category("Institute of Banking Personnel Selection", "CRP PO/MT-XVI") == "bank"
+    assert job_category("Staff Selection Commission", "Combined Graduate Level 2026") == "ssc"
+    assert job_category("IIT Kharagpur", "Junior Research Fellow [JRF]") == "research"
+    assert job_category("Bharat Electronics Limited", "Probationary Engineer") == "psu"
+    assert job_category("Tata Memorial Centre", "Gardener") == "other"

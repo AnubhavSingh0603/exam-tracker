@@ -55,6 +55,14 @@ class ExtractedPost(BaseModel):
     min_experience_years: float | None = Field(
         description="Minimum post-qualification work experience in years; 0 or null if none required"
     )
+    pay_scale: str | None = Field(
+        description="Pay as printed: pay level / pay scale / fixed monthly pay or stipend, e.g. "
+        "'Level 6 (Rs 35,400-1,12,400)' or 'Rs 37,000 per month (consolidated)'"
+    )
+    monthly_pay_min: int | None = Field(
+        description="Lowest monthly amount in rupees: entry basic pay of the scale, or the fixed monthly "
+        "pay/stipend; null if not printed. 'Level 6' alone is not a number: give its entry basic pay (35400)"
+    )
     vacancies: ExtractedVacancy
     age_relaxations: list[ExtractedRelaxation] = Field(
         description="Only relaxations specific to this post that differ from the notification-wide list"
@@ -78,6 +86,9 @@ class NotificationExtraction(BaseModel):
     exam_end_date: str | None = Field(description="Last day of a multi-day exam window, YYYY-MM-DD")
     answer_key_date: str | None = Field(description="Tentative answer key release date")
     result_date: str | None = Field(description="Tentative result declaration date")
+    employment_type: str | None = Field(
+        description="One of: permanent, contract, apprenticeship, fellowship, internship"
+    )
     general_age_relaxations: list[ExtractedRelaxation]
     posts: list[ExtractedPost]
 

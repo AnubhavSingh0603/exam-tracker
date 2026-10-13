@@ -25,6 +25,7 @@ def _raw(**over) -> NotificationExtraction:
         "exam_end_date": None,
         "answer_key_date": None,
         "result_date": None,
+        "employment_type": None,
         "general_age_relaxations": [
             {"category": "OBC (NCL)", "years": 3},
             {"category": "SC/ST", "years": 5},
@@ -47,6 +48,8 @@ def _raw(**over) -> NotificationExtraction:
                 "open_to_any_graduate": None,
                 "open_to_any_post_graduate": None,
                 "min_experience_years": None,
+                "pay_scale": None,
+                "monthly_pay_min": None,
                 "vacancies": vac,
                 "age_relaxations": [],
             }
@@ -118,3 +121,17 @@ def test_schedule_dates_become_the_timeline():
     assert n.timeline.admit_card_release.isoformat() == "2026-12-05"
     assert n.timeline.result_date.isoformat() == "2027-02-01"
     assert n.timeline.answer_key_release is None
+
+
+def test_pay_and_job_type_are_kept_and_sanity_checked():
+    raw = _raw(employment_type="Contractual")
+    raw.posts[0].pay_scale = "Level 6 (Rs 35,400 - 1,12,400)"
+    raw.posts[0].monthly_pay_min = 35400
+    n = normalize_extraction(raw, tz=IST)
+    assert n.employment_type == "contract"
+    assert (n.posts[0].pay_scale, n.posts[0].monthly_pay_min) == ("Level 6 (Rs 35,400 - 1,12,400)", 35400)
+
+    raw.posts[0].monthly_pay_min = 35  # "35 thousand" misread
+    n = normalize_extraction(raw, tz=IST)
+    assert n.posts[0].monthly_pay_min is None
+    assert any("implausible monthly pay" in note for note in n.review_notes)

@@ -10,9 +10,9 @@ Pipeline for one source
      NOTIFICATION_PDF -> queued for Gemini (discovery_pipeline.ingest_pending_pdfs)
      DETAIL_PAGE      -> aggregator page to open later (discovery_pipeline.follow_detail_pages)
      ALERT            -> admit card / exam date / postponed / corrigendum
-4. First crawl of a source records everything as BASELINE except the newest
-   ``seed_backfill_per_source`` actionable items, so adding a source never
-   floods the Gemini free tier.
+4. A job that is still open is always read, even on a source's first crawl.
+   Only old alerts (admit cards, results from before tracking began) count
+   as BASELINE. ``job_priority`` decides what Gemini reads first.
 5. A job link whose "Last Date" (printed beside it on aggregator lists) has
    passed is SKIPPED: reading it would spend a Gemini request on a closed job.
 
@@ -269,6 +269,8 @@ def parse_sarkari_result_detail(html: bytes | str, base_url: str) -> list[Link]:
             own_site = _is_sarkari_result(parts.netloc)
             if own_site and "/wp-content/uploads/" not in parts.path and not _looks_like_pdf_url(url):
                 continue  # links back into SarkariResult itself (home, categories)
+            if is_social_link(url):
+                continue  # "Join our WhatsApp channel for notifications"
             out.append(Link(url=url, title=page_title or label, context=label, pdf_hint=True))
     return out
 
@@ -284,6 +286,8 @@ def parse_free_job_alert_list(html: bytes | str, base_url: str) -> list[Link]:
             continue
         posted, board, post, _qual, advt, last_date = cells[:6]
         title = f"{board} – {post} Recruitment" + (f" (Advt {advt})" if advt.strip("– ") else "")
+        if _parse_ddmmyyyy(last_date):
+            title += f" – Last Date: {last_date}"  # kept with the item: closed jobs are skipped later
         published = _parse_ddmmyyyy(posted)
         links.append(
             Link(
@@ -305,9 +309,80 @@ def parse_free_job_alert_detail(html: bytes | str, base_url: str) -> list[Link]:
     for a in soup.find_all("a", href=True):
         text = clean_text(a.get_text(" ", strip=True), 120).lower()
         url = canonical_url(urljoin(base_url, str(a["href"])))
-        if "notification" in text and not urlsplit(url).netloc.endswith("freejobalert.com"):
+        if (
+            "notification" in text
+            and not urlsplit(url).netloc.endswith("freejobalert.com")
+            and not is_social_link(url)
+        ):
             out.append(Link(url=url, title=page_title or text, context=text, pdf_hint=True))
     return out
+
+
+_SOCIAL_HOSTS = (
+    "whatsapp.com",
+    "t.me",
+    "telegram.me",
+    "telegram.org",
+    "youtube.com",
+    "youtu.be",
+    "facebook.com",
+    "instagram.com",
+    "twitter.com",
+    "x.com",
+    "play.google.com",
+    "apps.apple.com",
+)
+
+
+def is_social_link(url: str) -> bool:
+    host = (urlsplit(url).hostname or "").lower()
+    return any(host == h or host.endswith("." + h) for h in _SOCIAL_HOSTS)
+
+
+# What Gemini reads first. Big national recruitments that many applicants want
+# outrank one-post walk-ins; the phone ranks for the individual user afterwards.
+_PRIORITY_WORDS: tuple[tuple[re.Pattern[str], int], ...] = tuple(
+    (re.compile(p, re.IGNORECASE), w)
+    for p, w in (
+        (r"\b(?:rrb|ntpc|rrc|railway|alp|group d)\b", 6),
+        (r"\b(?:ssc|cgl|chsl|mts|gd constable|stenographer|selection post)\b", 6),
+        (r"\b(?:ibps|sbi|rbi|nabard|sidbi|exim|lic|niacl|gic|sebi|ippb|crp|common recruitment process)\b", 6),
+        (r"\b(?:upsc|cds|nda|capf|ese|cms)\b", 5),
+        (r"\bbank\b", 3),
+        (
+            r"\b(?:ongc|bhel|bel|gail|iocl|ioc|hpcl|bpcl|sail|hal|nhpc|powergrid|coal india|nlc|npcil|"
+            r"drdo|isro|barc|aai|bsnl|nmdc|rites|ircon|mazagon|cochin shipyard|psu)\b",
+            5,
+        ),
+        (
+            r"\b(?:po|probationary|officer|clerk|assistant|junior engineer|je|engineer|executive|"
+            r"management trainee|graduate trainee|inspector|accountant|auditor)\b",
+            3,
+        ),
+        (r"\b(?:jrf|junior research fellow|net|gate)\b", 2),
+        (r"\b(?:psc|sssc|subordinate services|dsssb|police|constable|army|navy|air force|coast guard)\b", 2),
+        (
+            r"\b(?:walk[- ]?in|guest faculty|part[- ]time|consultant|retired|honorary|para legal|"
+            r"peon|chowkidar|sweeper|safai|gardener|cook|driver|attendant|anganwadi|home guard)\b",
+            -4,
+        ),
+        (
+            r"\b(?:project (?:assistant|associate|staff|technical)|field (?:worker|investigator)|"
+            r"senior resident|post[- ]doctoral|faculty)\b",
+            -2,
+        ),
+    )
+)
+_POST_COUNT = re.compile(r"([\d,]{2,7})\s*posts?\b", re.IGNORECASE)
+
+
+def job_priority(title: str) -> int:
+    """Higher = read sooner. Keyword weights plus a bonus for many vacancies."""
+    score = sum(w for pattern, w in _PRIORITY_WORDS if pattern.search(title))
+    if m := _POST_COUNT.search(title):
+        posts = int(m[1].replace(",", "") or 0)
+        score += 3 if posts >= 1000 else 2 if posts >= 100 else 1 if posts >= 20 else 0
+    return score
 
 
 _APPLY_LABEL = re.compile(r"\bapply\s+online\b|\bonline\s+(?:application|apply)\b", re.IGNORECASE)
@@ -558,9 +633,7 @@ class SourceCrawler:
                 )
             )
         )
-        backfill = self.settings.seed_backfill_per_source
         rows: list[dict[str, object]] = []
-        actionable_seen = 0
         for link in links:  # page order: newest first on every source we parse
             if link.url in known:
                 continue
@@ -571,14 +644,13 @@ class SourceCrawler:
             if kind is ItemKind.OTHER:
                 status = ItemStatus.SKIPPED
             elif closed:
-                status, actionable = ItemStatus.SKIPPED, False  # not worth a backfill slot either
-            elif first_crawl and not (actionable and actionable_seen < backfill):
-                status = ItemStatus.BASELINE
-            elif kind is ItemKind.ALERT:
-                status = ItemStatus.DONE  # recorded; surfaced via /sources/alerts
+                status = ItemStatus.SKIPPED
+            elif actionable:
+                status = ItemStatus.PENDING  # still open (or no date known): always read it
+            elif first_crawl:
+                status = ItemStatus.BASELINE  # an old admit card / result notice
             else:
-                status = ItemStatus.PENDING
-            actionable_seen += actionable
+                status = ItemStatus.DONE  # an alert: recorded, published in notices.json
             rows.append(
                 {
                     "id": uuid.uuid4(),
