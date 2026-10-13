@@ -302,18 +302,28 @@ def parse_free_job_alert_list(html: bytes | str, base_url: str) -> list[Link]:
 
 
 def parse_free_job_alert_detail(html: bytes | str, base_url: str) -> list[Link]:
-    """'Download Official Notification' links straight to the board's own PDF."""
+    """'Download Official Notification' links straight to the board's own PDF. Some
+    pages say "Official Notification PDF: Click here": the label is next to the link."""
     soup = _soup(html)
     page_title = clean_text(soup.title.get_text() if soup.title else "", 200)
     out: list[Link] = []
+    seen: set[str] = set()
     for a in soup.find_all("a", href=True):
         text = clean_text(a.get_text(" ", strip=True), 120).lower()
+        row = a.find_parent(["li", "p", "tr"])
+        if row is not None and len(row.find_all("a", href=True)) == 1:
+            label = clean_text(row.get_text(" ", strip=True), 160).lower()
+            if len(label) <= 120:
+                text = label
         url = canonical_url(urljoin(base_url, str(a["href"])))
         if (
             "notification" in text
+            and "apply" not in text
+            and url not in seen
             and not urlsplit(url).netloc.endswith("freejobalert.com")
             and not is_social_link(url)
         ):
+            seen.add(url)
             out.append(Link(url=url, title=page_title or text, context=text, pdf_hint=True))
     return out
 
@@ -376,9 +386,48 @@ _PRIORITY_WORDS: tuple[tuple[re.Pattern[str], int], ...] = tuple(
 _POST_COUNT = re.compile(r"([\d,]{2,7})\s*posts?\b", re.IGNORECASE)
 
 
+# The big recurring recruitments nobody should miss: they jump the queue, and each
+# run reports any that the sources mention but the app doesn't show yet.
+WATCHLIST: dict[str, re.Pattern[str]] = {
+    name: re.compile(pattern, re.IGNORECASE)
+    for name, pattern in {
+        "RRB NTPC": r"\brrb\b.*\bntpc\b|\bntpc\b.*\b(?:graduate|10\+2|ug|cen)\b|non[- ]technical popular",
+        "RRB Group D": r"\brrb\b.*\bgroup[- ]d\b|\brrb\b.*\blevel[- ]1\b",
+        "RRB ALP": r"\brrb\b.*\b(?:alp|assistant loco pilot)\b",
+        "RRB JE": r"\brrb\b.*\b(?:je|junior engineer)\b",
+        "SSC CGL": r"\bssc\b.*\b(?:cgl|combined graduate level)\b",
+        "SSC CHSL": r"\bssc\b.*\b(?:chsl|combined higher secondary)\b",
+        "SSC MTS": r"\bssc\b.*\b(?:mts|multi[- ]tasking)\b",
+        "SSC GD": r"\bssc\b.*\bgd\b",
+        "SSC CPO": r"\bssc\b.*\bcpo\b",
+        "SSC JE": r"\bssc\b.*\b(?:je|junior engineer)\b",
+        "SSC Stenographer": r"\bssc\b.*\bstenographer\b",
+        "IBPS PO": r"\bibps\b.*\b(?:po|probationary officer)|crp[-\s]*po",
+        "IBPS Clerk": r"\bibps\b.*\b(?:clerk|csa)\b|crp[-\s]*(?:clerk|csa)",
+        "IBPS RRB": r"\bibps\b.*\brrb\b|crp[-\s]*rrb",
+        "IBPS SO": r"\bibps\b.*\bso\b|crp[-\s]*spl|specialist officers?.*\bibps\b",
+        "SBI PO": r"\bsbi\b.*\b(?:po|probationary officer)\b",
+        "SBI Clerk": r"\bsbi\b.*\b(?:clerk|junior associate)\b",
+        "RBI": r"\brbi\b.*\b(?:grade b|assistant|officer)\b",
+        "NABARD": r"\bnabard\b",
+        "LIC AAO/ADO": r"\blic\b.*\b(?:aao|ado|assistant)\b",
+        "UPSC CSE": r"\bupsc\b.*\b(?:civil services|cse|ias)\b",
+        "UPSC CDS/NDA": r"\bupsc\b.*\b(?:cds|nda)\b",
+        "UPSC CAPF": r"\bupsc\b.*\bcapf\b",
+    }.items()
+}
+
+
+def watchlist_name(title: str) -> str | None:
+    return next((name for name, pattern in WATCHLIST.items() if pattern.search(title)), None)
+
+
 def job_priority(title: str) -> int:
-    """Higher = read sooner. Keyword weights plus a bonus for many vacancies."""
+    """Higher = read sooner. Keyword weights plus a bonus for many vacancies; the
+    watchlist's big recruitments always come first."""
     score = sum(w for pattern, w in _PRIORITY_WORDS if pattern.search(title))
+    if watchlist_name(title):
+        score += 20
     if m := _POST_COUNT.search(title):
         posts = int(m[1].replace(",", "") or 0)
         score += 3 if posts >= 1000 else 2 if posts >= 100 else 1 if posts >= 20 else 0

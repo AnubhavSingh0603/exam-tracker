@@ -41,7 +41,7 @@ from app.services.discovery_pipeline import (  # noqa: E402
 from app.services.http_fetcher import Fetcher  # noqa: E402
 from app.services.pdf_parser import quota_left, usage  # noqa: E402
 from app.services.publish import SCHEMA_VERSION, build_jobs_file, build_notices_file  # noqa: E402
-from app.services.scraper_service import closing_date, local_today  # noqa: E402
+from app.services.scraper_service import WATCHLIST, closing_date, local_today, watchlist_name  # noqa: E402
 from app.services.seeds import ensure_seed_sources  # noqa: E402
 
 log = logging.getLogger("pipeline")
@@ -158,6 +158,27 @@ async def prune(now: datetime) -> None:
         await session.commit()
 
 
+async def watchlist_missing(session, jobs: dict, now: datetime) -> list[str]:
+    """Big recruitments the sources mention as open whose job isn't in jobs.json yet."""
+    published = " ".join(f"{j['organization']} {j['exam_name']}" for j in jobs["jobs"])
+    published_names = {name for name, pattern in WATCHLIST.items() if pattern.search(published)}
+    today = local_today(get_settings(), now)
+    rows = await session.scalars(
+        select(DiscoveredItem.title).where(
+            DiscoveredItem.kind.in_([ItemKind.DETAIL_PAGE, ItemKind.NOTIFICATION_PDF]),
+            DiscoveredItem.created_at >= now - REOPEN_UNDATED,
+            DiscoveredItem.status != ItemStatus.SKIPPED,
+        )
+    )
+    missing: set[str] = set()
+    for title in rows:
+        name = watchlist_name(title or "")
+        closes = closing_date(title or "")
+        if name and name not in published_names and (closes is None or closes >= today):
+            missing.add(name)
+    return sorted(missing)
+
+
 def write_json(path: Path, data: object) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_suffix(".tmp")
@@ -165,7 +186,7 @@ def write_json(path: Path, data: object) -> None:
     tmp.replace(path)
 
 
-async def run(out: Path, ingest_rounds: int) -> dict[str, object]:
+async def run(out: Path, ingest_rounds: int, ingest_minutes: int = 25) -> dict[str, object]:
     settings = get_settings()
     started = datetime.now(UTC)
     async with engine.begin() as conn:
@@ -194,12 +215,15 @@ async def run(out: Path, ingest_rounds: int) -> dict[str, object]:
         stats["gemini_quota_exhausted"] = False
         if gemini_configured():
             stats["pdfs_requeued"] = await requeue_setup_failures()
-            # A few PDFs per Gemini request; stop early once nothing is waiting.
+            # Read until the queue is empty, every AI is out of quota, or time's up
+            # (the job has a 50-minute limit). Each PDF gets one try per run.
+            attempted: set = set()
+            deadline = datetime.now(UTC) + timedelta(minutes=ingest_minutes)
             for _ in range(ingest_rounds):
-                if await pending_pdfs() == 0:
+                if await pending_pdfs() <= len(attempted) or datetime.now(UTC) > deadline:
                     break
                 async with SessionLocal() as session:
-                    ingested += await ingest_pending_pdfs(session, fetcher, settings)
+                    ingested += await ingest_pending_pdfs(session, fetcher, settings, attempted=attempted)
                 if not quota_left():
                     log.warning("Gemini quota used up for today; remaining PDFs wait for the next run")
                     stats["gemini_quota_exhausted"] = True
@@ -217,6 +241,7 @@ async def run(out: Path, ingest_rounds: int) -> dict[str, object]:
         async with SessionLocal() as session:
             jobs = await build_jobs_file(session, now=now)
             notices = await build_notices_file(session, now=now)
+            stats["watchlist_missing"] = await watchlist_missing(session, jobs, now)
     finally:
         await fetcher.aclose()
         await engine.dispose()
@@ -236,11 +261,15 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--out", type=Path, required=True, help="folder for jobs.json / notices.json")
     parser.add_argument(
-        "--ingest-rounds", type=int, default=5, help="ingest rounds per run (INGEST_BATCH_SIZE PDFs each)"
+        "--ingest-rounds",
+        type=int,
+        default=200,
+        help="most ingest rounds per run (INGEST_BATCH_SIZE PDFs each)",
     )
+    parser.add_argument("--ingest-minutes", type=int, default=25, help="time budget for reading PDFs")
     args = parser.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
-    stats = asyncio.run(run(args.out, args.ingest_rounds))
+    stats = asyncio.run(run(args.out, args.ingest_rounds, args.ingest_minutes))
     log.info("Done: %s", stats)
 
 

@@ -178,7 +178,11 @@ async def follow_detail_pages(
 
 
 async def ingest_pending_pdfs(
-    session: AsyncSession, fetcher: Fetcher, settings: Settings | None = None
+    session: AsyncSession,
+    fetcher: Fetcher,
+    settings: Settings | None = None,
+    *,
+    attempted: set[uuid.UUID] | None = None,
 ) -> int:
     """Downloads one round of queued PDFs, then reads the new ones with as few Gemini
     requests as possible. PDFs left unread because every model is out of quota go
@@ -200,7 +204,10 @@ async def ingest_pending_pdfs(
         if note := closed_note(item.title, today):
             item.status, item.error = ItemStatus.SKIPPED, note
     await session.commit()
-    items = by_priority([i for i in items if i.status == ItemStatus.PENDING])[: settings.ingest_batch_size]
+    tried = attempted if attempted is not None else set()
+    items = by_priority([i for i in items if i.status == ItemStatus.PENDING and i.id not in tried])
+    items = items[: settings.ingest_batch_size]
+    tried.update(i.id for i in items)  # one try per run: what goes back in the queue waits for the next
     done = 0
     to_read: list[tuple[uuid.UUID, str, str | None, str, bytes]] = []  # id, url, apply url, sha256, doc
     for item in items:

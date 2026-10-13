@@ -280,3 +280,27 @@ def test_big_recruitments_are_read_before_walk_ins():
     assert is_social_link("https://whatsapp.com/channel/0029VaAb")
     assert is_social_link("https://t.me/sarkari")
     assert not is_social_link("https://rrb.indianrailways.gov.in/notice.pdf")
+
+
+def test_big_recruitments_are_on_the_watchlist_and_labelled_links_are_found():
+    from app.services.scraper_service import job_priority, watchlist_name
+
+    assert (
+        watchlist_name("RRB – Non-Technical Popular Categories – 3,548 Recruitment (Advt 06/2026)")
+        == "RRB NTPC"
+    )
+    assert watchlist_name("RRB NTPC 10+2 UG Online Form 2026") == "RRB NTPC"
+    assert watchlist_name("Notification for Common Recruitment Process for CRP- PO/MTs-XVI") == "IBPS PO"
+    assert watchlist_name("SSC Combined Graduate Level Examination 2026") == "SSC CGL"
+    assert watchlist_name("SSC CGL 2026 Notification") == "SSC CGL"
+    assert watchlist_name("Tata Memorial Centre Gardener") is None
+    assert job_priority("RRB NTPC Graduate Level Recruitment 2026") > job_priority(
+        "Canara Bank 3500 Apprentice Posts"
+    )
+
+    page = """<title>RRB NTPC Graduate Recruitment 2026</title><ul>
+      <li>RRB NTPC Graduate CEN 06/2026 Notification PDF: <a href="https://www.rrbapply.gov.in/assets/forms/CEN_06_2026_NTPC_G.pdf">Download PDF</a></li>
+      <li>Apply Online: <a href="https://www.rrbapply.gov.in/">Click here</a></li>
+      <li>Join for notifications: <a href="https://whatsapp.com/channel/x">Click here</a></li></ul>"""
+    links = parse_free_job_alert_detail(page, "https://www.freejobalert.com/articles/rrb-ntpc-3068511")
+    assert [lk.url for lk in links] == ["https://www.rrbapply.gov.in/assets/forms/CEN_06_2026_NTPC_G.pdf"]
