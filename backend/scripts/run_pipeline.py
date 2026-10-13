@@ -23,7 +23,7 @@ from pathlib import Path
 BACKEND = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(BACKEND))
 
-from sqlalchemy import delete, func, select  # noqa: E402
+from sqlalchemy import delete, func, or_, select, update  # noqa: E402
 
 import app.models  # noqa: E402,F401  (registers tables)
 from app.core.config import get_settings  # noqa: E402
@@ -67,6 +67,32 @@ async def pending_pdfs() -> int:
         )
 
 
+# Failures caused by our Gemini setup (retired model, bad/missing key, quota), not by
+# the PDF: they get another chance once the setup is fixed.
+SETUP_ERRORS = (
+    "Extraction: Gemini API error 400: API key%",
+    "Extraction: Gemini API error 401%",
+    "Extraction: Gemini API error 403%",
+    "Extraction: Gemini API error 404%",
+    "Extraction: Gemini API error 429%",
+)
+
+
+async def requeue_setup_failures() -> int:
+    async with SessionLocal() as session:
+        result = await session.execute(
+            update(DiscoveredItem)
+            .where(
+                DiscoveredItem.kind == ItemKind.NOTIFICATION_PDF,
+                DiscoveredItem.status == ItemStatus.FAILED,
+                or_(*(DiscoveredItem.error.like(pattern) for pattern in SETUP_ERRORS)),
+            )
+            .values(status=ItemStatus.PENDING, attempts=0, error=None)
+        )
+        await session.commit()
+        return result.rowcount or 0
+
+
 async def prune(now: datetime) -> None:
     async with SessionLocal() as session:
         await session.execute(delete(DiscoveredItem).where(DiscoveredItem.created_at < now - KEEP_ITEMS))
@@ -105,6 +131,7 @@ async def run(out: Path, ingest_rounds: int) -> dict[str, object]:
 
         ingested = 0
         if gemini_configured():
+            stats["pdfs_requeued"] = await requeue_setup_failures()
             # Small batches (Gemini free tier); stop early once nothing is waiting.
             for _ in range(ingest_rounds):
                 if await pending_pdfs() == 0:

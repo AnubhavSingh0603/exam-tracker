@@ -27,7 +27,9 @@ class Settings(BaseSettings):
 
     # --- Gemini -------------------------------------------------------------
     gemini_api_key: SecretStr
-    gemini_model: str = "gemini-2.5-flash"
+    # Google's alias for the current Flash model: fixed names get retired
+    # ("gemini-2.5-flash is no longer available to new users", Oct 2026).
+    gemini_model: str = "gemini-flash-latest"
     gemini_timeout_s: int = 180
     gemini_max_attempts: int = 5
 

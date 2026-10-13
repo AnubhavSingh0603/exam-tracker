@@ -41,6 +41,8 @@ jobs:
       DATABASE_URL: postgresql+asyncpg://tracker:tracker@localhost:5432/tracker
       PGURL: postgresql://tracker:tracker@localhost:5432/tracker
       GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY || 'unset' }}
+      # Override with a repository variable if Google renames things again.
+      GEMINI_MODEL: ${{ vars.GEMINI_MODEL || 'gemini-flash-latest' }}
       UPLOAD_DIR: /tmp/notifications
       # The server-only settings still need values to load the shared config.
       API_KEY: not-used-in-pipeline
@@ -49,6 +51,8 @@ jobs:
       # Runs are 4 h apart; slightly shorter so every source is due on every run.
       CRAWL_INTERVAL_HOURS: "3.5"
       CRAWL_JITTER_MINUTES: "10"
+      # A source's first visit reads its newest 15 posts (the rest count as already seen).
+      SEED_BACKFILL_PER_SOURCE: "15"
     steps:
       - uses: actions/checkout@v5
 
