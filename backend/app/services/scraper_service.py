@@ -13,6 +13,8 @@ Pipeline for one source
 4. First crawl of a source records everything as BASELINE except the newest
    ``seed_backfill_per_source`` actionable items, so adding a source never
    floods the Gemini free tier.
+5. A job link whose "Last Date" (printed beside it on aggregator lists) has
+   passed is SKIPPED: reading it would spend a Gemini request on a closed job.
 
 Parsers were written against the live markup of each site in Oct 2026. They
 fall back to the generic DOM parser when their selectors find nothing.
@@ -28,10 +30,12 @@ import re
 import uuid
 from collections.abc import Iterable
 from dataclasses import dataclass, field
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from urllib.parse import urljoin, urlsplit, urlunsplit
+from zoneinfo import ZoneInfo
 
 from bs4 import BeautifulSoup, Tag
+from dateutil import parser as dateparser
 from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -351,6 +355,39 @@ def _parse_iso(value: object) -> datetime | None:
         return None
 
 
+# "Last Date: 25 November 2026" (SarkariResult), "Last date 25/11/2026" (FreeJobAlert),
+# "Last Date Extended till 30-11-2026".
+_LAST_DATE = re.compile(
+    r"\blast\s+date\b\D{0,40}?"
+    r"(\d{1,2}[./-]\d{1,2}[./-]\d{4}|\d{1,2}(?:st|nd|rd|th)?\s+[a-z]{3,9}\.?,?\s+\d{4})",
+    re.IGNORECASE,
+)
+
+
+def closing_date(text: str) -> date | None:
+    """The 'Last Date' an aggregator prints beside a job link, if any."""
+    m = _LAST_DATE.search(text)
+    if m is None:
+        return None
+    try:
+        d = dateparser.parse(m[1], dayfirst=True).date()
+    except (ValueError, OverflowError):
+        return None
+    return d if 2000 <= d.year <= 2100 else None
+
+
+def closed_note(text: str, today: date) -> str | None:
+    """Why a job link is skipped unread: its 'Last Date' is before ``today``."""
+    closes = closing_date(text)
+    if closes is None or closes >= today:
+        return None
+    return f"Closed on {closes:%d %b %Y} before it was read"
+
+
+def local_today(settings: Settings, now: datetime | None = None) -> date:
+    return (now or datetime.now(UTC)).astimezone(ZoneInfo(settings.timezone)).date()
+
+
 LIST_PARSERS = {
     ParserKey.GENERIC: parse_generic,
     ParserKey.SARKARI_RESULT: parse_sarkari_result_list,
@@ -445,7 +482,9 @@ class SourceCrawler:
         outcome.changed = True
         source.content_hash = digest
         source.last_changed_at = now
-        rows = await self._new_item_rows(session, source, links, first_crawl=first_crawl)
+        rows = await self._new_item_rows(
+            session, source, links, first_crawl=first_crawl, today=local_today(self.settings, now)
+        )
         if rows:
             await session.execute(
                 pg_insert(DiscoveredItem)
@@ -471,7 +510,7 @@ class SourceCrawler:
         return outcome
 
     async def _new_item_rows(
-        self, session: AsyncSession, source: Source, links: list[Link], *, first_crawl: bool
+        self, session: AsyncSession, source: Source, links: list[Link], *, first_crawl: bool, today: date
     ) -> list[dict[str, object]]:
         if not links:
             return []
@@ -492,8 +531,11 @@ class SourceCrawler:
             known.add(link.url)
             kind, flags = classify(link)
             actionable = kind in (ItemKind.NOTIFICATION_PDF, ItemKind.DETAIL_PAGE)
+            closed = closed_note(f"{link.title} {link.context}", today) if actionable else None
             if kind is ItemKind.OTHER:
                 status = ItemStatus.SKIPPED
+            elif closed:
+                status, actionable = ItemStatus.SKIPPED, False  # not worth a backfill slot either
             elif first_crawl and not (actionable and actionable_seen < backfill):
                 status = ItemStatus.BASELINE
             elif kind is ItemKind.ALERT:
@@ -512,6 +554,7 @@ class SourceCrawler:
                     "status": status,
                     "keywords": flags,
                     "published_at": link.published_at,
+                    "error": closed,
                 }
             )
         return rows

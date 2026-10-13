@@ -38,7 +38,7 @@ from app.services.discovery_pipeline import (  # noqa: E402
     run_due_crawls,
 )
 from app.services.http_fetcher import Fetcher  # noqa: E402
-from app.services.pdf_parser import GeminiQuotaExhausted  # noqa: E402
+from app.services.pdf_parser import quota_left, usage  # noqa: E402
 from app.services.publish import SCHEMA_VERSION, build_jobs_file, build_notices_file  # noqa: E402
 from app.services.seeds import ensure_seed_sources  # noqa: E402
 
@@ -134,17 +134,19 @@ async def run(out: Path, ingest_rounds: int) -> dict[str, object]:
         stats["gemini_quota_exhausted"] = False
         if gemini_configured():
             stats["pdfs_requeued"] = await requeue_setup_failures()
-            # Small batches (Gemini free tier); stop early once nothing is waiting.
+            # A few PDFs per Gemini request; stop early once nothing is waiting.
             for _ in range(ingest_rounds):
                 if await pending_pdfs() == 0:
                     break
-                try:
-                    async with SessionLocal() as session:
-                        ingested += await ingest_pending_pdfs(session, fetcher, settings)
-                except GeminiQuotaExhausted:
+                async with SessionLocal() as session:
+                    ingested += await ingest_pending_pdfs(session, fetcher, settings)
+                if not quota_left():
                     log.warning("Gemini quota used up for today; remaining PDFs wait for the next run")
                     stats["gemini_quota_exhausted"] = True
                     break
+            gemini = usage()
+            stats["gemini_requests"] = gemini["requests"]  # the free tier allows ~20 a day per model
+            stats["gemini_models_skipped"] = gemini["models_skipped"]
         else:
             log.warning("GEMINI_API_KEY not set: skipping PDF extraction this run")
         stats["pdfs_ingested"] = ingested
@@ -173,7 +175,9 @@ async def run(out: Path, ingest_rounds: int) -> dict[str, object]:
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--out", type=Path, required=True, help="folder for jobs.json / notices.json")
-    parser.add_argument("--ingest-rounds", type=int, default=5, help="Gemini batches per run")
+    parser.add_argument(
+        "--ingest-rounds", type=int, default=5, help="ingest rounds per run (INGEST_BATCH_SIZE PDFs each)"
+    )
     args = parser.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
     stats = asyncio.run(run(args.out, args.ingest_rounds))

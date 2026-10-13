@@ -30,10 +30,14 @@ class Settings(BaseSettings):
     # Google's alias for the current Flash model: fixed names get retired
     # ("gemini-2.5-flash is no longer available to new users", Oct 2026).
     gemini_model: str = "gemini-flash-latest"
-    # Tried in order when the main model is out of daily quota (quotas are per model).
-    gemini_fallback_models: str = "gemini-3.5-flash-lite"
+    # Tried in order when the main model is out of daily quota (quotas are per model;
+    # the free tier allows about 20 requests a day for each of these).
+    gemini_fallback_models: str = "gemini-3.6-flash,gemini-3.5-flash-lite,gemini-3.1-flash-lite"
     gemini_timeout_s: int = 180
     gemini_max_attempts: int = 5
+    # Several notifications share one request while they fit these limits.
+    gemini_batch_docs: int = 3
+    gemini_batch_pages: int = 48
 
     # --- Uploads ------------------------------------------------------------
     upload_dir: Path = Path("/data/notifications")
@@ -77,7 +81,7 @@ class Settings(BaseSettings):
     playwright_enabled: bool = False  # needs the image built with WITH_CHROMIUM=1
     aggregator_detail_pages_per_run: int = 15  # SarkariResult/FJA follow-ups per crawl
     seed_backfill_per_source: int = 3  # on first crawl, ingest only the newest N
-    ingest_batch_size: int = 4  # Gemini free tier: keep this small
+    ingest_batch_size: int = 6  # PDFs per ingest round (read gemini_batch_docs per request)
     ingest_interval_minutes: int = 15
     max_custom_sources_per_user: int = 20
     telegram_pages_per_crawl: int = 2  # ~20 messages per page

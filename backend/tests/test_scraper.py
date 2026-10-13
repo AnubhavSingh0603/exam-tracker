@@ -1,5 +1,5 @@
 import json
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 
 from app.core.config import get_settings
 from app.domain.enums import ItemKind
@@ -7,6 +7,8 @@ from app.services.scraper_service import (
     Link,
     canonical_url,
     classify,
+    closed_note,
+    closing_date,
     fingerprint,
     flag_keywords,
     next_check_time,
@@ -202,3 +204,23 @@ def test_unofficial_sarkari_result_copy_is_parsed_like_the_original():
     assert kinds(links) == [ItemKind.DETAIL_PAGE, ItemKind.OTHER]
     pdfs = parse_sarkari_result_detail(CM_DETAIL, "https://sarkariresult.com.cm/ssc-cgl-2026/")
     assert [lk.url for lk in pdfs] == ["https://ssc.gov.in/Notice_of_adv_cgl_2026.pdf"]
+
+
+def test_closed_jobs_are_spotted_from_the_last_date_beside_the_link():
+    """Reading a closed job's PDF would spend a Gemini request on nothing."""
+    sr = parse_sarkari_result_list(SR_LIST, "https://www.sarkariresult.com/latestjob/")[0]
+    assert closing_date(f"{sr.title} {sr.context}") == date(2026, 10, 28)
+    fja = parse_free_job_alert_list(FJA_LIST, "https://www.freejobalert.com/latest-notifications/")[0]
+    assert closing_date(fja.context) == date(2026, 10, 21)
+    cm = parse_sarkari_result_list(CM_LIST, "https://sarkariresult.com.cm/latest-jobs/")[0]
+    assert closing_date(cm.title) == date(2026, 11, 25)
+
+    assert closing_date("SSC GD Last Date Extended till 30-11-2026") == date(2026, 11, 30)
+    assert closing_date("Last Date: 1st Dec, 2026") == date(2026, 12, 1)
+    assert closing_date("Last Date: Notify Soon") is None
+    assert closing_date("Posted on 05/10/2026") is None  # a date, but not the last date
+
+    today = date(2026, 10, 22)
+    assert closed_note(fja.context, today) == "Closed on 21 Oct 2026 before it was read"
+    assert closed_note("Last date 22/10/2026", today) is None  # open until the day ends
+    assert closed_note(sr.context, today) is None

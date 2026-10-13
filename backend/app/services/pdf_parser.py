@@ -1,8 +1,12 @@
 """Gemini Flash PDF extractor.
 
 Two stages:
-  1. ``_call_gemini``         PDF -> ``NotificationExtraction`` (LLM schema, loosely typed)
+  1. ``_call_gemini``         PDF(s) -> JSON in the LLM schema (``NotificationExtraction``, loosely typed)
   2. ``normalize_extraction`` -> ``ParsedNotification`` (strict types, sanity checks)
+
+The free tier allows about 20 requests a day per model, so ``extract_notifications``
+reads several PDFs in one request, and every call moves on to the next model in
+``GEMINI_FALLBACK_MODELS`` once one is out of quota.
 
 Stage 2 is pure and unit-testable. Anything suspicious is recorded in
 ``review_notes`` instead of failing the whole upload, so a half-good PDF is
@@ -16,11 +20,15 @@ import io
 import json
 import logging
 import re
+from collections import Counter
+from collections.abc import Sequence
+from dataclasses import dataclass
 from datetime import date, datetime, time
 from functools import lru_cache
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
+import httpx
 from dateutil import parser as dateparser
 from google import genai
 from google.genai import errors as genai_errors
@@ -28,6 +36,7 @@ from google.genai import types
 from pydantic import ValidationError
 from tenacity import (
     AsyncRetrying,
+    RetryCallState,
     retry_if_exception,
     stop_after_attempt,
     wait_exponential_jitter,
@@ -37,18 +46,22 @@ from app.core.config import get_settings
 from app.domain.enums import RELAXATION_KEY_EXSM, RELAXATION_KEY_PWBD, Category
 from app.domain.qualifications import QualificationLevel
 from app.schemas.extraction import (
+    BatchExtraction,
     ExtractedRelaxation,
     ExtractedVacancy,
     NotificationExtraction,
+    NumberedExtraction,
 )
 from app.schemas.notification import ParsedNotification, ParsedPost, ParsedTimeline, ParsedVacancy
-from app.services.pdf_slicer import select_relevant_pages
+from app.services.pdf_slicer import PageSelection, select_relevant_pages
 from app.services.streams import infer_requirement
 
 log = logging.getLogger(__name__)
 
 INLINE_PDF_LIMIT = 18 * 1024 * 1024  # inline request cap is ~20 MB; larger goes via Files API
 _RETRYABLE_HTTP = {429, 500, 502, 503, 504}
+_MAX_OUTPUT_TOKENS = 32768
+_BATCH_MAX_OUTPUT_TOKENS = 65536  # the Flash / Flash-Lite ceiling: room for several notifications
 
 
 class ExtractionError(RuntimeError):
@@ -60,9 +73,25 @@ class GeminiQuotaExhausted(ExtractionError):
     the caller should put it back in the queue and stop for this run."""
 
 
+class GeminiUnavailable(ExtractionError):
+    """No answer: a timeout, a network error, or a server error that outlasted the
+    retries. Worth trying the PDF again on a later run."""
+
+
 # Models that ran out of daily quota (or don't exist for this key) during this
 # process: skipped until the next run. Quotas are per model, so a fallback helps.
 _unusable_models: set[str] = set()
+# Requests sent per model during this process: the free tier counts requests, not PDFs.
+request_counts: Counter[str] = Counter()
+
+
+def usage() -> dict[str, object]:
+    """What this run used of today's quota (for the pipeline's status.json)."""
+    return {"requests": dict(request_counts), "models_skipped": sorted(_unusable_models)}
+
+
+def quota_left() -> bool:
+    return bool(_models_to_try(None))
 
 
 def _error_blob(exc: genai_errors.APIError) -> str:
@@ -72,14 +101,41 @@ def _error_blob(exc: genai_errors.APIError) -> str:
         return str(exc)
 
 
+# "Please retry in 22h28m9.7s." in the message, or RetryInfo {"retryDelay": "80889s"} in the details.
+_RETRY_DELAY = re.compile(r'"retryDelay":\s*"(\d+(?:\.\d+)?)s"')
+_RETRY_IN = re.compile(r"retry in\s+((?:\d+(?:\.\d+)?(?:h|ms|m|s))+)", re.IGNORECASE)
+_UNIT_SECONDS = {"h": 3600.0, "m": 60.0, "s": 1.0, "ms": 0.001}
+
+
+def _retry_delay_s(exc: BaseException | None) -> float | None:
+    """The wait the API asked for, in seconds, when it says."""
+    if not isinstance(exc, genai_errors.APIError):
+        return None
+    blob = _error_blob(exc)
+    if m := _RETRY_DELAY.search(blob):
+        return float(m[1])
+    if m := _RETRY_IN.search(blob):
+        return sum(float(n) * _UNIT_SECONDS[u] for n, u in re.findall(r"(\d+(?:\.\d+)?)(ms|h|m|s)", m[1]))
+    return None
+
+
 def _is_daily_quota(exc: BaseException) -> bool:
-    """A 429 that names a per-day quota: retrying today is pointless."""
-    return isinstance(exc, genai_errors.APIError) and exc.code == 429 and "PerDay" in _error_blob(exc)
+    """A 429 that retrying today can't fix: a per-day quota (the message doesn't always
+    say "PerDay", but the hours-long retry delay gives it away), or no free quota at all."""
+    if not (isinstance(exc, genai_errors.APIError) and exc.code == 429):
+        return False
+    blob = _error_blob(exc)
+    if "PerDay" in blob or re.search(r"\blimit: 0\b", blob):
+        return True
+    delay = _retry_delay_s(exc)
+    return delay is not None and delay > 600
 
 
 SYSTEM_INSTRUCTION = """\
 You are a meticulous data-entry clerk for Indian Government / PSU recruitment notifications.
 Extract facts ONLY from the attached PDF. Never guess or use outside knowledge.
+When several PDFs are attached, each is a separate notification: read each one on its own
+and never carry a fact from one document into another.
 
 Rules:
 - If a value is not printed, return null (or an empty list). Do not infer.
@@ -105,6 +161,11 @@ Rules:
 """
 
 USER_PROMPT = "Extract the recruitment notification in this PDF into the required JSON schema."
+BATCH_PROMPT = (
+    "The {count} PDFs above are separate recruitment notifications, each right after its "
+    "'Document N:' label. Extract every one of them into `documents`: exactly one entry per "
+    "document, with its `document_number`."
+)
 
 
 @lru_cache
@@ -120,6 +181,17 @@ def _is_retryable(exc: BaseException) -> bool:
     return isinstance(exc, genai_errors.APIError) and exc.code in _RETRYABLE_HTTP and not _is_daily_quota(exc)
 
 
+_backoff = wait_exponential_jitter(initial=2, max=60)
+
+
+def _wait(retry_state: RetryCallState) -> float:
+    """Exponential backoff, but never shorter than the wait the API asked for
+    (a per-minute limit says "retry in 39s"), and at most 90 s."""
+    outcome = retry_state.outcome
+    hinted = _retry_delay_s(outcome.exception()) if outcome is not None and outcome.failed else None
+    return min(max(hinted or 0.0, _backoff(retry_state)), 90.0)
+
+
 def _models_to_try(explicit: str | None) -> list[str]:
     if explicit:
         return [explicit]
@@ -133,17 +205,55 @@ def _models_to_try(explicit: str | None) -> list[str]:
 # =============================================================================
 
 
+@dataclass(frozen=True, slots=True)
+class _Doc:
+    data: bytes  # what Gemini reads: the relevant pages of a long PDF
+    pages: int | None  # None when the PDF can't be opened here (Gemini may still manage)
+    selection: PageSelection | None
+
+
 async def extract_notification(
     pdf: bytes | str | Path,
     *,
     client: genai.Client | None = None,
     model: str | None = None,
 ) -> ParsedNotification:
-    settings = get_settings()
     data = pdf if isinstance(pdf, bytes) else await asyncio.to_thread(Path(pdf).read_bytes)
+    doc = await _prepare(data)
+    text, used_model = await _call_with_fallback(client or _default_client(), [doc.data], model)
+    return _to_notification(_single(text), doc, used_model)
+
+
+async def extract_notifications(
+    pdfs: Sequence[bytes],
+    *,
+    client: genai.Client | None = None,
+    model: str | None = None,
+) -> list[ParsedNotification | ExtractionError]:
+    """Reads several PDFs with as few Gemini requests as possible: up to
+    ``gemini_batch_docs`` PDFs (``gemini_batch_pages`` pages) share one request.
+
+    One outcome per PDF, in order: the notification, or that PDF's error.
+    ``GeminiQuotaExhausted`` marks the PDFs left unread because every model ran out."""
+    settings = get_settings()
+    client = client or _default_client()
+    outcomes: dict[int, ParsedNotification | ExtractionError] = {}
+    ready: list[tuple[int, _Doc]] = []
+    for i, data in enumerate(pdfs):
+        try:
+            ready.append((i, await _prepare(data)))
+        except ExtractionError as exc:
+            outcomes[i] = exc
+    for group in _group(ready, max_docs=settings.gemini_batch_docs, max_pages=settings.gemini_batch_pages):
+        results = await _read_group(client, [doc for _, doc in group], model)
+        outcomes.update((i, result) for (i, _), result in zip(group, results, strict=True))
+    return [outcomes[i] for i in range(len(pdfs))]
+
+
+async def _prepare(data: bytes) -> _Doc:
     if not data.startswith(b"%PDF-"):
         raise ExtractionError("Input is not a PDF file.")
-
+    settings = get_settings()
     try:
         selection = await asyncio.to_thread(
             select_relevant_pages,
@@ -153,28 +263,123 @@ async def extract_notification(
         )
     except Exception as exc:  # noqa: BLE001 - malformed PDFs: let Gemini try the original
         log.warning("Page slicing failed, sending the whole PDF: %s", exc)
-        selection = None
+        return _Doc(data, None, None)
+    return _Doc(selection.data, len(selection.kept), selection)
 
-    payload = selection.data if selection is not None else data
-    raw, used_model = await _call_with_fallback(client or _default_client(), payload, model)
-    parsed = normalize_extraction(raw, tz=ZoneInfo(settings.timezone))
-    parsed.extraction_model = used_model
+
+def _group(docs: list[tuple[int, _Doc]], *, max_docs: int, max_pages: int) -> list[list[tuple[int, _Doc]]]:
+    """Consecutive PDFs share a request while they fit. One whose page count is
+    unknown, or that is too big to send inline, gets a request of its own."""
+    groups: list[list[tuple[int, _Doc]]] = []
+    shared: list[tuple[int, _Doc]] = []
+    for entry in docs:
+        doc = entry[1]
+        if doc.pages is None or len(doc.data) > INLINE_PDF_LIMIT:
+            groups.append([entry])
+            continue
+        if shared and not _fits(shared, doc, max_docs=max_docs, max_pages=max_pages):
+            groups.append(shared)
+            shared = []
+        shared.append(entry)
+    if shared:
+        groups.append(shared)
+    return groups
+
+
+def _fits(group: list[tuple[int, _Doc]], doc: _Doc, *, max_docs: int, max_pages: int) -> bool:
+    return (
+        len(group) < max_docs
+        and sum(d.pages or 0 for _, d in group) + (doc.pages or 0) <= max_pages
+        and sum(len(d.data) for _, d in group) + len(doc.data) <= INLINE_PDF_LIMIT
+    )
+
+
+async def _read_group(
+    client: genai.Client, docs: list[_Doc], explicit: str | None
+) -> list[ParsedNotification | ExtractionError]:
+    if len(docs) == 1:
+        return [await _read_one(client, docs[0], explicit)]
+    try:
+        text, used_model = await _call_with_fallback(client, [d.data for d in docs], explicit)
+        raws = _numbered(text, len(docs))
+    except GeminiQuotaExhausted as exc:
+        return [exc] * len(docs)
+    except ExtractionError as exc:
+        # Usually an answer cut off at the output limit (many posts): ask in halves.
+        log.warning("Reading %d PDFs in one request failed (%s); splitting it", len(docs), exc)
+        mid = len(docs) // 2
+        return [
+            *await _read_group(client, docs[:mid], explicit),
+            *await _read_group(client, docs[mid:], explicit),
+        ]
+    out: list[ParsedNotification | ExtractionError] = []
+    for doc, raw in zip(docs, raws, strict=True):
+        if raw is not None:
+            try:
+                out.append(_to_notification(raw, doc, used_model))
+                continue
+            except ExtractionError as exc:  # e.g. "no posts": the shared answer may be at fault
+                log.warning("Unusable answer for one PDF of a shared request (%s); reading it alone", exc)
+        out.append(await _read_one(client, doc, explicit))
+    return out
+
+
+async def _read_one(
+    client: genai.Client, doc: _Doc, explicit: str | None
+) -> ParsedNotification | ExtractionError:
+    try:
+        text, used_model = await _call_with_fallback(client, [doc.data], explicit)
+        return _to_notification(_single(text), doc, used_model)
+    except ExtractionError as exc:
+        return exc
+
+
+def _single(text: str) -> NotificationExtraction:
+    try:
+        return NotificationExtraction.model_validate_json(text)
+    except ValidationError as exc:
+        raise ExtractionError(f"Gemini output failed schema validation: {exc}") from exc
+
+
+def _numbered(text: str, count: int) -> list[NotificationExtraction | None]:
+    """A shared answer split per document; one the answer skipped or garbled is None."""
+    try:
+        entries = json.loads(text)["documents"]
+    except (ValueError, KeyError, TypeError) as exc:
+        raise ExtractionError(f"Gemini's shared answer is not the expected JSON: {exc}") from exc
+    if not isinstance(entries, list):
+        raise ExtractionError("Gemini's shared answer has no document list.")
+    out: list[NotificationExtraction | None] = [None] * count
+    for entry in entries:
+        try:
+            item = NumberedExtraction.model_validate(entry)
+        except ValidationError:
+            continue
+        n = item.document_number
+        if 1 <= n <= count and out[n - 1] is None:
+            out[n - 1] = item.notification
+    return out
+
+
+def _to_notification(raw: NotificationExtraction, doc: _Doc, model: str) -> ParsedNotification:
+    parsed = normalize_extraction(raw, tz=ZoneInfo(get_settings().timezone))
+    parsed.extraction_model = model
     # Only worth a reviewer's attention when something else already looks off.
-    if selection is not None and selection.sliced and parsed.review_notes:
-        parsed.review_notes.append(selection.describe())
+    if doc.selection is not None and doc.selection.sliced and parsed.review_notes:
+        parsed.review_notes.append(doc.selection.describe())
     return parsed
 
 
 async def _call_with_fallback(
-    client: genai.Client, data: bytes, explicit: str | None
-) -> tuple[NotificationExtraction, str]:
+    client: genai.Client, pdfs: list[bytes], explicit: str | None
+) -> tuple[str, str]:
     """First model with quota left wins. A model that is out of daily quota, or
     unknown to this API key (404), is skipped for the rest of the run."""
     last_error: ExtractionError | None = None
     quota_hit = False
     for name in _models_to_try(explicit):
         try:
-            return await _call_gemini(client, data, name), name
+            return await _call_gemini(client, pdfs, name), name
         except GeminiQuotaExhausted as exc:
             quota_hit, last_error = True, exc
         except ExtractionError as exc:
@@ -193,61 +398,78 @@ async def _call_with_fallback(
 # =============================================================================
 
 
-async def _call_gemini(client: genai.Client, data: bytes, model: str) -> NotificationExtraction:
+async def _call_gemini(client: genai.Client, pdfs: list[bytes], model: str) -> str:
+    """The model's JSON answer: one ``NotificationExtraction``, or a ``BatchExtraction``
+    when several PDFs share the request."""
+    shared = len(pdfs) > 1
+    settings = get_settings()
     config = types.GenerateContentConfig(
         system_instruction=SYSTEM_INSTRUCTION,
         response_mime_type="application/json",
-        response_schema=NotificationExtraction,
+        response_schema=BatchExtraction if shared else NotificationExtraction,
         temperature=0.0,
-        max_output_tokens=32768,
+        max_output_tokens=_BATCH_MAX_OUTPUT_TOKENS if shared else _MAX_OUTPUT_TOKENS,
+        # A shared answer is several notifications long: give it time to finish.
+        http_options=types.HttpOptions(timeout=settings.gemini_timeout_s * 2000) if shared else None,
     )
     retrying = AsyncRetrying(
         retry=retry_if_exception(_is_retryable),
-        wait=wait_exponential_jitter(initial=2, max=60),
-        stop=stop_after_attempt(get_settings().gemini_max_attempts),
+        wait=_wait,
+        stop=stop_after_attempt(settings.gemini_max_attempts),
         reraise=True,
     )
     try:
         async for attempt in retrying:
             with attempt:
-                response = await _generate(client, data, model, config)
+                response = await _generate(client, pdfs, model, config)
     except genai_errors.APIError as exc:
         if exc.code == 429:
             # Daily quota, or a per-minute limit that outlasted every retry.
             raise GeminiQuotaExhausted(f"Gemini API error 429 ({model}): {exc.message}") from exc
+        if exc.code in _RETRYABLE_HTTP:
+            raise GeminiUnavailable(f"Gemini API error {exc.code}: {exc.message}") from exc
         raise ExtractionError(f"Gemini API error {exc.code}: {exc.message}") from exc
+    except (httpx.TransportError, TimeoutError, ConnectionError) as exc:
+        raise GeminiUnavailable(f"Gemini did not answer ({type(exc).__name__}): {exc}") from exc
 
+    candidate = response.candidates[0] if response.candidates else None
+    if candidate is not None and candidate.finish_reason == types.FinishReason.MAX_TOKENS:
+        raise ExtractionError("Gemini's answer was cut off at the output limit.")
     text = response.text
     if not text:
-        reason = response.candidates[0].finish_reason if response.candidates else "no candidates"
+        reason = candidate.finish_reason if candidate is not None else "no candidates"
         raise ExtractionError(f"Gemini returned an empty response ({reason}).")
-    try:
-        return NotificationExtraction.model_validate_json(text)
-    except ValidationError as exc:
-        raise ExtractionError(f"Gemini output failed schema validation: {exc}") from exc
+    return text
 
 
 async def _generate(
-    client: genai.Client, data: bytes, model: str, config: types.GenerateContentConfig
+    client: genai.Client, pdfs: list[bytes], model: str, config: types.GenerateContentConfig
 ) -> types.GenerateContentResponse:
-    uploaded: types.File | None = None
+    uploaded: list[types.File] = []
     try:
-        if len(data) <= INLINE_PDF_LIMIT:
-            pdf_part: types.Part | types.File = types.Part.from_bytes(data=data, mime_type="application/pdf")
-        else:
-            uploaded = await client.aio.files.upload(
-                file=io.BytesIO(data), config=types.UploadFileConfig(mime_type="application/pdf")
-            )
-            pdf_part = uploaded
-        return await client.aio.models.generate_content(
-            model=model, contents=[pdf_part, USER_PROMPT], config=config
-        )
+        contents: list[types.Part | types.File | str] = []
+        for n, data in enumerate(pdfs, start=1):
+            if len(pdfs) > 1:
+                contents.append(f"Document {n}:")
+            if len(data) <= INLINE_PDF_LIMIT:
+                contents.append(types.Part.from_bytes(data=data, mime_type="application/pdf"))
+            else:
+                file = await client.aio.files.upload(
+                    file=io.BytesIO(data), config=types.UploadFileConfig(mime_type="application/pdf")
+                )
+                uploaded.append(file)
+                contents.append(file)
+        contents.append(BATCH_PROMPT.format(count=len(pdfs)) if len(pdfs) > 1 else USER_PROMPT)
+        request_counts[model] += 1
+        return await client.aio.models.generate_content(model=model, contents=contents, config=config)
     finally:
-        if uploaded is not None and uploaded.name:
+        for file in uploaded:
+            if not file.name:
+                continue
             try:
-                await client.aio.files.delete(name=uploaded.name)
+                await client.aio.files.delete(name=file.name)
             except Exception:  # noqa: BLE001 - cleanup is best-effort (files auto-expire in 48h)
-                log.warning("Failed to delete uploaded Gemini file %s", uploaded.name)
+                log.warning("Failed to delete uploaded Gemini file %s", file.name)
 
 
 # =============================================================================

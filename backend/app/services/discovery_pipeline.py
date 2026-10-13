@@ -1,5 +1,8 @@
 """Orchestration used by the scheduler: crawl due sources, open aggregator
-detail pages, and push discovered PDFs through the Phase 1 Gemini ingester."""
+detail pages, and push discovered PDFs through the Phase 1 Gemini ingester.
+
+Gemini's free tier allows about 20 requests a day per model, so links whose
+"Last Date" has passed are never read, and new PDFs are read several per request."""
 
 from __future__ import annotations
 
@@ -19,9 +22,14 @@ from app.core.config import Settings, get_settings
 from app.domain.enums import ItemKind, ItemStatus
 from app.models import DiscoveredItem, Source
 from app.services.http_fetcher import Fetcher, FetchError, RetryableFetchError
-from app.services.ingestion import ingest_notification
-from app.services.pdf_parser import ExtractionError, GeminiQuotaExhausted
-from app.services.scraper_service import DETAIL_PARSERS, SourceCrawler, classify
+from app.services.ingestion import find_by_pdf, pdf_sha256, save_notification
+from app.services.pdf_parser import (
+    ExtractionError,
+    GeminiQuotaExhausted,
+    GeminiUnavailable,
+    extract_notifications,
+)
+from app.services.scraper_service import DETAIL_PARSERS, SourceCrawler, classify, closed_note, local_today
 
 log = logging.getLogger(__name__)
 
@@ -89,7 +97,11 @@ async def follow_detail_pages(
         )
     )
     processed = 0
+    today = local_today(settings)
     for item in items:
+        if note := closed_note(item.title, today):
+            item.status, item.error = ItemStatus.SKIPPED, note  # no point reading its PDF
+            continue
         source = await session.get(Source, item.source_id)
         parse = DETAIL_PARSERS.get(source.parser) if source else None
         if parse is None:
@@ -143,7 +155,9 @@ async def follow_detail_pages(
 async def ingest_pending_pdfs(
     session: AsyncSession, fetcher: Fetcher, settings: Settings | None = None
 ) -> int:
-    """Small batches on purpose: the Gemini free tier is rate-limited per minute and per day."""
+    """Downloads one round of queued PDFs, then reads the new ones with as few Gemini
+    requests as possible. PDFs left unread because every model is out of quota go
+    back in the queue untouched (``pdf_parser.quota_left()`` then says so)."""
     settings = settings or get_settings()
     items = list(
         await session.scalars(
@@ -158,33 +172,49 @@ async def ingest_pending_pdfs(
         )
     )
     done = 0
+    to_read: list[tuple[uuid.UUID, str, str, bytes]] = []  # item id, url, sha256, pdf
     for item in items:
         item_id, url = item.id, item.url
         item.attempts += 1
         await session.commit()
         try:
             res = await fetcher.get(url, max_bytes=settings.max_upload_bytes)
-            if not res.is_pdf:
-                await _finish(session, item_id, ItemStatus.SKIPPED, error="Link is not a PDF")
-                continue
-            job, created = await ingest_notification(session, res.body)
-        except GeminiQuotaExhausted:
-            # Not this PDF's fault: back in the queue untouched, and stop for this run.
-            item = await session.get(DiscoveredItem, item_id)
-            if item is not None:
-                return_to_queue(item)
-                await session.commit()
-            raise
-        except ExtractionError as exc:
-            await _finish(session, item_id, ItemStatus.FAILED, error=f"Extraction: {exc}")
-            continue
         except FetchError as exc:
-            retry = isinstance(exc, RetryableFetchError)
             item = await session.get(DiscoveredItem, item_id)
             if item is not None:
-                _record_failure(item, exc, retryable=retry)
+                _record_failure(item, exc, retryable=isinstance(exc, RetryableFetchError))
                 await session.commit()
             continue
+        if not res.is_pdf:
+            await _finish(session, item_id, ItemStatus.SKIPPED, error="Link is not a PDF")
+            continue
+        sha256 = pdf_sha256(res.body)
+        if known := await find_by_pdf(session, sha256):  # read before, e.g. via another source
+            await _finish(session, item_id, ItemStatus.DONE, job_post_id=known.id)
+            done += 1
+            log.info("Ingested %s -> %s (duplicate)", url, known.exam_name)
+            continue
+        to_read.append((item_id, url, sha256, res.body))
+    if not to_read:
+        return done
+
+    pdfs = {sha256: data for _, _, sha256, data in to_read}  # the same PDF twice is read once
+    outcomes = dict(zip(pdfs, await extract_notifications(list(pdfs.values())), strict=True))
+    for item_id, url, sha256, data in to_read:
+        outcome = outcomes[sha256]
+        if isinstance(outcome, GeminiQuotaExhausted | GeminiUnavailable):
+            item = await session.get(DiscoveredItem, item_id)
+            if item is not None:
+                if isinstance(outcome, GeminiQuotaExhausted):
+                    return_to_queue(item)  # not even tried: the attempt doesn't count
+                else:
+                    _record_failure(item, outcome, retryable=True)  # again next run, up to MAX_ATTEMPTS
+                await session.commit()
+            continue
+        if isinstance(outcome, ExtractionError):
+            await _finish(session, item_id, ItemStatus.FAILED, error=f"Extraction: {outcome}")
+            continue
+        job, created = await save_notification(session, data, outcome)
         await _finish(session, item_id, ItemStatus.DONE, job_post_id=job.id)
         done += 1
         log.info("Ingested %s -> %s (%s)", url, job.exam_name, "new" if created else "duplicate")
@@ -212,7 +242,7 @@ async def _finish(
     error: str | None = None,
     job_post_id: uuid.UUID | None = None,
 ) -> None:
-    # Re-load: ingest_notification may have rolled the session back.
+    # Re-load: save_notification may have rolled the session back.
     item = await session.get(DiscoveredItem, item_id)
     if item is None:
         return

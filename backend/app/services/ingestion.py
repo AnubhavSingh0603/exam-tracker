@@ -79,6 +79,14 @@ def _to_orm(parsed: ParsedNotification, *, sha256: str, pdf_path: str, model: st
     )
 
 
+def pdf_sha256(data: bytes) -> str:
+    return hashlib.sha256(data).hexdigest()
+
+
+async def find_by_pdf(session: AsyncSession, sha256: str) -> JobPost | None:
+    return await load_job(session, JobPost.source_pdf_sha256 == sha256)
+
+
 async def ingest_notification(
     session: AsyncSession,
     data: bytes,
@@ -86,15 +94,24 @@ async def ingest_notification(
     portal_url_override: str | None = None,
 ) -> tuple[JobPost, bool]:
     """Returns ``(job, created)``. Raises ``ExtractionError`` if Gemini can't parse it."""
-    settings = get_settings()
-    sha256 = hashlib.sha256(data).hexdigest()
-
-    if existing := await load_job(session, JobPost.source_pdf_sha256 == sha256):
+    if existing := await find_by_pdf(session, pdf_sha256(data)):
         return existing, False
 
     parsed = await extract_notification(data)
     if portal_url_override:
         parsed.portal_url = portal_url_override
+    return await save_notification(session, data, parsed)
+
+
+async def save_notification(
+    session: AsyncSession, data: bytes, parsed: ParsedNotification
+) -> tuple[JobPost, bool]:
+    """Stores an extracted notification with its PDF. Returns ``(job, created)``;
+    a PDF that is already stored returns the existing job."""
+    settings = get_settings()
+    sha256 = pdf_sha256(data)
+    if existing := await find_by_pdf(session, sha256):
+        return existing, False
 
     pdf_path = settings.upload_dir / f"{sha256}.pdf"
     await asyncio.to_thread(_write_atomic, pdf_path, data)
@@ -107,7 +124,7 @@ async def ingest_notification(
     except IntegrityError:
         # A concurrent upload of the same PDF won the race.
         await session.rollback()
-        existing = await load_job(session, JobPost.source_pdf_sha256 == sha256)
+        existing = await find_by_pdf(session, sha256)
         if existing is None:
             raise
         return existing, False

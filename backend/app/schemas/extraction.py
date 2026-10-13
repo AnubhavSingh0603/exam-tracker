@@ -80,3 +80,14 @@ class NotificationExtraction(BaseModel):
     result_date: str | None = Field(description="Tentative result declaration date")
     general_age_relaxations: list[ExtractedRelaxation]
     posts: list[ExtractedPost]
+
+
+class NumberedExtraction(BaseModel):
+    document_number: int = Field(description="N from the 'Document N:' label placed just before the PDF")
+    notification: NotificationExtraction
+
+
+class BatchExtraction(BaseModel):
+    """Several PDFs read in one request: the free tier counts requests, not PDFs."""
+
+    documents: list[NumberedExtraction] = Field(description="Exactly one entry per attached document")
