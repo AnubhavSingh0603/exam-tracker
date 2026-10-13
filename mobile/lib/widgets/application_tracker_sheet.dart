@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../models/vault_entry.dart';
+import 'app_icons.dart';
 
 /// Application Tracker modal. Every field is optional: "Save" with nothing
 /// typed is a valid, zero-friction choice. Returns null if dismissed.
@@ -87,7 +88,7 @@ class _TrackerSheetState extends State<_TrackerSheet> {
                 helperText: widget.hasSavedPassword ? 'Leave blank to keep the saved one' : null,
                 suffixIcon: IconButton(
                   tooltip: _obscure ? 'Show' : 'Hide',
-                  icon: Icon(_obscure ? Icons.visibility_rounded : Icons.visibility_off_rounded),
+                  icon: glyph(_obscure ? AppIcon.passwordShow : AppIcon.passwordHide),
                   onPressed: () => setState(() => _obscure = !_obscure),
                 ),
               ),

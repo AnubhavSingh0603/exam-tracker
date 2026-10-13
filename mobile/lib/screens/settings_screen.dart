@@ -16,6 +16,7 @@ import '../services/calendar_sync_service.dart';
 import '../services/deadline_reminders.dart';
 import '../theme/app_theme.dart';
 import '../utils/system_actions.dart';
+import '../widgets/app_icons.dart';
 import '../widgets/common.dart';
 import '../widgets/samsung_sleep_tip.dart';
 import '../widgets/update_dialog.dart';
@@ -130,7 +131,7 @@ class _AccountTab extends ConsumerWidget {
               const SizedBox(height: 12),
               FilledButton.icon(
                 onPressed: () => signInWithGoogle(context, ref),
-                icon: const Icon(Icons.login_rounded),
+                icon: const DuoIcon(AppIcon.login),
                 label: const Text('Sign in with Google'),
               ),
             ] else ...[
@@ -146,8 +147,8 @@ class _AccountTab extends ConsumerWidget {
               const SizedBox(height: 4),
               Row(
                 children: [
-                  Icon(
-                    backup.phase == BackupPhase.idle ? Icons.cloud_done_rounded : Icons.cloud_sync_rounded,
+                  DuoIcon(
+                    backup.phase == BackupPhase.idle ? AppIcon.backupDone : AppIcon.backupSyncing,
                     size: 18,
                     color: AppPalette.textMuted,
                   ),

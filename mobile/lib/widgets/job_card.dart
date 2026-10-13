@@ -14,8 +14,10 @@ import '../providers/providers.dart';
 import '../theme/app_theme.dart';
 import '../utils/system_actions.dart';
 import 'app_card.dart';
+import 'app_icons.dart';
 import 'application_tracker_sheet.dart';
 import 'common.dart';
+import 'motion.dart';
 import 'pills.dart';
 
 // -----------------------------------------------------------------------------
@@ -32,6 +34,7 @@ Future<bool> applyToJob(BuildContext screenContext, WidgetRef ref, FeedItem item
   try {
     final app = await notifier.markAppliedFromFeed(item, category: category);
     unawaited(HapticFeedback.mediumImpact());
+    if (screenContext.mounted) showAppliedCelebration(screenContext);
     if (!screenContext.mounted) return true;
     showCalmSnack(
       screenContext,
@@ -96,7 +99,7 @@ class SwipeableJob extends ConsumerWidget {
     final colors = context.urgencyColors;
     return Dismissible(
       key: ValueKey('job-${item.jobPostId}'),
-      background: SwipeBackground(color: colors.safe, icon: Icons.check_circle_rounded, label: 'Applied'),
+      background: SwipeBackground(color: colors.safe, icon: AppIcon.eligible, label: 'Applied'),
       secondaryBackground: SwipeBackground(
         color: AppPalette.textMuted,
         icon: Icons.close_rounded,
@@ -106,7 +109,10 @@ class SwipeableJob extends ConsumerWidget {
       confirmDismiss: (direction) => direction == DismissDirection.startToEnd
           ? applyToJob(screenContext, ref, item)
           : rejectJobWithUndo(screenContext, ref, item),
-      child: JobCard(ranked: ranked, screenContext: screenContext, showSwipeHint: showSwipeHint),
+      child: SwipeNudge(
+        enabled: showSwipeHint,
+        child: JobCard(ranked: ranked, screenContext: screenContext, showSwipeHint: showSwipeHint),
+      ),
     );
   }
 }
@@ -179,7 +185,7 @@ class _JobCardState extends ConsumerState<JobCard> {
               if (item.applicationUrl != null) ...[
                 FilledButton.tonalIcon(
                   onPressed: () => openExternal(context, item.applicationUrl),
-                  icon: const Icon(Icons.open_in_new_rounded, size: 18),
+                  icon: const DuoIcon(AppIcon.applyOnline, size: 18),
                   label: const Text('Apply online'),
                 ),
                 const SizedBox(width: 4),
@@ -198,7 +204,7 @@ class _JobCardState extends ConsumerState<JobCard> {
               IconButton(
                 tooltip: 'I applied',
                 onPressed: () => applyToJob(widget.screenContext, ref, item),
-                icon: Icon(Icons.check_circle_outline_rounded, size: 22, color: context.urgencyColors.safe),
+                icon: DuoIcon(AppIcon.eligible, size: 22, color: context.urgencyColors.safe),
               ),
             ],
           ),

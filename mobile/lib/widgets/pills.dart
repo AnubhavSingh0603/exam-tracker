@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 
 import '../domain/urgency.dart';
 import '../theme/app_theme.dart';
+import 'app_icons.dart';
+import 'motion.dart';
 
 class _Pill extends StatelessWidget {
   const _Pill(
@@ -10,7 +12,7 @@ class _Pill extends StatelessWidget {
   final String label;
   final Color foreground;
   final Color background;
-  final IconData? icon;
+  final Object? icon;
   final String? semantics;
 
   @override
@@ -25,7 +27,7 @@ class _Pill extends StatelessWidget {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            if (icon != null) ...[Icon(icon, size: 14, color: foreground), const SizedBox(width: 4)],
+            if (icon case final i?) ...[glyph(i, size: 14, color: foreground), const SizedBox(width: 4)],
             Flexible(child: Text(label, style: style, overflow: TextOverflow.ellipsis)),
           ],
         ),
@@ -47,12 +49,18 @@ class CountdownPill extends StatelessWidget {
     final d = due;
     final urgency = urgencyFor(d, now);
     final label = d == null ? 'No date yet' : countdownLabel(d, now);
-    return _Pill(
-      label: label,
-      icon: Icons.schedule_rounded,
-      foreground: colors.of(urgency),
-      background: colors.tint(urgency),
-      semantics: d == null ? label : '$label, due ${formatDue(d)}',
+    // Only the last 24 hours breathe; nothing else on screen moves by itself.
+    final lastDay = d != null && d.isAfter(now) && d.difference(now) <= const Duration(hours: 24);
+    return LastDayGlow(
+      active: lastDay,
+      color: colors.of(urgency),
+      child: _Pill(
+        label: label,
+        icon: AppIcon.reminder,
+        foreground: colors.of(urgency),
+        background: colors.tint(urgency),
+        semantics: d == null ? label : '$label, due ${formatDue(d)}',
+      ),
     );
   }
 }

@@ -10,9 +10,11 @@ import '../providers/jobs_providers.dart';
 import '../providers/providers.dart';
 import '../theme/app_theme.dart';
 import '../utils/system_actions.dart';
+import '../widgets/app_icons.dart';
 import '../widgets/common.dart';
 import '../widgets/hero_card.dart';
 import '../widgets/job_card.dart';
+import '../widgets/motion.dart';
 import 'home_shell.dart';
 
 /// Just today: the one next step, a glance at what's waiting, the best few jobs.
@@ -54,7 +56,7 @@ class TodayScreen extends ConsumerWidget {
           if (account == AccountStatus.needsProfile)
             padSliver(
               PromptCard(
-                icon: Icons.badge_outlined,
+                icon: AppIcon.profile,
                 title: 'One minute to finish your profile',
                 body:
                     'Date of birth, category and degree are all we need to filter jobs and count your seats.',
@@ -85,20 +87,20 @@ class TodayScreen extends ConsumerWidget {
               runSpacing: 8,
               children: [
                 _GlanceChip(
-                  icon: Icons.work_outline_rounded,
+                  icon: AppIcon.experience,
                   label: allJobs == 1 ? '1 job for you' : '$allJobs jobs for you',
                   onTap: () => ref.read(homeTabProvider.notifier).show(1),
                 ),
                 if (admitCards > 0)
                   _GlanceChip(
-                    icon: Icons.badge_rounded,
+                    icon: AppIcon.admitCard,
                     label: admitCards == 1 ? '1 admit card out' : '$admitCards admit cards out',
                     color: AppPalette.sage,
                     onTap: () => ref.read(homeTabProvider.notifier).show(2),
                   ),
                 if (examsSoon > 0)
                   _GlanceChip(
-                    icon: Icons.event_rounded,
+                    icon: AppIcon.examDay,
                     label: examsSoon == 1 ? '1 exam in 2 weeks' : '$examsSoon exams in 2 weeks',
                     color: AppPalette.honey,
                     onTap: () => ref.read(homeTabProvider.notifier).show(2),
@@ -126,7 +128,11 @@ class TodayScreen extends ConsumerWidget {
                   itemCount: top.length,
                   separatorBuilder: (_, __) => const SizedBox(height: 12),
                   itemBuilder: (_, i) =>
-                      SwipeableJob(ranked: top[i], screenContext: context, showSwipeHint: i == 0),
+                      SettleIn(
+                    id: top[i].item.jobPostId,
+                    index: i,
+                    child: SwipeableJob(ranked: top[i], screenContext: context, showSwipeHint: i == 0),
+                  ),
                 ),
               ),
             if (allJobs > top.length + (heroJob == null ? 0 : 1))
@@ -157,7 +163,7 @@ bool _examWithin(TrackedApplication a, DateTime now, Duration window) {
 class _GlanceChip extends StatelessWidget {
   const _GlanceChip({required this.icon, required this.label, required this.onTap, this.color});
 
-  final IconData icon;
+  final Object icon;
   final String label;
   final VoidCallback onTap;
   final Color? color;
@@ -166,7 +172,7 @@ class _GlanceChip extends StatelessWidget {
   Widget build(BuildContext context) {
     final c = color ?? AppPalette.periwinkle;
     return ActionChip(
-      avatar: Icon(icon, size: 18, color: c),
+      avatar: glyph(icon, size: 18, color: c),
       label: Text(label),
       onPressed: onTap,
       backgroundColor: c.withValues(alpha: 0.10),

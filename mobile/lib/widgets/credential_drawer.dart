@@ -5,6 +5,7 @@ import '../models/tracked_application.dart';
 import '../providers/providers.dart';
 import '../theme/app_theme.dart';
 import '../utils/system_actions.dart';
+import 'app_icons.dart';
 import 'application_tracker_sheet.dart';
 
 /// Expanded content of a tracked card: tap-to-copy chips + portal deep link.
@@ -73,7 +74,7 @@ class CredentialDrawer extends ConsumerWidget {
             Expanded(
               child: OutlinedButton.icon(
                 onPressed: () => openExternal(context, app.actionUrl),
-                icon: const Icon(Icons.login_rounded, size: 18),
+                icon: const DuoIcon(AppIcon.login, size: 18),
                 label:
                     Text(app.status == ApplicationStatus.admitCardLive ? 'Admit card' : 'Application login'),
               ),
@@ -130,7 +131,7 @@ class _CopyChip extends StatelessWidget {
                   ),
                   if (!empty) ...[
                     const SizedBox(width: 10),
-                    Icon(Icons.copy_rounded, size: 16, color: AppPalette.textMuted),
+                    DuoIcon(AppIcon.copy, size: 16, color: AppPalette.textMuted),
                   ],
                 ],
               ),

@@ -10,6 +10,7 @@ import '../providers/providers.dart';
 import '../theme/app_theme.dart';
 import '../widgets/common.dart';
 import '../widgets/job_card.dart';
+import '../widgets/motion.dart';
 import 'settings_screen.dart';
 
 enum _View { forYou, nearMiss, notForMe }
@@ -215,7 +216,11 @@ class _JobsScreenState extends ConsumerState<JobsScreen> {
                   itemCount: shown.length,
                   separatorBuilder: (_, __) => const SizedBox(height: 12),
                   itemBuilder: (_, i) =>
-                      SwipeableJob(ranked: shown[i], screenContext: context, showSwipeHint: i == 0),
+                      SettleIn(
+                    id: shown[i].item.jobPostId,
+                    index: i,
+                    child: SwipeableJob(ranked: shown[i], screenContext: context, showSwipeHint: i == 0),
+                  ),
                 ),
               ),
           ],

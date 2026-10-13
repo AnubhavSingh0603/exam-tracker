@@ -6,6 +6,7 @@ import '../providers/backup_providers.dart';
 import '../providers/providers.dart';
 import '../screens/settings_screen.dart';
 import '../theme/app_theme.dart';
+import 'app_icons.dart';
 
 /// A sliver with the screen's side gutter.
 Widget padSliver(Widget child, {double top = 0}) => SliverPadding(
@@ -103,7 +104,7 @@ class AccountAvatarButton extends ConsumerWidget {
           backgroundColor: AppPalette.surfaceVariant,
           child: user != null
               ? Text(user.initial, style: text.labelLarge?.copyWith(color: AppPalette.periwinkle))
-              : Icon(Icons.person_outline_rounded, size: 20, color: AppPalette.periwinkle),
+              : DuoIcon(AppIcon.profile, size: 20, color: AppPalette.periwinkle),
         ),
       ),
     );
@@ -120,14 +121,14 @@ class SwipeBackground extends StatelessWidget {
   });
 
   final Color color;
-  final IconData icon;
+  final Object icon;
   final String label;
   final bool alignEnd;
 
   @override
   Widget build(BuildContext context) {
     final children = [
-      Icon(icon, color: color),
+      glyph(icon, color: color),
       const SizedBox(width: 8),
       Text(label, style: Theme.of(context).textTheme.labelLarge?.copyWith(color: color)),
     ];
@@ -151,7 +152,7 @@ class PromptCard extends StatelessWidget {
   const PromptCard(
       {super.key, required this.icon, required this.title, required this.body, required this.action});
 
-  final IconData icon;
+  final Object icon;
   final String title;
   final String body;
   final Widget action;
@@ -172,7 +173,7 @@ class PromptCard extends StatelessWidget {
         children: [
           Row(
             children: [
-              Icon(icon, color: info),
+              glyph(icon, color: info),
               const SizedBox(width: 10),
               Expanded(child: Text(title, style: text.titleMedium)),
             ],

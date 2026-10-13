@@ -6,17 +6,19 @@ import 'package:permission_handler/permission_handler.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../config/env.dart';
+import '../domain/relevance.dart';
 import '../models/tracked_application.dart';
 import '../providers/account_providers.dart';
 import '../providers/backup_providers.dart';
 import '../providers/jobs_providers.dart';
 import '../providers/providers.dart';
-import '../domain/relevance.dart';
 import '../services/auth_service.dart';
 import '../services/deadline_reminders.dart';
 import '../services/notification_service.dart';
 import '../theme/app_theme.dart';
 import '../utils/system_actions.dart';
+import '../widgets/app_icons.dart';
+import '../widgets/motion.dart';
 import '../widgets/samsung_sleep_tip.dart';
 import '../widgets/welcome_sheet.dart';
 import 'jobs_screen.dart';
@@ -38,7 +40,7 @@ class HomeShell extends ConsumerWidget {
       child: Scaffold(
         body: SafeArea(
           bottom: false,
-          child: IndexedStack(
+          child: TabSwitcher(
             index: tab,
             children: const [TodayScreen(), JobsScreen(), MyExamsScreen()],
           ),
@@ -50,25 +52,25 @@ class HomeShell extends ConsumerWidget {
           indicatorColor: AppPalette.periwinkle.withValues(alpha: 0.22),
           destinations: [
             const NavigationDestination(
-              icon: Icon(Icons.wb_twilight_outlined),
-              selectedIcon: Icon(Icons.wb_twilight_rounded),
+              icon: DuoIcon(AppIcon.nextStep),
+              selectedIcon: DuoIcon(AppIcon.nextStep),
               label: 'Today',
             ),
             NavigationDestination(
               icon: Badge(
                   isLabelVisible: jobs > 0,
                   label: Text('$jobs'),
-                  child: const Icon(Icons.work_outline_rounded)),
-              selectedIcon: const Icon(Icons.work_rounded),
+                  child: const DuoIcon(AppIcon.experience)),
+              selectedIcon: const DuoIcon(AppIcon.experience),
               label: 'Jobs',
             ),
             NavigationDestination(
               icon: Badge(
                 isLabelVisible: needsAction > 0,
                 label: Text('$needsAction'),
-                child: const Icon(Icons.fact_check_outlined),
+                child: const DuoIcon(AppIcon.answerKey),
               ),
-              selectedIcon: const Icon(Icons.fact_check_rounded),
+              selectedIcon: const DuoIcon(AppIcon.answerKey),
               label: 'My exams',
             ),
           ],

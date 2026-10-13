@@ -6,6 +6,7 @@ import '../providers/providers.dart';
 import '../theme/app_theme.dart';
 import '../utils/system_actions.dart';
 import '../widgets/add_exam_sheet.dart';
+import '../widgets/app_icons.dart';
 import '../widgets/common.dart';
 import '../widgets/tracked_application_card.dart';
 
@@ -143,7 +144,7 @@ class _StageList extends ConsumerWidget {
                 background: const SizedBox.shrink(),
                 secondaryBackground: SwipeBackground(
                   color: AppPalette.textMuted,
-                  icon: app.archived ? Icons.unarchive_rounded : Icons.archive_rounded,
+                  icon: app.archived ? Icons.unarchive_rounded : AppIcon.archive,
                   label: app.archived ? 'Restore' : 'Archive',
                   alignEnd: true,
                 ),

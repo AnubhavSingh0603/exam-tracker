@@ -4,6 +4,7 @@ import '../domain/lifecycle.dart';
 import '../models/tracked_application.dart';
 import '../theme/app_theme.dart';
 import '../utils/system_actions.dart';
+import 'app_icons.dart';
 
 /// Vertical 5-stage timeline: Applied → Admit card → Exam → Answer key → Result.
 /// Completed sage, active terracotta, upcoming honey, locked grey. Each stage
@@ -118,7 +119,7 @@ class _StageRow extends StatelessWidget {
                             a.primary
                                 ? FilledButton.tonalIcon(
                                     onPressed: () => openExternal(context, a.url),
-                                    icon: const Icon(Icons.open_in_new_rounded, size: 16),
+                                    icon: const DuoIcon(AppIcon.applyOnline, size: 16),
                                     label: Text(a.label),
                                   )
                                 : TextButton(

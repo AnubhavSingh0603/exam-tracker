@@ -6,6 +6,7 @@ import '../config/env.dart';
 import '../services/update_service.dart';
 import '../theme/app_theme.dart';
 import '../utils/system_actions.dart';
+import 'app_icons.dart';
 
 /// Calm update prompt: one decision, plain notes, a visible progress bar.
 /// Non-blocking unless the installed version is below `min_supported`.
@@ -74,7 +75,7 @@ class _UpdateDialogState extends State<_UpdateDialog> {
             children: [
               Row(
                 children: [
-                  Icon(Icons.system_update_rounded, color: colors.info),
+                  DuoIcon(AppIcon.updateApp, color: colors.info),
                   const SizedBox(width: 10),
                   Expanded(child: Text('Update available', style: text.titleLarge)),
                 ],

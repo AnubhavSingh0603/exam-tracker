@@ -7,6 +7,7 @@ import '../domain/urgency.dart';
 import '../models/user_profile.dart';
 import '../providers/account_providers.dart';
 import '../theme/app_theme.dart';
+import '../widgets/app_icons.dart';
 import '../widgets/common.dart';
 
 /// Opens the profile form as a near-full-height sheet. Returns true when saved.
@@ -162,7 +163,7 @@ class _ProfileSetupScreenState extends ConsumerState<ProfileSetupScreen> {
                   children: [
                     OutlinedButton.icon(
                       onPressed: _pickDob,
-                      icon: const Icon(Icons.cake_outlined, size: 18),
+                      icon: const DuoIcon(AppIcon.birthday, size: 18),
                       label: Text(dob == null ? 'Pick your date of birth' : _formatDob(dob)),
                     ),
                     if (dob != null) ...[

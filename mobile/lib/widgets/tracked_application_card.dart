@@ -11,6 +11,7 @@ import '../services/calendar_sync_service.dart';
 import '../theme/app_theme.dart';
 import '../utils/system_actions.dart';
 import 'app_card.dart';
+import 'app_icons.dart';
 import 'common.dart';
 import 'credential_drawer.dart';
 import 'exam_lifecycle_stepper.dart';
@@ -192,7 +193,7 @@ class _TrackedApplicationCardState extends ConsumerState<TrackedApplicationCard>
                     value: _MenuAction.delete,
                     child: Row(
                       children: [
-                        Icon(Icons.delete_outline_rounded,
+                        DuoIcon(AppIcon.delete,
                             size: 20, color: Theme.of(context).colorScheme.error),
                         const SizedBox(width: 8),
                         Text('Delete', style: TextStyle(color: Theme.of(context).colorScheme.error)),
@@ -236,13 +237,13 @@ class _TrackedApplicationCardState extends ConsumerState<TrackedApplicationCard>
                     Expanded(child: _SyncButton(state: _sync, onPressed: _syncToCalendar)),
                     const SizedBox(width: 4),
                     _PanelToggle(
-                      icon: Icons.timeline_rounded,
+                      icon: AppIcon.timeline,
                       label: 'Timeline',
                       open: _panel == _Panel.timeline,
                       onPressed: () => _toggle(_Panel.timeline),
                     ),
                     _PanelToggle(
-                      icon: Icons.key_rounded,
+                      icon: AppIcon.idVault,
                       label: 'IDs',
                       open: _panel == _Panel.credentials,
                       onPressed: () => _toggle(_Panel.credentials),
@@ -284,12 +285,12 @@ class _MilestoneBadge extends StatelessWidget {
     final text = Theme.of(context).textTheme;
     final t = app.timeline;
     final status = app.displayStatus;
-    final (Color color, IconData icon) = switch (status) {
-      TrackerStatus.applied => (AppPalette.textMuted, Icons.hourglass_top_rounded),
-      TrackerStatus.admitCardLive => (AppPalette.sage, Icons.badge_rounded),
-      TrackerStatus.examScheduled => (AppPalette.honey, Icons.event_rounded),
-      TrackerStatus.answerKeyLive => (AppPalette.lavender, Icons.fact_check_rounded),
-      TrackerStatus.resultDeclared => (AppPalette.periwinkle, Icons.emoji_events_rounded),
+    final (Color color, AppIcon icon) = switch (status) {
+      TrackerStatus.applied => (AppPalette.textMuted, AppIcon.applied),
+      TrackerStatus.admitCardLive => (AppPalette.sage, AppIcon.admitCard),
+      TrackerStatus.examScheduled => (AppPalette.honey, AppIcon.examDay),
+      TrackerStatus.answerKeyLive => (AppPalette.lavender, AppIcon.answerKey),
+      TrackerStatus.resultDeclared => (AppPalette.periwinkle, AppIcon.result),
     };
     final exam = app.effectiveExamAt;
     final objection = t?.objectionDeadline;
@@ -332,7 +333,7 @@ class _MilestoneBadge extends StatelessWidget {
         children: [
           Row(
             children: [
-              Icon(icon, size: 18, color: color),
+              glyph(icon, size: 18, color: color),
               const SizedBox(width: 8),
               Expanded(
                 child: Semantics(
@@ -341,7 +342,7 @@ class _MilestoneBadge extends StatelessWidget {
                 ),
               ),
               if (status == TrackerStatus.examScheduled && app.calendarSynced)
-                const _MiniChip(label: 'Calendar Synced', icon: Icons.event_available_rounded),
+                const _MiniChip(label: 'Calendar Synced', icon: AppIcon.calendarDone),
               if (objectionOpen)
                 CountdownPill(
                     due: DateTime(objection.year, objection.month, objection.day, 23, 59), now: now),
@@ -359,7 +360,7 @@ class _MilestoneBadge extends StatelessWidget {
             const SizedBox(height: 8),
             FilledButton.tonalIcon(
               onPressed: () => openExternal(context, actionUrl),
-              icon: const Icon(Icons.download_rounded, size: 18),
+              icon: const DuoIcon(AppIcon.download, size: 18),
               label: Text(actionLabel),
             ),
           ],
@@ -373,7 +374,7 @@ class _MiniChip extends StatelessWidget {
   const _MiniChip({required this.label, required this.icon});
 
   final String label;
-  final IconData icon;
+  final Object icon;
 
   @override
   Widget build(BuildContext context) {
@@ -385,7 +386,7 @@ class _MiniChip extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 14, color: sage),
+          glyph(icon, size: 14, color: sage),
           const SizedBox(width: 4),
           Text(label, style: Theme.of(context).textTheme.labelSmall?.copyWith(color: sage)),
         ],
@@ -401,14 +402,14 @@ List<Widget> _quickCopyChips(BuildContext context, VaultEntry? vault) {
   return [
     if (reg != null && reg.isNotEmpty)
       ActionChip(
-        avatar: const Icon(Icons.copy_rounded, size: 16),
+        avatar: const DuoIcon(AppIcon.copy, size: 16),
         label: Text('Reg $reg'),
         tooltip: 'Copy registration number',
         onPressed: () => copyToClipboard(context, 'Registration number', reg),
       ),
     if (roll != null && roll.isNotEmpty)
       ActionChip(
-        avatar: const Icon(Icons.copy_rounded, size: 16),
+        avatar: const DuoIcon(AppIcon.copy, size: 16),
         label: Text('Roll $roll'),
         tooltip: 'Copy roll number',
         onPressed: () => copyToClipboard(context, 'Roll number', roll),
@@ -432,7 +433,7 @@ class _LatestNotice extends StatelessWidget {
         padding: const EdgeInsets.symmetric(vertical: 4),
         child: Row(
           children: [
-            Icon(Icons.notifications_active_outlined, size: 16, color: AppPalette.periwinkle),
+            DuoIcon(AppIcon.newNotice, size: 16, color: AppPalette.periwinkle),
             const SizedBox(width: 6),
             Expanded(
               child: Text(
@@ -452,7 +453,7 @@ class _LatestNotice extends StatelessWidget {
 class _PanelToggle extends StatelessWidget {
   const _PanelToggle({required this.icon, required this.label, required this.open, required this.onPressed});
 
-  final IconData icon;
+  final Object icon;
   final String label;
   final bool open;
   final VoidCallback onPressed;
@@ -460,7 +461,7 @@ class _PanelToggle extends StatelessWidget {
   @override
   Widget build(BuildContext context) => TextButton.icon(
         onPressed: onPressed,
-        icon: Icon(open ? Icons.expand_less_rounded : icon, size: 18),
+        icon: glyph(open ? Icons.expand_less_rounded : icon, size: 18),
         label: Text(open ? 'Hide' : label),
       );
 }
@@ -484,12 +485,12 @@ class _SyncButton extends StatelessWidget {
           onPressed: onPressed,
           style: OutlinedButton.styleFrom(
               foregroundColor: sage, side: BorderSide(color: sage.withValues(alpha: 0.5))),
-          icon: const Icon(Icons.event_available_rounded, size: 18),
+          icon: const DuoIcon(AppIcon.calendarDone, size: 18),
           label: const Text('In calendar'),
         ),
       _SyncState.idle => FilledButton.tonalIcon(
           onPressed: onPressed,
-          icon: const Icon(Icons.edit_calendar_rounded, size: 18),
+          icon: const DuoIcon(AppIcon.calendarAdd, size: 18),
           label: const Text('Sync to Calendar'),
         ),
     };

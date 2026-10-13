@@ -6,6 +6,7 @@ import '../providers/backup_providers.dart';
 import '../services/auth_service.dart';
 import '../services/backup_service.dart';
 import '../theme/app_theme.dart';
+import 'app_icons.dart';
 
 /// First launch on a phone: one calm choice. Signing in restores a backup made
 /// on another phone (or before a reinstall), or starts one. "Not now" keeps the
@@ -87,7 +88,7 @@ class _WelcomeSheetState extends ConsumerState<_WelcomeSheet> {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Icon(done == null ? Icons.cloud_sync_rounded : Icons.cloud_done_rounded, size: 40, color: info),
+          glyph(done == null ? AppIcon.backupSyncing : AppIcon.backupDone, size: 40, color: info),
           const SizedBox(height: 12),
           Text(done == null ? 'Keep your exams safe' : 'All set', style: text.headlineSmall),
           const SizedBox(height: 8),
@@ -109,7 +110,7 @@ class _WelcomeSheetState extends ConsumerState<_WelcomeSheet> {
               onPressed: _busy ? null : _signIn,
               icon: _busy
                   ? const SizedBox.square(dimension: 18, child: CircularProgressIndicator(strokeWidth: 2))
-                  : const Icon(Icons.login_rounded, size: 18),
+                  : const DuoIcon(AppIcon.login, size: 18),
               label: Text(_busy ? 'Restoring…' : 'Sign in with Google'),
             ),
             const SizedBox(height: 8),

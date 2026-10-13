@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../domain/next_step.dart';
 import '../domain/urgency.dart';
 import '../theme/app_theme.dart';
+import 'app_icons.dart';
 
 /// "One Next Step": the only loud thing on the screen, and only as loud as it
 /// needs to be (terracotta < 72 h, honey < 14 d, sage otherwise).
@@ -36,7 +37,7 @@ class HeroCard extends StatelessWidget {
           children: [
             Row(
               children: [
-                Icon(Icons.flag_rounded, size: 18, color: tone),
+                DuoIcon(AppIcon.nextStep, size: 18, color: tone),
                 const SizedBox(width: 8),
                 Text('Your one next step', style: text.labelMedium?.copyWith(color: tone)),
               ],
@@ -56,7 +57,7 @@ class HeroCard extends StatelessWidget {
                 FilledButton.icon(
                   onPressed: onPrimary,
                   style: FilledButton.styleFrom(backgroundColor: tone, foregroundColor: AppPalette.background),
-                  icon: const Icon(Icons.open_in_new_rounded, size: 18),
+                  icon: const DuoIcon(AppIcon.applyOnline, size: 18),
                   label: Text(step.actionLabel),
                 ),
                 if (onMarkApplied != null)
@@ -90,7 +91,7 @@ class CalmEmptyHero extends StatelessWidget {
       ),
       child: Row(
         children: [
-          Icon(Icons.spa_rounded, color: colors.safe),
+          DuoIcon(AppIcon.calmEmpty, color: colors.safe),
           const SizedBox(width: 12),
           Expanded(
             child: Text('Nothing urgent right now. You are on track.', style: text.bodyLarge),
