@@ -190,7 +190,7 @@ class _SwipeToApplyState extends State<_SwipeToApply> {
         item: item,
         now: widget.now,
         category: widget.category,
-        onOpenPortal: () => unawaited(openExternal(context, item.portalUrl)),
+        onApply: item.applicationUrl == null ? null : () => unawaited(openExternal(context, item.applicationUrl)),
       ),
     );
   }

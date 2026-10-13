@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 
 import 'exam_timeline.dart';
+import 'links.dart';
 
 enum ApplicationStatus {
   applied('applied', 'Applied'),
@@ -102,6 +103,7 @@ class TrackedApplication {
     this.examAt,
     this.admitCardUrl,
     this.portalUrl,
+    this.applyUrl,
     this.category,
     this.totalSeats,
     this.urSeats,
@@ -124,7 +126,12 @@ class TrackedApplication {
   final DateTime? deadline;
   final DateTime? examAt;
   final String? admitCardUrl;
+
+  /// The organisation's website: the exam watcher checks it for notices.
   final String? portalUrl;
+
+  /// The registration / application login page, when a job site linked it.
+  final String? applyUrl;
   final String? category; // UR / SC / ST / OBC / EWS
   final int? totalSeats;
   final int? urSeats;
@@ -179,10 +186,14 @@ class TrackedApplication {
         ApplicationStatus.admitCardLive || ApplicationStatus.examScheduled => effectiveExamAt,
       };
 
-  /// Best link for "open portal" / "download admit card".
+  /// Where you log in to pay, correct the form or download the admit card: the
+  /// application page, else the official website.
+  String? get applicationUrl => preferredUrl(applyUrl, portalUrl);
+
+  /// Best link for "application login" / "download admit card".
   String? get actionUrl => status == ApplicationStatus.admitCardLive
-      ? (admitCardUrl ?? timeline?.admitCardUrl ?? portalUrl)
-      : portalUrl;
+      ? (admitCardUrl ?? timeline?.admitCardUrl ?? applicationUrl)
+      : applicationUrl;
 
   static List<ExamUpdate> _updates(Object? raw) {
     if (raw is! String || raw.isEmpty) return const [];
@@ -223,6 +234,7 @@ class TrackedApplication {
         'exam_timestamp': _ms(examAt),
         'admit_card_url': admitCardUrl,
         'portal_url': portalUrl,
+        'apply_url': applyUrl,
         'category': category,
         'total_seats': totalSeats,
         'ur_seats': urSeats,
@@ -245,6 +257,7 @@ class TrackedApplication {
         examAt: _dt(r['exam_timestamp']),
         admitCardUrl: r['admit_card_url'] as String?,
         portalUrl: r['portal_url'] as String?,
+        applyUrl: r['apply_url'] as String?,
         category: r['category'] as String?,
         totalSeats: r['total_seats'] as int?,
         urSeats: r['ur_seats'] as int?,
@@ -278,6 +291,7 @@ class TrackedApplication {
         examAt: examAt ?? this.examAt,
         admitCardUrl: admitCardUrl ?? this.admitCardUrl,
         portalUrl: portalUrl,
+        applyUrl: applyUrl,
         category: category,
         totalSeats: totalSeats,
         urSeats: urSeats,

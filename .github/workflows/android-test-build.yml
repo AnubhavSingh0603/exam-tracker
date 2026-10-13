@@ -86,7 +86,12 @@ jobs:
           python3 - <<'PY'
           import json, os
           repo = os.environ["GITHUB_REPOSITORY"]
-          config = {"DATA_BASE_URL": f"https://raw.githubusercontent.com/{repo}/data"}
+          owner, name = repo.split("/")
+          config = {
+              "DATA_BASE_URL": f"https://raw.githubusercontent.com/{repo}/data",
+              # GitHub Pages copy of the data branch (some ISPs block raw.githubusercontent.com).
+              "DATA_MIRROR_URL": f"https://{owner.lower()}.github.io/{name}",
+          }
           # Only when set: an empty value would switch off the client ID built into the app.
           if os.environ.get("GOOGLE_SERVER_CLIENT_ID"):
               config["GOOGLE_SERVER_CLIENT_ID"] = os.environ["GOOGLE_SERVER_CLIENT_ID"]

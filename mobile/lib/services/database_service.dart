@@ -26,7 +26,7 @@ class DatabaseService {
   final Database _db;
 
   static const _fileName = 'exam_tracker.db';
-  static const _version = 2;
+  static const _version = 3;
 
   /// [factory]/[path] are injectable so tests can use sqflite_common_ffi in memory.
   static Future<DatabaseService> open({DatabaseFactory? factory, String? path}) async {
@@ -58,6 +58,7 @@ class DatabaseService {
           exam_timestamp     INTEGER,
           admit_card_url     TEXT,
           portal_url         TEXT,
+          apply_url          TEXT,
           category           TEXT,
           total_seats        INTEGER,
           ur_seats           INTEGER,
@@ -102,11 +103,15 @@ class DatabaseService {
   }
 
   /// v2: notification id, cached 5-stage timeline and exam-watcher state.
+  /// v3: the application page ("Apply online" link).
   static Future<void> _onUpgrade(Database db, int from, int to) async {
     if (from < 2) {
       for (final column in ['job_post_id', 'timeline_json', 'server_id', 'server_status', 'updates_json']) {
         await db.execute('ALTER TABLE tracked_applications ADD COLUMN $column TEXT');
       }
+    }
+    if (from < 3) {
+      await db.execute('ALTER TABLE tracked_applications ADD COLUMN apply_url TEXT');
     }
   }
 
@@ -126,6 +131,7 @@ class DatabaseService {
     'exam_timestamp',
     'admit_card_url',
     'portal_url',
+    'apply_url',
     'category',
     'total_seats',
     'ur_seats',

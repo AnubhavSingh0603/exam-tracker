@@ -7,12 +7,14 @@ import 'pills.dart';
 
 /// Unapplied job. Swipe right → Applied (handled by the parent Dismissible).
 class FeedCard extends StatelessWidget {
-  const FeedCard({super.key, required this.item, required this.now, this.category, this.onOpenPortal});
+  const FeedCard({super.key, required this.item, required this.now, this.category, this.onApply});
 
   final FeedItem item;
   final DateTime now;
   final String? category;
-  final VoidCallback? onOpenPortal;
+
+  /// Opens the application form (or the official website when the form isn't known).
+  final VoidCallback? onApply;
 
   @override
   Widget build(BuildContext context) {
@@ -20,7 +22,7 @@ class FeedCard extends StatelessWidget {
     final post = item.bestPost;
     return AppCard(
       accent: context.urgencyColors.of(item.urgency),
-      onTap: onOpenPortal,
+      onTap: onApply,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -58,12 +60,20 @@ class FeedCard extends StatelessWidget {
               const SizedBox(height: 8),
               Text(note, style: text.bodySmall),
             ],
-          const SizedBox(height: 10),
+          const SizedBox(height: 12),
           Row(
             children: [
+              if (onApply != null) ...[
+                FilledButton.tonalIcon(
+                  onPressed: onApply,
+                  icon: const Icon(Icons.open_in_new_rounded, size: 18),
+                  label: const Text('Apply online'),
+                ),
+                const SizedBox(width: 12),
+              ],
               const Icon(Icons.swipe_right_rounded, size: 16, color: AppPalette.textMuted),
               const SizedBox(width: 6),
-              Text('Swipe right once you have applied', style: text.labelSmall),
+              Flexible(child: Text('Swipe right once you have applied', style: text.labelSmall)),
             ],
           ),
         ],

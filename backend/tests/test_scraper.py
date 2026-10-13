@@ -9,6 +9,7 @@ from app.services.scraper_service import (
     classify,
     closed_note,
     closing_date,
+    find_apply_link,
     fingerprint,
     flag_keywords,
     next_check_time,
@@ -224,3 +225,40 @@ def test_closed_jobs_are_spotted_from_the_last_date_beside_the_link():
     assert closed_note(fja.context, today) == "Closed on 21 Oct 2026 before it was read"
     assert closed_note("Last date 22/10/2026", today) is None  # open until the day ends
     assert closed_note(sr.context, today) is None
+
+
+# Shapes copied from live pages (Oct 2026).
+CM_LINKS = """<table><tbody>
+ <tr><td><h5>Apply Online Link</h5></td>
+     <td><h5><a href="https://sso.rajasthan.gov.in/signin?encq=6JkTF7D/fPuyiLpq+ts=">Click Here</a></h5></td></tr>
+ <tr><td><h5>Check Official Notification</h5></td>
+     <td><h5><a href="https://jankalyanfile.rajasthan.gov.in/O_270726.pdf">Click Here</a></h5></td></tr>
+ <tr><td><h5>Check Sarkari Result</h5></td><td><h5><a href="https://sarkariresult.com.cm/">Click Here</a></h5></td></tr>
+</tbody></table>"""
+FJA_LINKS = """<article>
+ <p><strong><a href="https://www.eximbankindia.in/files/Advertisement.pdf">Download Official Notification</a> |
+   <a href="https://ibpsreg.ibps.in/iebsrdaug26/">Apply Online</a></strong></p>
+ <ol><li><a href="iit-bhu-field-worker-recruitment-2026-apply-online-3072979">IIT (BHU) Recruitment 2026 – Apply Online</a></li></ol>
+</article>
+<ul><li>Apply Online: <a href="https://ibpsreg.ibps.in/iebsrdaug26/">Click here</a></li>
+    <li>Official Website: <a href="https://www.eximbankindia.in">Click here</a></li></ul>"""
+
+
+def test_apply_online_link_is_the_registration_page_not_the_portal():
+    assert (
+        find_apply_link(CM_LINKS, "https://sarkariresult.com.cm/rajasthan-safai-karmchari-2026/")
+        == "https://sso.rajasthan.gov.in/signin?encq=6JkTF7D/fPuyiLpq+ts="
+    )
+    fja_page = "https://www.freejobalert.com/articles/exim-bank-recruitment-2026-3066646"
+    assert find_apply_link(FJA_LINKS, fja_page) == "https://ibpsreg.ibps.in/iebsrdaug26/"
+
+    # Several links in one row: each is judged by its own text, not the row's.
+    row = """<table><tr><td>Apply Online</td><td><a href="https://ibps.in/">Official Website</a>
+             <a href="https://ibpsonline.ibps.in/crpcl/">Registration</a> | <a href="https://x.in/login">Login</a></td></tr></table>"""
+    assert find_apply_link(row, "https://www.sarkariresult.com/x/") == "https://ibpsonline.ibps.in/crpcl/"
+
+    # Not live yet, or only an ad: no link (the app falls back to the official website).
+    soon = "<table><tr><td>Apply Online</td><td><a href='#'>Link Activate Soon</a></td></tr></table>"
+    assert find_apply_link(soon, "https://sarkariresult.com.cm/x/") is None
+    ad = "<p><a href='https://mocktests.example.com/'>Free Mock Test – Register Now</a></p>"
+    assert find_apply_link(ad, "https://sarkariresult.com.cm/x/") is None

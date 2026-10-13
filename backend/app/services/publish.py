@@ -82,6 +82,7 @@ def job_json(job: JobPost) -> dict[str, Any]:
         "exam_name": job.exam_name,
         "advertisement_no": job.advertisement_no,
         "portal_url": job.portal_url,
+        "apply_url": job.apply_url,  # the registration page itself, when a job site links it
         "application_start": _iso(job.application_start),
         "application_deadline": _iso(job.application_deadline),
         "exam_date": _iso(job.exam_date),

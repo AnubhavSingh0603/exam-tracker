@@ -150,6 +150,22 @@ void main() {
     expect((await upgraded.getVault('old'))!.rollNumber, 'R-42');
     await upgraded.saveWatcherState('old', status: 'result_declared', updatesJson: '[]');
     expect((await upgraded.getApplication('old'))!.displayStatus, TrackerStatus.resultDeclared);
+
+    // v3: the application page ("Apply online") is stored and read back.
+    expect(old.applicationUrl, isNull);
+    await upgraded.upsertApplication(TrackedApplication(
+      id: 'new',
+      examName: 'IBPS PO',
+      postName: 'PO',
+      status: ApplicationStatus.applied,
+      portalUrl: 'https://ibps.in',
+      applyUrl: 'https://ibpsreg.ibps.in/crpo/',
+      createdAt: DateTime(2026, 10, 1),
+      updatedAt: DateTime(2026, 10, 1),
+    ));
+    final fresh = (await upgraded.getApplication('new'))!;
+    expect((fresh.portalUrl, fresh.applicationUrl), ('https://ibps.in', 'https://ibpsreg.ibps.in/crpo/'));
+    expect((await upgraded.exportApplicationRows()).last['apply_url'], 'https://ibpsreg.ibps.in/crpo/');
     await upgraded.close();
     await dir.delete(recursive: true);
   });

@@ -14,15 +14,25 @@ abstract final class Env {
 
   static bool get canSignIn => googleServerClientId.isNotEmpty;
 
-  /// Where the data pipeline publishes jobs.json / notices.json (the repo's `data`
-  /// branch). No server needed: the phone matches jobs itself.
+  /// Where the data pipeline publishes jobs.json / notices.json: the repo's `data`
+  /// branch. No server needed: the phone matches jobs itself.
   static const _dataBaseUrl = String.fromEnvironment(
     'DATA_BASE_URL',
     defaultValue: 'https://raw.githubusercontent.com/AnubhavSingh0603/exam-tracker/data',
   );
 
-  static String get dataBaseUrl =>
-      _dataBaseUrl.endsWith('/') ? _dataBaseUrl.substring(0, _dataBaseUrl.length - 1) : _dataBaseUrl;
+  /// The same files on GitHub Pages. Some Indian ISPs (Jio, at times) block
+  /// raw.githubusercontent.com, so downloads fall back from one to the other.
+  static const _dataMirrorUrl = String.fromEnvironment(
+    'DATA_MIRROR_URL',
+    defaultValue: 'https://anubhavsingh0603.github.io/exam-tracker',
+  );
+
+  /// Both addresses, mirror first, without trailing slashes or duplicates.
+  static List<String> get dataBaseUrls => {
+        for (final url in [_dataMirrorUrl, _dataBaseUrl])
+          if (url.trim().isNotEmpty) url.trim().replaceFirst(RegExp(r'/+$'), ''),
+      }.toList();
 
   /// Calendar events are written in this zone. The audience is India-only, so
   /// a fixed zone avoids a native timezone-lookup dependency.

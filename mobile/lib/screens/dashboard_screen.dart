@@ -21,6 +21,7 @@ import '../utils/system_actions.dart';
 import '../widgets/add_exam_sheet.dart';
 import '../widgets/application_tracker_sheet.dart';
 import '../widgets/hero_card.dart';
+import '../widgets/samsung_sleep_tip.dart';
 import '../widgets/tracked_application_card.dart';
 import '../widgets/welcome_sheet.dart';
 import 'feed_screen.dart';
@@ -321,6 +322,7 @@ class _AccountGateState extends ConsumerState<_AccountGate> {
     _startupDone = true;
     if (ref.read(accountStatusProvider) == AccountStatus.needsProfile) _promptProfile();
     await _askNotificationsOnce();
+    await _samsungTipOnce();
     unawaited(NotificationService.openLaunchLink()); // a notification tap opened the app
     unawaited(ref.read(trackedAppsProvider.notifier).checkForUpdates()); // throttled
     unawaited(ref.read(backupControllerProvider.notifier).syncIfDue());
@@ -397,21 +399,47 @@ class _AccountGateState extends ConsumerState<_AccountGate> {
     }
   }
 
+  /// Once, as soon as there is an exam to watch: Samsung's app sleeping would
+  /// otherwise pause the checks after a few days without opening the app.
+  Future<void> _samsungTipOnce() async {
+    const key = 'tip.samsungSleepShown';
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      if (prefs.getBool(key) ?? false) return;
+      final tracked = await ref.read(trackedAppsProvider.future);
+      if (tracked.isEmpty || !await isSamsungPhone() || !mounted) return;
+      await prefs.setBool(key, true);
+      if (mounted) await showSamsungSleepTip(context);
+    } catch (_) {
+      // A tip, not a requirement.
+    }
+  }
+
   @override
   Widget build(BuildContext context) => widget.child;
 }
 
 /// The exam watcher runs every ~4 h in the background; battery optimisation
 /// (aggressive on Samsung/Xiaomi) can postpone it for many hours. One system
-/// dialog turns that off for this app only.
+/// dialog turns that off for this app only; Samsung also needs its sleep list.
 Future<void> _allowBackgroundChecks(BuildContext context) async {
+  final samsung = await isSamsungPhone();
   try {
     if (await Permission.ignoreBatteryOptimizations.isGranted) {
-      if (context.mounted) showCalmSnack(context, 'Background checks are already allowed.');
+      if (!context.mounted) return;
+      if (samsung) {
+        await showSamsungSleepTip(context);
+      } else {
+        showCalmSnack(context, 'Background checks are already allowed.');
+      }
       return;
     }
     final status = await Permission.ignoreBatteryOptimizations.request();
     if (!context.mounted) return;
+    if (samsung) {
+      await showSamsungSleepTip(context);
+      return;
+    }
     showCalmSnack(
       context,
       status.isGranted

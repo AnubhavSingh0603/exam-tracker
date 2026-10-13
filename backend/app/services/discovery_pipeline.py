@@ -22,14 +22,21 @@ from app.core.config import Settings, get_settings
 from app.domain.enums import ItemKind, ItemStatus
 from app.models import DiscoveredItem, Source
 from app.services.http_fetcher import Fetcher, FetchError, RetryableFetchError
-from app.services.ingestion import find_by_pdf, pdf_sha256, save_notification
+from app.services.ingestion import find_by_pdf, pdf_sha256, remember_apply_url, save_notification
 from app.services.pdf_parser import (
     ExtractionError,
     GeminiQuotaExhausted,
     GeminiUnavailable,
     extract_notifications,
 )
-from app.services.scraper_service import DETAIL_PARSERS, SourceCrawler, classify, closed_note, local_today
+from app.services.scraper_service import (
+    DETAIL_PARSERS,
+    SourceCrawler,
+    classify,
+    closed_note,
+    find_apply_link,
+    local_today,
+)
 
 log = logging.getLogger(__name__)
 
@@ -115,6 +122,7 @@ async def follow_detail_pages(
             await session.commit()
             continue
 
+        apply_url = find_apply_link(res.body, res.url)  # travels with the PDF to its job
         rows = []
         for link in parse(res.body, res.url):
             kind, flags = classify(link)
@@ -131,6 +139,7 @@ async def follow_detail_pages(
                     "status": ItemStatus.PENDING if kind is ItemKind.NOTIFICATION_PDF else ItemStatus.DONE,
                     "keywords": flags,
                     "published_at": item.published_at,
+                    "apply_url": apply_url,
                 }
             )
         if rows:
@@ -172,9 +181,9 @@ async def ingest_pending_pdfs(
         )
     )
     done = 0
-    to_read: list[tuple[uuid.UUID, str, str, bytes]] = []  # item id, url, sha256, pdf
+    to_read: list[tuple[uuid.UUID, str, str | None, str, bytes]] = []  # id, url, apply url, sha256, pdf
     for item in items:
-        item_id, url = item.id, item.url
+        item_id, url, apply_url = item.id, item.url, item.apply_url
         item.attempts += 1
         await session.commit()
         try:
@@ -190,17 +199,18 @@ async def ingest_pending_pdfs(
             continue
         sha256 = pdf_sha256(res.body)
         if known := await find_by_pdf(session, sha256):  # read before, e.g. via another source
+            await remember_apply_url(session, known, apply_url)
             await _finish(session, item_id, ItemStatus.DONE, job_post_id=known.id)
             done += 1
             log.info("Ingested %s -> %s (duplicate)", url, known.exam_name)
             continue
-        to_read.append((item_id, url, sha256, res.body))
+        to_read.append((item_id, url, apply_url, sha256, res.body))
     if not to_read:
         return done
 
-    pdfs = {sha256: data for _, _, sha256, data in to_read}  # the same PDF twice is read once
+    pdfs = {sha256: data for *_, sha256, data in to_read}  # the same PDF twice is read once
     outcomes = dict(zip(pdfs, await extract_notifications(list(pdfs.values())), strict=True))
-    for item_id, url, sha256, data in to_read:
+    for item_id, url, apply_url, sha256, data in to_read:
         outcome = outcomes[sha256]
         if isinstance(outcome, GeminiQuotaExhausted | GeminiUnavailable):
             item = await session.get(DiscoveredItem, item_id)
@@ -214,7 +224,7 @@ async def ingest_pending_pdfs(
         if isinstance(outcome, ExtractionError):
             await _finish(session, item_id, ItemStatus.FAILED, error=f"Extraction: {outcome}")
             continue
-        job, created = await save_notification(session, data, outcome)
+        job, created = await save_notification(session, data, outcome, apply_url=apply_url)
         await _finish(session, item_id, ItemStatus.DONE, job_post_id=job.id)
         done += 1
         log.info("Ingested %s -> %s (%s)", url, job.exam_name, "new" if created else "duplicate")

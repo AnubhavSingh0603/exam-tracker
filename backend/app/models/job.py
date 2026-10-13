@@ -28,6 +28,9 @@ class JobPost(UUIDPkMixin, TimestampMixin, Base):
     exam_name: Mapped[str] = mapped_column(String(300))
     advertisement_no: Mapped[str | None] = mapped_column(String(120))
     portal_url: Mapped[str | None] = mapped_column(String(1000))
+    # The registration / application page itself (from the job site's "Apply Online"
+    # link); portal_url is the website the exam watcher checks for notices.
+    apply_url: Mapped[str | None] = mapped_column(String(1000))
     application_start: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     application_deadline: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), index=True)
     exam_date: Mapped[date | None]

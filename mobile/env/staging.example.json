@@ -2,5 +2,6 @@
   "_comment": "All optional: leave a key out to use the default built into the app.",
   "GOOGLE_SERVER_CLIENT_ID": "1234567890-web.apps.googleusercontent.com",
   "DATA_BASE_URL": "https://raw.githubusercontent.com/OWNER/REPO/data",
+  "DATA_MIRROR_URL": "https://owner.github.io/REPO",
   "TIME_ZONE": "Asia/Kolkata"
 }

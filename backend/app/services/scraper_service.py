@@ -310,6 +310,42 @@ def parse_free_job_alert_detail(html: bytes | str, base_url: str) -> list[Link]:
     return out
 
 
+_APPLY_LABEL = re.compile(r"\bapply\s+online\b|\bonline\s+(?:application|apply)\b", re.IGNORECASE)
+_REGISTER_LABEL = re.compile(r"\bregistration\b|\bregister\b", re.IGNORECASE)
+_AGGREGATOR_DOMAINS = (*SARKARI_RESULT_DOMAINS, "freejobalert.com")
+
+
+def find_apply_link(html: bytes | str, base_url: str) -> str | None:
+    """The official application page a job site links to: SarkariResult's "Apply Online
+    Link | Click Here" row, FreeJobAlert's "Apply Online: Click here", or the
+    "Registration" link of an "Apply Online | Registration | Login" row. None until the
+    link is live ("Link Activate Soon"). Kept as written: some portals route by #fragment."""
+    registration: str | None = None
+    for a in _soup(html).find_all("a", href=True):
+        url = urljoin(base_url, str(a["href"]).strip())
+        parts = urlsplit(url)
+        if (
+            parts.scheme not in ("http", "https")
+            or (parts.hostname or "").endswith(_AGGREGATOR_DOMAINS)
+            or _looks_like_pdf_url(url)
+        ):
+            continue
+        # A one-link row is labelled by the row ("Apply Online Link | Click Here");
+        # in a row of several links ("Registration | Login") each speaks for itself.
+        row = a.find_parent(["tr", "li", "p"])
+        row_text = clean_text(row.get_text(" ", strip=True), 200) if row is not None else ""
+        single = row is not None and len(row.find_all("a", href=True)) == 1
+        label = row_text if single else clean_text(a.get_text(" ", strip=True), 200)
+        if len(label) > 120:
+            continue  # a paragraph or a list of other jobs, not a link row
+        if _APPLY_LABEL.search(label):
+            return url[:2000]
+        # A bare "Register now" is often an ad (mock tests): only inside an apply row.
+        if registration is None and _REGISTER_LABEL.search(label) and _APPLY_LABEL.search(row_text):
+            registration = url[:2000]
+    return registration
+
+
 SSC_API_BASE = "https://ssc.gov.in/api/attachment/"
 
 

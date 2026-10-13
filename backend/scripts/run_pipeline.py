@@ -23,7 +23,7 @@ from pathlib import Path
 BACKEND = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(BACKEND))
 
-from sqlalchemy import delete, func, or_, select, update  # noqa: E402
+from sqlalchemy import delete, func, or_, select, text, update  # noqa: E402
 
 import app.models  # noqa: E402,F401  (registers tables)
 from app.core.config import get_settings  # noqa: E402
@@ -47,6 +47,13 @@ log = logging.getLogger("pipeline")
 # Kept long enough that a link seen once is never "new" again on its source.
 KEEP_ITEMS = timedelta(days=365)
 KEEP_JOBS = timedelta(days=400)
+
+# Columns added after the saved state was first created: create_all() makes new
+# tables but never alters existing ones, and a fresh start would forget every link.
+ADDED_COLUMNS = (
+    "ALTER TABLE discovered_items ADD COLUMN IF NOT EXISTS apply_url VARCHAR(2000)",
+    "ALTER TABLE job_posts ADD COLUMN IF NOT EXISTS apply_url VARCHAR(1000)",
+)
 
 
 def gemini_configured() -> bool:
@@ -113,6 +120,8 @@ async def run(out: Path, ingest_rounds: int) -> dict[str, object]:
     started = datetime.now(UTC)
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+        for ddl in ADDED_COLUMNS:
+            await conn.execute(text(ddl))
     async with SessionLocal() as session:
         await ensure_seed_sources(session)
 

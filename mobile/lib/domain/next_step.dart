@@ -26,10 +26,12 @@ class NextStep {
   final TrackedApplication? application; // set for tracked-app steps
   final FeedItem? feedItem; // set for "apply" steps
 
+  /// Not applied yet: the application form. Applied: the same site's login, where
+  /// fees, corrections and admit cards live.
   String get actionLabel => switch (kind) {
-        NextStepKind.apply => 'Open portal',
+        NextStepKind.apply => 'Apply online',
         NextStepKind.downloadAdmitCard => 'Download admit card',
-        NextStepKind.attendExam || NextStepKind.prepareForExam => 'Open portal',
+        NextStepKind.attendExam || NextStepKind.prepareForExam => 'Application login',
       };
 }
 
@@ -69,7 +71,7 @@ NextStep? computeNextStep({
       title: 'Apply for ${item.bestPost.postName} — ${item.organization}',
       due: item.deadline,
       urgency: urgencyFor(item.deadline, now),
-      actionUrl: item.portalUrl,
+      actionUrl: item.applicationUrl,
       feedItem: item,
     ));
   }

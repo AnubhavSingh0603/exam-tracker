@@ -3,9 +3,9 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
-import '../config/env.dart';
 import '../domain/exam_watcher.dart';
 import '../models/tracked_application.dart';
+import 'data_source.dart';
 import 'database_service.dart';
 import 'page_links.dart';
 
@@ -114,7 +114,7 @@ class ExamWatchService {
 
   Future<List<PageLink>> _notices() async {
     try {
-      final res = await _client.get(Uri.parse('${Env.dataBaseUrl}/notices.json')).timeout(_timeout);
+      final res = (await DataSource(_client).get('notices.json')).response;
       if (res.statusCode != 200) return const [];
       final data = jsonDecode(utf8.decode(res.bodyBytes)) as Map<String, dynamic>;
       return [

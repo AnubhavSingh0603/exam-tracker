@@ -54,5 +54,7 @@ class DiscoveredItem(UUIDPkMixin, TimestampMixin, Base):
     attempts: Mapped[int] = mapped_column(Integer, default=0)
     error: Mapped[str | None] = mapped_column(Text)
     job_post_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("job_posts.id", ondelete="SET NULL"))
+    # "Apply Online" link from the job page this PDF was found on; copied to the job.
+    apply_url: Mapped[str | None] = mapped_column(String(2000))
 
     source: Mapped[Source] = relationship(back_populates="items")

@@ -87,8 +87,11 @@ jobs:
           python3 - <<'PY'
           import json, os
           repo = os.environ["GITHUB_REPOSITORY"]
+          owner, name = repo.split("/")
           config = {
               "DATA_BASE_URL": f"https://raw.githubusercontent.com/{repo}/data",
+              # GitHub Pages copy of the data branch (some ISPs block raw.githubusercontent.com).
+              "DATA_MIRROR_URL": f"https://{owner.lower()}.github.io/{name}",
               "RELEASE_MANIFEST_URL": f"https://github.com/{repo}/releases/latest/download/latest.json",
               "RELEASES_PAGE_URL": f"https://github.com/{repo}/releases/latest",
           }

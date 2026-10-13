@@ -3,8 +3,8 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
-import '../config/env.dart';
 import '../models/jobs_data.dart';
+import 'data_source.dart';
 import 'database_service.dart';
 
 /// Result of a load: the jobs and whether they came from the offline cache.
@@ -16,19 +16,20 @@ class JobsLoad {
   final bool fromCache;
 }
 
-/// Downloads jobs.json from the data branch, keeping the last good copy in
-/// SQLite for offline start-up. Uses the ETag so an unchanged file costs a
-/// few bytes, not the whole download.
+/// Downloads jobs.json (from whichever of its two addresses answers), keeping the
+/// last good copy in SQLite for offline start-up. Uses the ETag so an unchanged
+/// file costs a few bytes, not the whole download.
 class JobsRepository {
-  JobsRepository(this._db, {http.Client? client}) : _client = client ?? http.Client();
+  JobsRepository(this._db, {http.Client? client, List<String>? bases})
+      : _client = client ?? http.Client(),
+        _bases = bases;
 
   final DatabaseService _db;
   final http.Client _client;
+  final List<String>? _bases;
 
+  /// Saved as `address\netag`: an ETag only means something to the server that sent it.
   static const _etagKey = 'jobs.etag';
-  static const _timeout = Duration(seconds: 20);
-
-  Uri get _url => Uri.parse('${Env.dataBaseUrl}/jobs.json');
 
   Future<JobsLoad?> cached() async {
     final cached = await _db.readFeedCache();
@@ -49,22 +50,35 @@ class JobsRepository {
     final cache = await cached();
     try {
       final prefs = await SharedPreferences.getInstance();
-      final etag = cache == null ? null : prefs.getString(_etagKey);
-      final res = await _client.get(_url,
-          headers: {'Accept': 'application/json', if (etag != null) 'If-None-Match': etag}).timeout(_timeout);
+      final saved = cache == null ? null : prefs.getString(_etagKey)?.split('\n');
+      final got = await DataSource(_client, bases: _bases).get('jobs.json',
+          headers: (base) => {
+                'Accept': 'application/json',
+                if (saved != null && saved.length == 2 && saved[0] == base) 'If-None-Match': saved[1],
+              });
+      final res = got.response;
       final now = DateTime.now();
       if (res.statusCode == 304 && cache != null) {
         await _db.touchFeedCache(now);
         return JobsLoad(cache.file, fetchedAt: now, fromCache: false);
       }
       if (res.statusCode != 200) {
-        throw http.ClientException('jobs.json: HTTP ${res.statusCode}', _url);
+        throw http.ClientException('jobs.json: HTTP ${res.statusCode}', Uri.parse(got.base));
       }
       final body = utf8.decode(res.bodyBytes);
       final file = JobsFile.fromJson(jsonDecode(body) as Map<String, dynamic>); // validate before caching
+      // Right after a pipeline run one address can lag the other: never step back.
+      if (cache != null && file.generatedAt.isBefore(cache.file.generatedAt)) {
+        await _db.touchFeedCache(now);
+        return JobsLoad(cache.file, fetchedAt: now, fromCache: false);
+      }
       await _db.cacheFeed(body, now);
-      final newEtag = res.headers['etag'];
-      if (newEtag != null) await prefs.setString(_etagKey, newEtag);
+      final etag = res.headers['etag'];
+      if (etag != null) {
+        await prefs.setString(_etagKey, '${got.base}\n$etag');
+      } else {
+        await prefs.remove(_etagKey);
+      }
       return JobsLoad(file, fetchedAt: now, fromCache: false);
     } catch (_) {
       if (cache != null) return cache;

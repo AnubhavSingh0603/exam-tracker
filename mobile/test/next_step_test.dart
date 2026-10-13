@@ -83,4 +83,40 @@ void main() {
     )!;
     expect(step.kind, NextStepKind.downloadAdmitCard);
   });
+
+  test('"Apply online" opens the application form, else the official website', () {
+    final job = feed('f', now.add(const Duration(days: 5)));
+    FeedItem withLinks({String? portal, String? apply}) => FeedItem(
+          jobPostId: job.jobPostId,
+          organization: job.organization,
+          examName: job.examName,
+          deadline: job.deadline,
+          urgency: job.urgency,
+          nextStep: job.nextStep,
+          bestPost: job.bestPost,
+          portalUrl: portal,
+          applyUrl: apply,
+        );
+    NextStep stepFor(FeedItem item) => computeNextStep(tracked: const [], feed: [item], now: now)!;
+
+    final both = stepFor(withLinks(portal: 'https://ibps.in', apply: 'https://ibpsreg.ibps.in/crpo/'));
+    expect((both.actionLabel, both.actionUrl), ('Apply online', 'https://ibpsreg.ibps.in/crpo/'));
+    expect(stepFor(withLinks(portal: 'https://ibps.in', apply: '  ')).actionUrl, 'https://ibps.in');
+    expect(stepFor(withLinks()).actionUrl, isNull);
+
+    // Already applied: the same site's login, not "Apply online" again.
+    final applied = TrackedApplication(
+      id: 't',
+      examName: 'IBPS PO',
+      postName: 'PO',
+      status: ApplicationStatus.applied,
+      examAt: now.add(const Duration(days: 3)),
+      portalUrl: 'https://ibps.in',
+      applyUrl: 'https://ibpsreg.ibps.in/crpo/',
+      createdAt: now,
+      updatedAt: now,
+    );
+    final prepare = computeNextStep(tracked: [applied], feed: const [], now: now)!;
+    expect((prepare.actionLabel, prepare.actionUrl), ('Application login', 'https://ibpsreg.ibps.in/crpo/'));
+  });
 }

@@ -84,6 +84,7 @@ class TrackedAppsNotifier extends AsyncNotifier<List<TrackedApplication>> {
       status: ApplicationStatus.applied,
       deadline: item.deadline,
       portalUrl: item.portalUrl,
+      applyUrl: item.applyUrl,
       category: category,
       totalSeats: post.totalReachableSeats,
       urSeats: post.urOpenSeats,
@@ -135,7 +136,9 @@ class TrackedAppsNotifier extends AsyncNotifier<List<TrackedApplication>> {
     }
   }
 
-  /// Undo for swipe-right: forget it entirely so it returns to the feed.
+  /// Delete, and the Undo for swipe-right: forget the exam entirely, with its
+  /// calendar events, saved IDs and password, here and in the backup. A job
+  /// that is still open returns to the feed.
   Future<void> untrack(String id) async {
     try {
       await ref.read(calendarSyncProvider).removeFromCalendar(id);

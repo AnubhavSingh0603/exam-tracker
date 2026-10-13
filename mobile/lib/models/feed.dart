@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 
 import '../domain/urgency.dart';
+import 'links.dart';
 
 /// Backend `MatchKind`: direct matches fill the main feed, suggestions their own tab.
 enum MatchKind {
@@ -75,6 +76,7 @@ class FeedItem {
     required this.nextStep,
     required this.bestPost,
     this.portalUrl,
+    this.applyUrl,
     this.matchKind = MatchKind.direct,
     this.timelineJson,
   });
@@ -83,6 +85,12 @@ class FeedItem {
   final String organization;
   final String examName;
   final String? portalUrl;
+
+  /// The registration / application page itself, when a job site links it.
+  final String? applyUrl;
+
+  /// Where "Apply online" goes: the application page, else the official website.
+  String? get applicationUrl => preferredUrl(applyUrl, portalUrl);
   final DateTime deadline;
   final Urgency urgency;
   final String nextStep;
@@ -97,6 +105,7 @@ class FeedItem {
         organization: j['organization'] as String,
         examName: j['exam_name'] as String,
         portalUrl: j['portal_url'] as String?,
+        applyUrl: j['apply_url'] as String?,
         deadline: DateTime.parse(j['application_deadline'] as String),
         urgency: urgencyFromWire(j['urgency'] as String?),
         nextStep: j['next_step'] as String? ?? '',

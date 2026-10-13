@@ -188,7 +188,7 @@ class CalendarSyncService {
     final lines = <String>[
       app.postName,
       if (app.organization != null) app.organization!,
-      if (app.actionUrl != null) '\nPortal: ${app.actionUrl}',
+      if (app.actionUrl != null) '\nApply / log in: ${app.actionUrl}',
       '\nAdded by Exam Tracker',
     ];
     return lines.join('\n');

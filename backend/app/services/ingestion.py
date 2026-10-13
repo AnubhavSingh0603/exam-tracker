@@ -41,12 +41,15 @@ def _write_atomic(path: Path, data: bytes) -> None:
     tmp.replace(path)
 
 
-def _to_orm(parsed: ParsedNotification, *, sha256: str, pdf_path: str, model: str) -> JobPost:
+def _to_orm(
+    parsed: ParsedNotification, *, sha256: str, pdf_path: str, model: str, apply_url: str | None = None
+) -> JobPost:
     return JobPost(
         organization=parsed.organization,
         exam_name=parsed.exam_name,
         advertisement_no=parsed.advertisement_no,
         portal_url=parsed.portal_url,
+        apply_url=apply_url[:1000] if apply_url else None,
         application_start=parsed.application_start,
         application_deadline=parsed.application_deadline,
         exam_date=parsed.exam_date,
@@ -87,6 +90,13 @@ async def find_by_pdf(session: AsyncSession, sha256: str) -> JobPost | None:
     return await load_job(session, JobPost.source_pdf_sha256 == sha256)
 
 
+async def remember_apply_url(session: AsyncSession, job: JobPost, apply_url: str | None) -> None:
+    """A job site's "Apply Online" link for a job that has none yet."""
+    if apply_url and not job.apply_url:
+        job.apply_url = apply_url[:1000]
+        await session.commit()
+
+
 async def ingest_notification(
     session: AsyncSession,
     data: bytes,
@@ -104,20 +114,21 @@ async def ingest_notification(
 
 
 async def save_notification(
-    session: AsyncSession, data: bytes, parsed: ParsedNotification
+    session: AsyncSession, data: bytes, parsed: ParsedNotification, *, apply_url: str | None = None
 ) -> tuple[JobPost, bool]:
     """Stores an extracted notification with its PDF. Returns ``(job, created)``;
     a PDF that is already stored returns the existing job."""
     settings = get_settings()
     sha256 = pdf_sha256(data)
     if existing := await find_by_pdf(session, sha256):
+        await remember_apply_url(session, existing, apply_url)
         return existing, False
 
     pdf_path = settings.upload_dir / f"{sha256}.pdf"
     await asyncio.to_thread(_write_atomic, pdf_path, data)
 
     model = parsed.extraction_model or settings.gemini_model
-    job = _to_orm(parsed, sha256=sha256, pdf_path=str(pdf_path), model=model)
+    job = _to_orm(parsed, sha256=sha256, pdf_path=str(pdf_path), model=model, apply_url=apply_url)
     session.add(job)
     try:
         await session.commit()

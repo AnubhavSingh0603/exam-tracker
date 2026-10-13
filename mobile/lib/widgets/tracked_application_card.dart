@@ -19,7 +19,7 @@ enum _SyncState { idle, syncing, done }
 
 enum _Panel { none, timeline, credentials }
 
-enum _MenuAction { admitCardLive, examScheduled, backToApplied }
+enum _MenuAction { admitCardLive, examScheduled, backToApplied, delete }
 
 class TrackedApplicationCard extends ConsumerStatefulWidget {
   const TrackedApplicationCard({super.key, required this.app, required this.now});
@@ -87,8 +87,36 @@ class _TrackedApplicationCardState extends ConsumerState<TrackedApplicationCard>
         if (app.calendarSynced && mounted) await _syncAfterReload();
       case _MenuAction.backToApplied:
         await notifier.setStatus(app.id, ApplicationStatus.applied);
+      case _MenuAction.delete:
+        if (!await _confirmDelete()) return;
+        final name = app.postName;
+        await notifier.untrack(app.id);
+        if (mounted) showCalmSnack(context, 'Deleted $name');
     }
   }
+
+  Future<bool> _confirmDelete() async =>
+      await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          backgroundColor: AppPalette.surface,
+          title: const Text('Delete this exam?'),
+          content: Text('${app.postName} goes from this phone and your backup, with its calendar '
+              'reminders, saved IDs and password. Swipe left instead to just archive it.'),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
+            FilledButton(
+              style: FilledButton.styleFrom(
+                backgroundColor: Theme.of(context).colorScheme.error,
+                foregroundColor: Theme.of(context).colorScheme.onError,
+              ),
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('Delete'),
+            ),
+          ],
+        ),
+      ) ??
+      false;
 
   Future<void> _syncAfterReload() async {
     final fresh = await ref.read(databaseProvider).getApplication(app.id);
@@ -151,7 +179,7 @@ class _TrackedApplicationCardState extends ConsumerState<TrackedApplicationCard>
                 child: CountdownPill(due: focus, now: widget.now),
               ),
               PopupMenuButton<_MenuAction>(
-                tooltip: 'Update status',
+                tooltip: 'Update status or delete',
                 onSelected: _onMenu,
                 itemBuilder: (_) => [
                   if (app.status != ApplicationStatus.admitCardLive)
@@ -159,6 +187,17 @@ class _TrackedApplicationCardState extends ConsumerState<TrackedApplicationCard>
                   const PopupMenuItem(value: _MenuAction.examScheduled, child: Text('Set exam date')),
                   if (app.status != ApplicationStatus.applied)
                     const PopupMenuItem(value: _MenuAction.backToApplied, child: Text('Back to “Applied”')),
+                  const PopupMenuDivider(),
+                  PopupMenuItem(
+                    value: _MenuAction.delete,
+                    child: Row(
+                      children: [
+                        Icon(Icons.delete_outline_rounded, size: 20, color: Theme.of(context).colorScheme.error),
+                        const SizedBox(width: 8),
+                        Text('Delete', style: TextStyle(color: Theme.of(context).colorScheme.error)),
+                      ],
+                    ),
+                  ),
                 ],
               ),
             ],
@@ -262,7 +301,7 @@ class _MilestoneBadge extends StatelessWidget {
     final (String? actionLabel, String? actionUrl) = switch (status) {
       TrackerStatus.admitCardLive => (
           'Download admit card',
-          app.latestUpdate('admit_card')?.url ?? t?.admitCardUrl ?? app.admitCardUrl ?? app.portalUrl,
+          app.latestUpdate('admit_card')?.url ?? t?.admitCardUrl ?? app.admitCardUrl ?? app.applicationUrl,
         ),
       TrackerStatus.answerKeyLive => (
           'View answer key',

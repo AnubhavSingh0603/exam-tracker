@@ -93,7 +93,7 @@ List<StageView> computeLifecycle(TrackedApplication app, ExamTimeline? t, DateTi
         if (t?.editWindowStart != null && t?.editWindowEnd != null && !_passed(t!.editWindowEnd, now))
           'Correction window ${_d(t.editWindowStart!)} – ${_d(t.editWindowEnd!)}',
       ],
-      actions: [if (app.portalUrl != null) StageAction('Open portal', app.portalUrl!)],
+      actions: [if (app.applicationUrl != null) StageAction('Application login', app.applicationUrl!)],
     ),
     StageView(
       stage: LifecycleStage.admitCard,

@@ -53,6 +53,8 @@ def test_job_json_is_plain_json_with_timeline():
         application_deadline=datetime(2026, 10, 1, 18, tzinfo=UTC),
         exam_date=date(2026, 12, 14),
         needs_review=False,
+        portal_url="https://ssc.gov.in",
+        apply_url="https://ssc.gov.in/login#/register",
     )
     job.timeline = None
     post = _post(eligible_streams=["Any graduate"], age_as_on=date(2026, 8, 1), base_max_age=27)
@@ -61,6 +63,10 @@ def test_job_json_is_plain_json_with_timeline():
 
     data = json.loads(json.dumps(job_json(job)))  # must survive a JSON round trip
     assert data["application_deadline"] == "2026-10-01T18:00:00+00:00"
+    assert (data["portal_url"], data["apply_url"]) == (
+        "https://ssc.gov.in",
+        "https://ssc.gov.in/login#/register",
+    )
     assert data["timeline"]["exam_start"] == "2026-12-14"
     p = data["posts"][0]
     assert p["is_open_to_any_graduate"] and p["min_qualification_level"] == "UG"

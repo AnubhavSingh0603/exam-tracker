@@ -129,6 +129,7 @@ class PublishedJob {
     required this.posts,
     this.advertisementNo,
     this.portalUrl,
+    this.applyUrl,
     this.applicationStart,
     this.applicationDeadline,
     this.examDate,
@@ -139,7 +140,12 @@ class PublishedJob {
   final String organization;
   final String examName;
   final String? advertisementNo;
+
+  /// The organisation's website (the exam watcher checks it for notices).
   final String? portalUrl;
+
+  /// The registration / application page itself, when a job site links it.
+  final String? applyUrl;
   final DateTime? applicationStart;
   final DateTime? applicationDeadline;
   final DateTime? examDate;
@@ -154,6 +160,7 @@ class PublishedJob {
         examName: j['exam_name'] as String? ?? '',
         advertisementNo: j['advertisement_no'] as String?,
         portalUrl: j['portal_url'] as String?,
+        applyUrl: j['apply_url'] as String?,
         applicationStart: _dateTime(j['application_start']),
         applicationDeadline: _dateTime(j['application_deadline']),
         examDate: _date(j['exam_date']),

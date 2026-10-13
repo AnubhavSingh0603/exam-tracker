@@ -35,6 +35,7 @@ FeedItem _feedItem(PublishedJob job, List<FeedPost> posts, MatchKind kind) {
     organization: job.organization,
     examName: job.examName,
     portalUrl: job.portalUrl,
+    applyUrl: job.applyUrl,
     deadline: deadline,
     urgency: urgencyFor(deadline, DateTime.now()),
     nextStep: '$verb ${best.postName} (${job.organization}) — closes ${formatDue(deadline)}',
