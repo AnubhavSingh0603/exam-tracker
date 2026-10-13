@@ -10,7 +10,10 @@ import '../providers/account_providers.dart';
 import '../providers/backup_providers.dart';
 import '../providers/jobs_providers.dart';
 import '../providers/providers.dart';
+import '../providers/ui_providers.dart';
 import '../services/auth_service.dart';
+import '../services/calendar_sync_service.dart';
+import '../services/deadline_reminders.dart';
 import '../theme/app_theme.dart';
 import '../utils/system_actions.dart';
 import '../widgets/common.dart';
@@ -22,6 +25,7 @@ enum SettingsTab {
   account('Account'),
   profile('Profile'),
   jobs('Jobs'),
+  look('Look'),
   alerts('Alerts'),
   about('About');
 
@@ -57,7 +61,7 @@ class SettingsScreen extends StatelessWidget {
             ),
           ),
           body: const TabBarView(
-            children: [_AccountTab(), _ProfileTab(), _JobsTab(), _AlertsTab(), _AboutTab()],
+            children: [_AccountTab(), _ProfileTab(), _JobsTab(), _LookTab(), _AlertsTab(), _AboutTab()],
           ),
         ),
       );
@@ -435,6 +439,40 @@ class _JobsTab extends ConsumerWidget {
 }
 
 // -----------------------------------------------------------------------------
+// Look
+// -----------------------------------------------------------------------------
+
+class _LookTab extends ConsumerWidget {
+  const _LookTab();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final mode = ref.watch(themeModeProvider);
+    return ListView(
+      padding: const EdgeInsets.all(16),
+      children: [
+        _Section(
+          title: 'Appearance',
+          note: 'Light, dark, or follow your phone’s setting.',
+          children: [
+            SegmentedButton<ThemeMode>(
+              showSelectedIcon: false,
+              segments: const [
+                ButtonSegment(value: ThemeMode.system, icon: Icon(Icons.brightness_auto_rounded), label: Text('Phone')),
+                ButtonSegment(value: ThemeMode.light, icon: Icon(Icons.light_mode_rounded), label: Text('Light')),
+                ButtonSegment(value: ThemeMode.dark, icon: Icon(Icons.dark_mode_rounded), label: Text('Dark')),
+              ],
+              selected: {mode},
+              onSelectionChanged: (s) => ref.read(themeModeProvider.notifier).set(s.first),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+}
+
+// -----------------------------------------------------------------------------
 // Alerts
 // -----------------------------------------------------------------------------
 
@@ -445,6 +483,12 @@ class _AlertsTab extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) => ListView(
         padding: const EdgeInsets.all(16),
         children: [
+          const _Section(
+            title: 'Last-day reminders',
+            note: 'When a job that fits you closes within 24 hours: a notification every few hours and '
+                'a calendar event with a reminder every 4 hours. Applying, or swiping it left, removes them.',
+            children: [_LastDaySwitch()],
+          ),
           _Section(
             title: 'Exam updates',
             note: 'Every few hours the app checks job sites and exam websites for admit cards, exam dates, '
@@ -550,4 +594,43 @@ class _AboutTab extends ConsumerWidget {
       ],
     );
   }
+}
+
+class _LastDaySwitch extends ConsumerStatefulWidget {
+  const _LastDaySwitch();
+
+  @override
+  ConsumerState<_LastDaySwitch> createState() => _LastDaySwitchState();
+}
+
+class _LastDaySwitchState extends ConsumerState<_LastDaySwitch> {
+  bool? _on;
+
+  @override
+  void initState() {
+    super.initState();
+    LastDayAlerts.enabled().then((v) {
+      if (mounted) setState(() => _on = v);
+    });
+  }
+
+  Future<void> _set(bool on) async {
+    setState(() => _on = on);
+    await LastDayAlerts.setEnabled(on);
+    final db = ref.read(databaseProvider);
+    if (on) await CalendarSyncService(db).ensurePermission(); // asks once; notifications work without it
+    final jobs = [for (final r in ref.read(rankedJobsProvider)) r.item];
+    await DeadlineReminders(db).sync(jobs, now: DateTime.now(), enabled: on);
+    if (mounted) {
+      showCalmSnack(context, on ? 'Last-day reminders are on.' : 'Last-day reminders are off, and removed.');
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) => SwitchListTile(
+        contentPadding: EdgeInsets.zero,
+        value: _on ?? true,
+        onChanged: _on == null ? null : _set,
+        title: const Text('Remind me before jobs close'),
+      );
 }

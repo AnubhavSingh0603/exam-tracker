@@ -11,7 +11,9 @@ import '../providers/account_providers.dart';
 import '../providers/backup_providers.dart';
 import '../providers/jobs_providers.dart';
 import '../providers/providers.dart';
+import '../domain/relevance.dart';
 import '../services/auth_service.dart';
+import '../services/deadline_reminders.dart';
 import '../services/notification_service.dart';
 import '../theme/app_theme.dart';
 import '../utils/system_actions.dart';
@@ -160,7 +162,28 @@ class _AccountGateState extends ConsumerState<AccountGate> {
         WidgetsBinding.instance.addPostFrameCallback((_) => _askAccountChoice(to));
       }
     });
+    ref.listenManual<List<RankedJob>>(rankedJobsProvider, (_, __) => _syncReminders());
     WidgetsBinding.instance.addPostFrameCallback((_) => _startup());
+  }
+
+  Timer? _reminderDebounce;
+
+  @override
+  void dispose() {
+    _reminderDebounce?.cancel();
+    super.dispose();
+  }
+
+  /// A swipe, a restore or a new job list: update last-day reminders shortly after.
+  void _syncReminders() {
+    _reminderDebounce?.cancel();
+    _reminderDebounce = Timer(const Duration(seconds: 2), () async {
+      if (!mounted || ref.read(feedProvider).dataOrNull == null) return;
+      final jobs = [for (final r in ref.read(rankedJobsProvider)) r.item];
+      try {
+        await DeadlineReminders(ref.read(databaseProvider)).sync(jobs, now: DateTime.now());
+      } catch (_) {}
+    });
   }
 
   Future<void> _startup() async {

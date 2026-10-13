@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:timezone/data/latest.dart' as tzdata;
 
 import 'providers/providers.dart';
+import 'providers/ui_providers.dart';
 import 'screens/home_shell.dart';
 import 'services/auth_service.dart';
 import 'services/background_watch.dart';
@@ -28,32 +29,73 @@ Future<void> main() async {
     // Notifications/background work are extras: the app must still start without them.
   }
 
-  SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
-    statusBarColor: Colors.transparent,
-    statusBarIconBrightness: Brightness.light,
-    systemNavigationBarColor: AppPalette.background,
-    systemNavigationBarIconBrightness: Brightness.light,
-  ));
+  final themeMode = await ThemeModeNotifier.load();
 
   runApp(ProviderScope(
-    overrides: [databaseProvider.overrideWithValue(db)],
+    overrides: [
+      databaseProvider.overrideWithValue(db),
+      themeModeProvider.overrideWith(() => ThemeModeNotifier(themeMode)),
+    ],
     child: const ApplyTrackApp(),
   ));
 }
 
-class ApplyTrackApp extends StatelessWidget {
+class ApplyTrackApp extends ConsumerWidget {
   const ApplyTrackApp({super.key});
 
   @override
+  Widget build(BuildContext context, WidgetRef ref) => MaterialApp(
+        title: 'ApplyTrack',
+        debugShowCheckedModeBanner: false,
+        theme: AppTheme.of(Brightness.light),
+        darkTheme: AppTheme.of(Brightness.dark),
+        themeMode: ref.watch(themeModeProvider),
+        builder: (context, child) => _PaletteScope(brightness: Theme.of(context).brightness, child: child!),
+        home: const UpdateGate(child: HomeShell()),
+      );
+}
+
+/// Points [AppPalette] at the light or dark colours before anything below builds,
+/// and repaints every screen (keeping its state) when that changes.
+class _PaletteScope extends StatefulWidget {
+  const _PaletteScope({required this.brightness, required this.child});
+
+  final Brightness brightness;
+  final Widget child;
+
+  @override
+  State<_PaletteScope> createState() => _PaletteScopeState();
+}
+
+class _PaletteScopeState extends State<_PaletteScope> {
+  Brightness? _applied;
+
+  static void _rebuildAll(Element element) {
+    element.markNeedsBuild();
+    element.visitChildren(_rebuildAll);
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final theme = AppTheme.darkPastel();
-    return MaterialApp(
-      title: 'ApplyTrack',
-      debugShowCheckedModeBanner: false,
-      theme: theme,
-      darkTheme: theme,
-      themeMode: ThemeMode.dark,
-      home: const UpdateGate(child: HomeShell()),
-    );
+    final b = widget.brightness;
+    if (_applied != b) {
+      final first = _applied == null;
+      _applied = b;
+      AppPalette.use(b);
+      final light = b == Brightness.light;
+      SystemChrome.setSystemUIOverlayStyle(SystemUiOverlayStyle(
+        statusBarColor: Colors.transparent,
+        statusBarIconBrightness: light ? Brightness.dark : Brightness.light,
+        systemNavigationBarColor: AppPalette.background,
+        systemNavigationBarIconBrightness: light ? Brightness.dark : Brightness.light,
+      ));
+      if (!first) {
+        // Widgets that read AppPalette directly don't depend on the Theme: mark them all.
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) (context as Element).visitChildren(_rebuildAll);
+        });
+      }
+    }
+    return widget.child;
   }
 }

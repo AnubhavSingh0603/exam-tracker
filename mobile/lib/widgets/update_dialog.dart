@@ -64,7 +64,7 @@ class _UpdateDialogState extends State<_UpdateDialog> {
         backgroundColor: AppPalette.surface,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(AppRadii.card),
-          side: const BorderSide(color: AppPalette.outline),
+          side: BorderSide(color: AppPalette.outline),
         ),
         child: Padding(
           padding: const EdgeInsets.fromLTRB(24, 24, 24, 16),

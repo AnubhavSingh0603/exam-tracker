@@ -432,7 +432,7 @@ class _LatestNotice extends StatelessWidget {
         padding: const EdgeInsets.symmetric(vertical: 4),
         child: Row(
           children: [
-            const Icon(Icons.notifications_active_outlined, size: 16, color: AppPalette.periwinkle),
+            Icon(Icons.notifications_active_outlined, size: 16, color: AppPalette.periwinkle),
             const SizedBox(width: 6),
             Expanded(
               child: Text(

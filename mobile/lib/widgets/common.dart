@@ -103,7 +103,7 @@ class AccountAvatarButton extends ConsumerWidget {
           backgroundColor: AppPalette.surfaceVariant,
           child: user != null
               ? Text(user.initial, style: text.labelLarge?.copyWith(color: AppPalette.periwinkle))
-              : const Icon(Icons.person_outline_rounded, size: 20, color: AppPalette.periwinkle),
+              : Icon(Icons.person_outline_rounded, size: 20, color: AppPalette.periwinkle),
         ),
       ),
     );

@@ -14,6 +14,13 @@ abstract final class NotificationService {
     importance: Importance.high,
   );
 
+  static const _deadlineChannel = AndroidNotificationChannel(
+    'deadline_alerts',
+    'Last-day reminders',
+    description: 'Jobs that fit you and close within a day',
+    importance: Importance.high,
+  );
+
   static Future<void> init() async {
     if (_ready) return;
     await _plugin.initialize(
@@ -23,6 +30,9 @@ abstract final class NotificationService {
     await _plugin
         .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()
         ?.createNotificationChannel(_channel);
+    await _plugin
+        .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()
+        ?.createNotificationChannel(_deadlineChannel);
     _ready = true;
   }
 
@@ -34,17 +44,18 @@ abstract final class NotificationService {
 
   /// [key] keeps one notification per exam + milestone (a newer one replaces it).
   static Future<void> show(
-      {required String key, required String title, required String body, String? url}) async {
+      {required String key, required String title, required String body, String? url, bool deadline = false}) async {
     await init();
+    final channel = deadline ? _deadlineChannel : _channel;
     await _plugin.show(
-      key.hashCode & 0x7fffffff,
+      _id(key),
       title,
       body,
       NotificationDetails(
         android: AndroidNotificationDetails(
-          _channel.id,
-          _channel.name,
-          channelDescription: _channel.description,
+          channel.id,
+          channel.name,
+          channelDescription: channel.description,
           importance: Importance.high,
           priority: Priority.high,
           styleInformation: BigTextStyleInformation(body),
@@ -53,6 +64,13 @@ abstract final class NotificationService {
       payload: url,
     );
   }
+
+  static Future<void> cancel(String key) async {
+    await init();
+    await _plugin.cancel(_id(key));
+  }
+
+  static int _id(String key) => key.hashCode & 0x7fffffff;
 
   static Future<void> _open(String? url) async {
     final uri = url == null ? null : Uri.tryParse(url);

@@ -130,7 +130,7 @@ class _CopyChip extends StatelessWidget {
                   ),
                   if (!empty) ...[
                     const SizedBox(width: 10),
-                    const Icon(Icons.copy_rounded, size: 16, color: AppPalette.textMuted),
+                    Icon(Icons.copy_rounded, size: 16, color: AppPalette.textMuted),
                   ],
                 ],
               ),

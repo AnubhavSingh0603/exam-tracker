@@ -6,6 +6,7 @@ import '../domain/exam_watcher.dart';
 import 'backup_service.dart';
 import 'calendar_sync_service.dart';
 import 'database_service.dart';
+import 'deadline_reminders.dart';
 import 'exam_watch_service.dart';
 import 'notification_service.dart';
 
@@ -60,7 +61,14 @@ void watchCallbackDispatcher() {
     tzdata.initializeTimeZones();
     // Same file the app uses; never closed here (the app may hold the same connection).
     final db = await DatabaseService.open();
-    await runWatchAndNotify(db, force: true);
+    try {
+      await runWatchAndNotify(db, force: true);
+    } catch (_) {}
+    // Jobs that fit you and close within a day: notify again, keep the calendar right.
+    try {
+      final now = DateTime.now();
+      await DeadlineReminders(db).sync(await loadOpenJobs(db, now: now), now: now);
+    } catch (_) {}
     return true;
   });
 }

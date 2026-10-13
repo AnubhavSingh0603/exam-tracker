@@ -74,7 +74,7 @@ class _StageRow extends StatelessWidget {
                       border: Border.all(color: color, width: 2),
                     ),
                     child: view.state == StageState.completed
-                        ? const Icon(Icons.check_rounded, size: 10, color: AppPalette.background)
+                        ? Icon(Icons.check_rounded, size: 10, color: AppPalette.background)
                         : null,
                   ),
                   if (!isLast)

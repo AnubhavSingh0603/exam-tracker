@@ -97,7 +97,7 @@ class SwipeableJob extends ConsumerWidget {
     return Dismissible(
       key: ValueKey('job-${item.jobPostId}'),
       background: SwipeBackground(color: colors.safe, icon: Icons.check_circle_rounded, label: 'Applied'),
-      secondaryBackground: const SwipeBackground(
+      secondaryBackground: SwipeBackground(
         color: AppPalette.textMuted,
         icon: Icons.close_rounded,
         label: 'Not for me',
@@ -193,7 +193,7 @@ class _JobCardState extends ConsumerState<JobCard> {
               IconButton(
                 tooltip: 'Not for me',
                 onPressed: () => rejectJobWithUndo(widget.screenContext, ref, item),
-                icon: const Icon(Icons.close_rounded, size: 20, color: AppPalette.textMuted),
+                icon: Icon(Icons.close_rounded, size: 20, color: AppPalette.textMuted),
               ),
               IconButton(
                 tooltip: 'I applied',

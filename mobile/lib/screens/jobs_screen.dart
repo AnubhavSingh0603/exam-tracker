@@ -111,7 +111,7 @@ class _JobsScreenState extends ConsumerState<JobsScreen> {
                 selectedBackgroundColor: AppPalette.surfaceVariant,
                 selectedForegroundColor: AppPalette.textPrimary,
                 foregroundColor: AppPalette.textMuted,
-                side: const BorderSide(color: AppPalette.outline),
+                side: BorderSide(color: AppPalette.outline),
                 visualDensity: VisualDensity.compact,
               ),
               segments: [
@@ -179,7 +179,7 @@ class _JobsScreenState extends ConsumerState<JobsScreen> {
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          const Icon(Icons.sort_rounded, size: 18, color: AppPalette.textMuted),
+                          Icon(Icons.sort_rounded, size: 18, color: AppPalette.textMuted),
                           const SizedBox(width: 6),
                           Text(_sort.label, style: Theme.of(context).textTheme.labelLarge),
                         ],
@@ -238,7 +238,7 @@ class _JobsScreenState extends ConsumerState<JobsScreen> {
         padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
         sliver: SliverList.separated(
           itemCount: rejected.length,
-          separatorBuilder: (_, __) => const Divider(height: 1, color: AppPalette.outline),
+          separatorBuilder: (_, __) => Divider(height: 1, color: AppPalette.outline),
           itemBuilder: (_, i) {
             final d = rejected[i];
             return ListTile(

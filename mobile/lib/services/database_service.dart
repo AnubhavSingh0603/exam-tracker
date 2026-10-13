@@ -26,7 +26,7 @@ class DatabaseService {
   final Database _db;
 
   static const _fileName = 'exam_tracker.db';
-  static const _version = 4;
+  static const _version = 5;
 
   /// [factory]/[path] are injectable so tests can use sqflite_common_ffi in memory.
   static Future<DatabaseService> open({DatabaseFactory? factory, String? path}) async {
@@ -100,8 +100,20 @@ class DatabaseService {
           fetched_at INTEGER NOT NULL
         )''');
     _createDecisions(batch);
+    _createJobReminders(batch);
     await batch.commit(noResult: true);
   }
+
+  /// v5: last-day reminders for jobs you haven't applied to: the calendar event and
+  /// when the last notification went out.
+  static void _createJobReminders(Batch batch) => batch.execute('''
+        CREATE TABLE IF NOT EXISTS job_reminders (
+          job_post_id TEXT PRIMARY KEY,
+          calendar_id TEXT,
+          event_id    TEXT,
+          deadline    INTEGER NOT NULL,
+          notified_at INTEGER
+        )''');
 
   /// v4: "applied" / "not for me" per job, with the job's features for learning.
   static void _createDecisions(Batch batch) => batch.execute('''
@@ -129,6 +141,11 @@ class DatabaseService {
     if (from < 4) {
       final batch = db.batch();
       _createDecisions(batch);
+      await batch.commit(noResult: true);
+    }
+    if (from < 5) {
+      final batch = db.batch();
+      _createJobReminders(batch);
       await batch.commit(noResult: true);
     }
   }
@@ -391,4 +408,17 @@ class DatabaseService {
           await txn.insert('job_decisions', r, conflictAlgorithm: ConflictAlgorithm.replace);
         }
       });
+
+  // ---------------------------------------------------------------------------
+  // job_reminders (last-day alerts for jobs not applied to yet)
+  // ---------------------------------------------------------------------------
+
+  Future<List<Map<String, Object?>>> listJobReminders() async =>
+      [for (final r in await _db.query('job_reminders')) Map.of(r)];
+
+  Future<void> saveJobReminder(Map<String, Object?> row) =>
+      _db.insert('job_reminders', row, conflictAlgorithm: ConflictAlgorithm.replace);
+
+  Future<void> deleteJobReminder(String jobPostId) =>
+      _db.delete('job_reminders', where: 'job_post_id = ?', whereArgs: [jobPostId]);
 }

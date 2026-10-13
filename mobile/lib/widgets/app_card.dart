@@ -17,7 +17,7 @@ class AppCard extends StatelessWidget {
     final radius = BorderRadius.circular(AppRadii.card);
     return Material(
       color: AppPalette.surface,
-      shape: RoundedRectangleBorder(borderRadius: radius, side: const BorderSide(color: AppPalette.outline)),
+      shape: RoundedRectangleBorder(borderRadius: radius, side: BorderSide(color: AppPalette.outline)),
       clipBehavior: Clip.antiAlias,
       child: InkWell(
         onTap: onTap,

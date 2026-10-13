@@ -281,7 +281,7 @@ class _ProfileSetupScreenState extends ConsumerState<ProfileSetupScreen> {
           ),
         ),
         DecoratedBox(
-          decoration: const BoxDecoration(
+          decoration: BoxDecoration(
             color: AppPalette.surface,
             border: Border(top: BorderSide(color: AppPalette.outline)),
           ),
