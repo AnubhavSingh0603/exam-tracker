@@ -141,8 +141,9 @@ void main() {
               200,
             );
           }
-          if (req.url.host == 'ssc.gov.in')
+          if (req.url.host == 'ssc.gov.in') {
             return http.Response(noticeBoard, portalStatus, headers: {'content-type': 'text/html'});
+          }
           return http.Response('', 404);
         });
 
