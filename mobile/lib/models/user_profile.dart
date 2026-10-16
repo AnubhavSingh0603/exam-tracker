@@ -74,6 +74,7 @@ class UserProfileData {
     required this.qualificationTier,
     required this.degreeTitle,
     this.customQualificationText,
+    this.otherDegrees = const [],
     this.experienceYears = 0,
     this.isPwbd = false,
     this.isExServiceman = false,
@@ -90,6 +91,13 @@ class UserProfileData {
   /// `DegreeOption.code`, or [kOthersDegreeCode].
   final String degreeTitle;
   final String? customQualificationText;
+
+  /// Further degrees held besides [degreeTitle] (`DegreeOption.code`s): a B.Ed on
+  /// top of a B.Sc, an LL.B after a B.A. Jobs can ask for any of them.
+  final List<String> otherDegrees;
+
+  /// Every degree you hold: the main one and the others.
+  List<String> get allDegrees => [degreeTitle, ...otherDegrees.where((d) => d != degreeTitle)];
   final double experienceYears;
   final bool isPwbd;
   final bool isExServiceman;
@@ -102,9 +110,13 @@ class UserProfileData {
       levelByCode(qualificationTier) != null &&
       (isOthers ? (customQualificationText?.trim().length ?? 0) >= 2 : degreeByCode(degreeTitle) != null);
 
-  /// "B.Tech / B.E." or the user's own text for Others.
-  String get qualificationLabel =>
-      isOthers ? (customQualificationText ?? 'Other') : (degreeByCode(degreeTitle)?.label ?? degreeTitle);
+  /// "B.Tech / B.E." or the user's own text for Others, plus the other degrees
+  /// ("B.Sc + B.Ed").
+  String get qualificationLabel => [
+        isOthers ? (customQualificationText ?? 'Other') : (degreeByCode(degreeTitle)?.label ?? degreeTitle),
+        for (final d in otherDegrees)
+          if (d != degreeTitle) degreeByCode(d)?.label ?? d,
+      ].join(' + ');
 
   static String _date(DateTime d) =>
       '${d.year.toString().padLeft(4, '0')}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
@@ -117,6 +129,7 @@ class UserProfileData {
         'qualification_tier': qualificationTier,
         'degree_title': degreeTitle,
         'custom_qualification_text': isOthers ? customQualificationText?.trim() : null,
+        if (otherDegrees.isNotEmpty) 'other_degrees': otherDegrees,
         'experience_years': experienceYears,
         'is_pwbd': isPwbd,
         'is_ex_serviceman': isExServiceman,
@@ -130,6 +143,7 @@ class UserProfileData {
         qualificationTier: j['qualification_tier'] as String? ?? '',
         degreeTitle: j['degree_title'] as String? ?? '',
         customQualificationText: j['custom_qualification_text'] as String?,
+        otherDegrees: [for (final d in (j['other_degrees'] as List<dynamic>? ?? const [])) d.toString()],
         experienceYears: (j['experience_years'] as num?)?.toDouble() ?? 0,
         isPwbd: j['is_pwbd'] as bool? ?? false,
         isExServiceman: j['is_ex_serviceman'] as bool? ?? false,

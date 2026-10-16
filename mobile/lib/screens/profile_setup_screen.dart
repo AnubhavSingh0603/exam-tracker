@@ -44,6 +44,7 @@ class _ProfileSetupScreenState extends ConsumerState<ProfileSetupScreen> {
   // Old profiles (free-text streams) have no valid degree: start the picker empty.
   late String? _degree = widget.initial?.isComplete == true ? widget.initial!.degreeTitle : null;
   late String? _othersTier = widget.initial?.isOthers == true ? widget.initial!.qualificationTier : null;
+  late final Set<String> _otherDegrees = {...?widget.initial?.otherDegrees};
   late final _othersText = TextEditingController(text: widget.initial?.customQualificationText ?? '');
   late double _experience = widget.initial?.experienceYears.clamp(0, kMaxExperienceYears).toDouble() ?? 0;
   late bool _pwbd = widget.initial?.isPwbd ?? false;
@@ -97,7 +98,13 @@ class _ProfileSetupScreenState extends ConsumerState<ProfileSetupScreen> {
       _saving = true;
       _error = null;
     });
-    final tier = _isOthers ? _othersTier! : degreeByCode(_degree)!.level;
+    // Your level is the highest among all the degrees you hold.
+    final others = {..._otherDegrees}..remove(_degree);
+    var tier = _isOthers ? _othersTier! : degreeByCode(_degree)!.level;
+    for (final code in others) {
+      final level = degreeByCode(code)?.level;
+      if (level != null && (levelByCode(level)?.rank ?? 0) > (levelByCode(tier)?.rank ?? 0)) tier = level;
+    }
     try {
       await ref.read(profileProvider.notifier).save(UserProfileData(
             displayName: widget.initial?.displayName ?? widget.suggestedName ?? 'Me',
@@ -106,6 +113,7 @@ class _ProfileSetupScreenState extends ConsumerState<ProfileSetupScreen> {
             qualificationTier: tier,
             degreeTitle: _degree!,
             customQualificationText: _isOthers ? _othersText.text.trim() : null,
+            otherDegrees: [for (final d in kDegrees) if (others.contains(d.code)) d.code],
             experienceYears: _experience,
             isPwbd: _pwbd,
             isExServiceman: _exsm,
@@ -212,6 +220,24 @@ class _ProfileSetupScreenState extends ConsumerState<ProfileSetupScreen> {
                             )
                           : null,
                     ),
+                  ],
+                ),
+              ),
+              _Section(
+                title: 'Other degrees you hold',
+                subtitle: 'Optional. A B.Ed with your B.Sc, an LL.B after a B.A.: jobs that ask for any of '
+                    'them will show up too.',
+                child: Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    for (final d in kDegrees)
+                      if (d.level != 'MATRIC' && d.level != 'INTERMEDIATE' && d.code != _degree)
+                        FilterChip(
+                          label: Text(d.label),
+                          selected: _otherDegrees.contains(d.code),
+                          onSelected: (on) => setState(() => on ? _otherDegrees.add(d.code) : _otherDegrees.remove(d.code)),
+                        ),
                   ],
                 ),
               ),

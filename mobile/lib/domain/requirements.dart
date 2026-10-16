@@ -234,13 +234,14 @@ FeedItem keepPostsYouMeet(FeedItem item, JobPreferences prefs) {
 Set<String> qualificationsFromProfile(UserProfileData? profile) {
   if (profile == null) return const {};
   final found = <String>{
-    ...switch (profile.degreeTitle) {
-      'B_ED' || 'M_ED' => {Profession.teaching.key},
-      'LLB' || 'LLM' => {Profession.law.key},
-      'B_PHARM' || 'M_PHARM' => {Profession.pharmacy.key},
-      'MBBS' || 'MD_MS' => {Profession.doctor.key},
-      _ => const <String>{},
-    },
+    for (final degree in profile.allDegrees)
+      ...switch (degree) {
+        'B_ED' || 'M_ED' => {Profession.teaching.key},
+        'LLB' || 'LLM' => {Profession.law.key},
+        'B_PHARM' || 'M_PHARM' => {Profession.pharmacy.key},
+        'MBBS' || 'MD_MS' => {Profession.doctor.key},
+        _ => const <String>{},
+      },
   };
   final typed = profile.customQualificationText ?? '';
   if (typed.trim().isEmpty) return found;

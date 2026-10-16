@@ -105,6 +105,9 @@ Set<String> degreeCodesHeld(String degreeTitle) {
   return held;
 }
 
+/// Every degree a profile holds, with what each implies.
+Set<String> profileDegreesHeld(UserProfileData p) => {for (final d in p.allDegrees) ...degreeCodesHeld(d)};
+
 String normaliseText(String raw) {
   var s = raw.toLowerCase().replaceAll('&', ' and ').replaceAll('.', '');
   s = s.replaceAll(RegExp('[^a-z0-9]+'), ' ');
@@ -180,7 +183,7 @@ _Qual _evaluateQualification(UserProfileData p, PublishedPost post) {
   }
   if (anyPg && tier >= pg) return const _Qual(true, MatchReason.universalPostGraduate);
   if (anyGrad && tier >= ug) return const _Qual(true, MatchReason.universalGraduate);
-  if (degreeCodesHeld(p.degreeTitle).intersection(allowed).isNotEmpty) {
+  if (profileDegreesHeld(p).intersection(allowed).isNotEmpty) {
     return const _Qual(true, MatchReason.directDegree);
   }
   // Only *plain* 10th/12th posts cascade ("10th + ITI" lists ITI, so it doesn't).
