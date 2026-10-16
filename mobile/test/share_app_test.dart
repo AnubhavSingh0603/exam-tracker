@@ -1,3 +1,4 @@
+import 'package:exam_tracker/config/env.dart';
 import 'package:exam_tracker/widgets/share_app.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -21,6 +22,7 @@ void main() {
     await tester.tap(find.text('Share JobSummit with friends'));
     expect(fake.shared, hasLength(1));
     expect(fake.shared.single.text, contains('JobSummit'));
-    expect(fake.shared.single.text, endsWith(kShareLink));
+    expect(fake.shared.single.text, endsWith(Env.homePageUrl));
+    expect(fake.shared.single.text, isNot(contains('anubhav')));
   });
 }

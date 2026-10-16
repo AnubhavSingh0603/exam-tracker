@@ -36,9 +36,9 @@ enum SettingsTab {
   final String label;
 }
 
-const kHomePage = kShareLink;
-const kPrivacyPolicy = 'https://anubhavsingh0603.github.io/exam-tracker/privacy.html';
-const kIssues = 'https://github.com/AnubhavSingh0603/exam-tracker/issues';
+String get kHomePage => Env.homePageUrl;
+String get kPrivacyPolicy => '${Env.homePageUrl}privacy.html';
+String get kIssues => '${Env.repoUrl}/issues';
 
 /// Account & settings, one page per topic.
 class SettingsScreen extends StatelessWidget {

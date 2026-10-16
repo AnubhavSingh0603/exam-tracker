@@ -17,19 +17,30 @@ abstract final class Env {
 
   static bool get canSignIn => googleServerClientId.isNotEmpty;
 
+  /// The GitHub repo (under the JobSummit organization, so no personal name shows
+  /// in links). Release builds pass the real addresses; these are the fallbacks.
+  static const _repo = 'jobsummit/exam-tracker';
+
+  /// Code, releases and "report a problem".
+  static const repoUrl = String.fromEnvironment('REPO_URL', defaultValue: 'https://github.com/$_repo');
+
   /// Where the data pipeline publishes jobs.json / notices.json: the repo's `data`
   /// branch. No server needed: the phone matches jobs itself.
   static const _dataBaseUrl = String.fromEnvironment(
     'DATA_BASE_URL',
-    defaultValue: 'https://raw.githubusercontent.com/AnubhavSingh0603/exam-tracker/data',
+    defaultValue: 'https://raw.githubusercontent.com/$_repo/data',
   );
 
   /// The same files on GitHub Pages. Some Indian ISPs (Jio, at times) block
   /// raw.githubusercontent.com, so downloads fall back from one to the other.
+  /// The home page and privacy policy live here too.
   static const _dataMirrorUrl = String.fromEnvironment(
     'DATA_MIRROR_URL',
-    defaultValue: 'https://anubhavsingh0603.github.io/exam-tracker',
+    defaultValue: 'https://jobsummit.github.io/exam-tracker',
   );
+
+  /// The home page (with the download button), ending in a slash.
+  static String get homePageUrl => '${_dataMirrorUrl.trim().replaceFirst(RegExp(r'/+$'), '')}/';
 
   /// Both addresses, mirror first, without trailing slashes or duplicates.
   static List<String> get dataBaseUrls => {

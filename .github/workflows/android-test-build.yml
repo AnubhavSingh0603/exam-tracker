@@ -91,6 +91,7 @@ jobs:
               "DATA_BASE_URL": f"https://raw.githubusercontent.com/{repo}/data",
               # GitHub Pages copy of the data branch (some ISPs block raw.githubusercontent.com).
               "DATA_MIRROR_URL": f"https://{owner.lower()}.github.io/{name}",
+              "REPO_URL": f"https://github.com/{repo}",
           }
           # Only when set: an empty value would switch off the client ID built into the app.
           if os.environ.get("GOOGLE_SERVER_CLIENT_ID"):
