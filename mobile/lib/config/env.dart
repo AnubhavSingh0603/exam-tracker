@@ -19,7 +19,7 @@ abstract final class Env {
 
   /// The GitHub repo (under the JobSummit organization, so no personal name shows
   /// in links). Release builds pass the real addresses; these are the fallbacks.
-  static const _repo = 'jobsummit/exam-tracker';
+  static const _repo = 'jobsummit/JobSummit';
 
   /// Code, releases and "report a problem".
   static const repoUrl = String.fromEnvironment('REPO_URL', defaultValue: 'https://github.com/$_repo');
@@ -36,7 +36,7 @@ abstract final class Env {
   /// The home page and privacy policy live here too.
   static const _dataMirrorUrl = String.fromEnvironment(
     'DATA_MIRROR_URL',
-    defaultValue: 'https://jobsummit.github.io/exam-tracker',
+    defaultValue: 'https://jobsummit.github.io/JobSummit',
   );
 
   /// The home page (with the download button), ending in a slash.

@@ -3,9 +3,9 @@
 **One clear next step. Less to keep in mind.** A calm, ADHD-friendly Android app for
 Indian government and PSU jobs and exams.
 
-**Download:** [latest release](https://github.com/jobsummit/exam-tracker/releases/latest)
-(most phones: the `arm64-v8a` file) · [home page](https://jobsummit.github.io/exam-tracker/) ·
-[privacy policy](https://jobsummit.github.io/exam-tracker/privacy.html)
+**Download:** [latest release](https://github.com/jobsummit/JobSummit/releases/latest)
+(most phones: the `arm64-v8a` file) · [home page](https://jobsummit.github.io/JobSummit/) ·
+[privacy policy](https://jobsummit.github.io/JobSummit/privacy.html)
 
 | Folder | What | Status |
 |---|---|---|
