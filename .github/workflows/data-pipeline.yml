@@ -106,6 +106,21 @@ jobs:
         working-directory: backend
         run: python scripts/run_pipeline.py --out ../publish
 
+      # Private workspace (optional module, backend/app/modules/private_jobs): its own
+      # step, after the Govt data is built, so a failure here never blocks it. The last
+      # published file is handed over, so a bad run keeps the app's feed as it was.
+      # Off when the repository variable ENABLE_PRIVATE_JOBS is 'false'.
+      - name: Private jobs (company job boards)
+        if: ${{ vars.ENABLE_PRIVATE_JOBS != 'false' }}
+        continue-on-error: true
+        timeout-minutes: 10
+        working-directory: backend
+        run: |
+          if git fetch -q --depth=1 origin data 2>/dev/null; then
+            git show FETCH_HEAD:private_jobs.json > /tmp/previous_private_jobs.json 2>/dev/null || true
+          fi
+          python -m app.modules.private_jobs --out ../publish/private_jobs.json --previous /tmp/previous_private_jobs.json
+
       - name: Save state
         run: |
           mkdir -p publish/state

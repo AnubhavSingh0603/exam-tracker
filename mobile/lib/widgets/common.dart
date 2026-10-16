@@ -8,6 +8,7 @@ import '../screens/settings_screen.dart';
 import '../services/auth_service.dart';
 import '../theme/app_theme.dart';
 import 'app_icons.dart';
+import 'workspace_switch.dart';
 
 /// A sliver with the screen's side gutter.
 Widget padSliver(Widget child, {double top = 0}) => SliverPadding(
@@ -42,6 +43,7 @@ class ScreenHeader extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              const WorkspaceSwitch(),
               Semantics(header: true, child: Text(title, style: text.headlineSmall)),
               if (subtitle != null) ...[
                 const SizedBox(height: 2),

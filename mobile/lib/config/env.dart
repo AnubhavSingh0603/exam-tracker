@@ -48,6 +48,11 @@ abstract final class Env {
           if (url.trim().isNotEmpty) url.trim().replaceFirst(RegExp(r'/+$'), ''),
       }.toList();
 
+  /// Builds can leave out the Private (corporate) jobs workspace entirely with
+  /// `--dart-define=ENABLE_PRIVATE_JOBS=false`. On by default; users still switch it
+  /// on themselves in Settings › Jobs.
+  static const privateJobsAvailable = bool.fromEnvironment('ENABLE_PRIVATE_JOBS', defaultValue: true);
+
   /// Calendar events are written in this zone. The audience is India-only, so
   /// a fixed zone avoids a native timezone-lookup dependency.
   static const timeZone = String.fromEnvironment('TIME_ZONE', defaultValue: 'Asia/Kolkata');

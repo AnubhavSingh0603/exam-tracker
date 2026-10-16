@@ -14,6 +14,7 @@ import '../providers/jobs_providers.dart';
 import '../providers/pin_providers.dart';
 import '../providers/providers.dart';
 import '../providers/ui_providers.dart';
+import '../providers/workspace_providers.dart';
 import '../services/auth_service.dart';
 import '../services/auto_update.dart';
 import '../services/calendar_sync_service.dart';
@@ -305,6 +306,7 @@ class _JobsTab extends ConsumerWidget {
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
+        if (Env.privateJobsAvailable) const _PrivateJobsSwitch(),
         _Section(
           title: 'Show these first',
           note: 'Picked groups rank above the rest. None picked: railways, banks, SSC, UPSC and PSUs lead.',
@@ -827,6 +829,31 @@ class _PinLockSection extends ConsumerWidget {
               ),
             ],
           ),
+      ],
+    );
+  }
+}
+
+/// Settings › Jobs: switches the Private (corporate) jobs workspace on or off. Off,
+/// the app is the Govt exam tracker only, exactly as before.
+class _PrivateJobsSwitch extends ConsumerWidget {
+  const _PrivateJobsSwitch();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final ws = ref.watch(workspaceProvider);
+    return _Section(
+      title: 'Private jobs (beta)',
+      note: 'Adds a second workspace for company jobs: your skills and experience, roles from '
+          'employers’ own job boards, and a tracker for private applications. Your Govt profile '
+          'and exams are not touched.',
+      children: [
+        SwitchListTile(
+          contentPadding: EdgeInsets.zero,
+          title: const Text('Show the Govt | Private switch'),
+          value: ws.privateEnabled,
+          onChanged: (on) => ref.read(workspaceProvider.notifier).setPrivateEnabled(on),
+        ),
       ],
     );
   }

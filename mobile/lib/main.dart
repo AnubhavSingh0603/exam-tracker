@@ -3,8 +3,10 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:timezone/data/latest.dart' as tzdata;
 
+import 'features/private_jobs/private_jobs.dart';
 import 'providers/providers.dart';
 import 'providers/ui_providers.dart';
+import 'providers/workspace_providers.dart';
 import 'screens/home_shell.dart';
 import 'services/auth_service.dart';
 import 'services/background_watch.dart';
@@ -56,7 +58,10 @@ class JobSummitApp extends ConsumerWidget {
         darkTheme: AppTheme.of(Brightness.dark),
         themeMode: ref.watch(themeModeProvider),
         builder: (context, child) => _PaletteScope(brightness: Theme.of(context).brightness, child: child!),
-        home: const UpdateGate(child: HomeShell()),
+        // The one place the app knows about the optional Private workspace.
+        home: UpdateGate(
+          child: ref.watch(workspaceProvider).shown == Workspace.private ? const PrivateShell() : const HomeShell(),
+        ),
       );
 }
 
