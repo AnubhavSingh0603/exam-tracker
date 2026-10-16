@@ -103,34 +103,59 @@ final class UpdateFailed extends UpdateProgress {
 
 /// Checks for and installs new APKs for the `direct` build. All network work
 /// is best-effort: any failure simply means "no update offered right now".
+class UpdateCheckFailed implements Exception {
+  const UpdateCheckFailed();
+}
+
 class UpdateService {
-  UpdateService({http.Client? client}) : _client = client ?? http.Client();
+  UpdateService({http.Client? client, String? manifestUrl, bool? enabled})
+      : _client = client ?? http.Client(),
+        _manifestUrl = manifestUrl ?? Env.releaseManifestUrl,
+        _enabled = enabled ?? Env.updatesEnabled;
 
   final http.Client _client;
+  final String _manifestUrl;
+  final bool _enabled;
 
   static const checkInterval = Duration(hours: 12);
   static const _timeout = Duration(seconds: 8);
   static const _kLastCheck = 'update.lastCheckMs';
   static const _kSkipped = 'update.skippedVersion';
 
+  /// The automatic check (app start): at most every [checkInterval] unless
+  /// [force]d, quiet on failure, and a version the user put off with "Later"
+  /// is not offered again.
   Future<UpdateCheck?> check({bool force = false}) async {
-    if (!Env.updatesEnabled) return null;
+    if (!_enabled) return null;
     final prefs = await SharedPreferences.getInstance();
     final now = DateTime.now().millisecondsSinceEpoch;
     final last = prefs.getInt(_kLastCheck) ?? 0;
     if (!force && now - last < checkInterval.inMilliseconds) return null;
+    try {
+      final found = await checkNow();
+      if (found == null || found.mandatory) return found;
+      return prefs.getInt(_kSkipped) == found.info.versionCode ? null : found;
+    } on UpdateCheckFailed {
+      return null;
+    }
+  }
 
+  /// "Check for updates" in Settings: the user asked, so an update put off
+  /// with "Later" still shows. null = up to date. Throws [UpdateCheckFailed]
+  /// when GitHub can't be reached, so that is not mistaken for "up to date".
+  Future<UpdateCheck?> checkNow() async {
     final package = await PackageInfo.fromPlatform();
     final installed = releaseNumberOf(int.tryParse(package.buildNumber) ?? 0);
-    final abi = await _primaryAbi();
-
-    final remote = await _fromManifest(abi);
-    await prefs.setInt(_kLastCheck, now);
-    if (remote == null || !remote.isTrustworthy || remote.versionCode <= installed) return null;
-
-    final mandatory = installed < remote.minSupportedVersionCode;
-    if (!mandatory && prefs.getInt(_kSkipped) == remote.versionCode) return null;
-    return UpdateCheck(info: remote, installedVersionName: package.version, mandatory: mandatory);
+    final remote = await _fromManifest(await _primaryAbi());
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt(_kLastCheck, DateTime.now().millisecondsSinceEpoch);
+    if (remote == null || !remote.isTrustworthy) throw const UpdateCheckFailed();
+    if (remote.versionCode <= installed) return null;
+    return UpdateCheck(
+      info: remote,
+      installedVersionName: package.version,
+      mandatory: installed < remote.minSupportedVersionCode,
+    );
   }
 
   /// "Later": don't offer this exact version again (a newer one will still show).
@@ -178,10 +203,10 @@ class UpdateService {
   }
 
   Future<UpdateInfo?> _fromManifest(String? abi) async {
-    if (Env.releaseManifestUrl.isEmpty) return null;
+    if (_manifestUrl.isEmpty) return null;
     try {
       // GitHub's /releases/latest/download/<asset> redirects to the newest release's file.
-      final res = await _client.get(Uri.parse(Env.releaseManifestUrl)).timeout(_timeout);
+      final res = await _client.get(Uri.parse(_manifestUrl)).timeout(_timeout);
       if (res.statusCode != 200) return null;
       return UpdateInfo.fromManifest(jsonDecode(utf8.decode(res.bodyBytes)) as Map<String, dynamic>, abi);
     } catch (_) {

@@ -14,6 +14,7 @@ import '../providers/ui_providers.dart';
 import '../services/auth_service.dart';
 import '../services/calendar_sync_service.dart';
 import '../services/deadline_reminders.dart';
+import '../services/update_service.dart';
 import '../theme/app_theme.dart';
 import '../utils/system_actions.dart';
 import '../widgets/app_icons.dart';
@@ -554,12 +555,18 @@ class _AboutTab extends ConsumerWidget {
               FilledButton.tonal(
                 onPressed: () async {
                   final service = ref.read(updateServiceProvider);
-                  final check = await service.check(force: true);
-                  if (!context.mounted) return;
-                  if (check == null) {
-                    showCalmSnack(context, 'You have the latest version.');
-                  } else {
-                    await showUpdateDialog(context, service, check);
+                  try {
+                    final check = await service.checkNow();
+                    if (!context.mounted) return;
+                    if (check == null) {
+                      showCalmSnack(context, 'You have the latest version.');
+                    } else {
+                      await showUpdateDialog(context, service, check);
+                    }
+                  } on UpdateCheckFailed {
+                    if (context.mounted) {
+                      showCalmSnack(context, 'Couldn’t reach GitHub to check. Try again in a minute.');
+                    }
                   }
                 },
                 child: const Text('Check for updates'),
