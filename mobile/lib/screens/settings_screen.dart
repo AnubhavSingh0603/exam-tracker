@@ -5,6 +5,7 @@ import 'package:permission_handler/permission_handler.dart';
 import 'package:self_update/self_update.dart';
 
 import '../config/env.dart';
+import '../domain/requirements.dart';
 import '../models/job_preferences.dart';
 import '../models/user_profile.dart';
 import '../providers/account_providers.dart';
@@ -294,6 +295,7 @@ class _JobsTab extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final prefs = ref.watch(jobPreferencesProvider).dataOrNull ?? JobPreferences.defaults;
+    final fromProfile = qualificationsFromProfile(ref.watch(profileProvider).dataOrNull);
     final decisions = ref.watch(decisionsProvider).dataOrNull ?? const <JobDecision>[];
     final applied = decisions.where((d) => d.applied).length;
     void save(JobPreferences p) => ref.read(jobPreferencesProvider.notifier).save(p);
@@ -387,8 +389,31 @@ class _JobsTab extends ConsumerWidget {
           ],
         ),
         _Section(
+          title: 'Professional qualifications',
+          note: 'Posts that need one you don’t have (a teacher’s B.Ed, a nurse’s GNM, a pharmacist’s '
+              'D.Pharm…) are hidden. Ones your degree already shows are on by themselves.',
+          children: [
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                for (final p in Profession.values)
+                  FilterChip(
+                    label: Text(p.label),
+                    selected: prefs.qualifications.contains(p.key) || fromProfile.contains(p.key),
+                    // From your profile: change the degree there instead.
+                    onSelected: fromProfile.contains(p.key)
+                        ? null
+                        : (_) => save(prefs.copyWith(qualifications: toggle(prefs.qualifications, p.key))),
+                  ),
+              ],
+            ),
+          ],
+        ),
+        _Section(
           title: 'Languages you can work in',
-          note: 'Posts about another language (a Marathi teacher, a Tamil translator) are hidden.',
+          note: 'Posts that need another language are hidden: a Marathi teacher, “knowledge of Konkani”, '
+              '“passed with Marathi subject”, “Marathi medium”.',
           children: [
             Wrap(
               spacing: 8,

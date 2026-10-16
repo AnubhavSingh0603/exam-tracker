@@ -103,13 +103,17 @@ final _dayRange = RegExp('$_day$_ord(?:\\s+$_mon(?:,?\\s*$_yr)?)?$_to(\\d{1,2})$
     caseSensitive: false);
 final _monthRange =
     RegExp('\\b$_mon\\s+(\\d{1,2})$_ord$_to(\\d{1,2})$_ord(?:,?\\s*$_yr)?(?!\\d)', caseSensitive: false);
+// "September 30, 2026 – October 30, 2026", "Sep 30 to Oct 30, 2026".
+final _monthDayRange = RegExp(
+    '\\b$_mon\\s+(\\d{1,2})$_ord(?:,?\\s*$_yr)?$_to$_mon\\s+(\\d{1,2})$_ord(?:,?\\s*$_yr)?(?!\\d)',
+    caseSensitive: false);
 final _numDate = RegExp('\\b(\\d{1,2})[./-](\\d{1,2})[./-]$_yr\\b', caseSensitive: false);
 final _dayMonth = RegExp('$_day$_ord\\s+$_mon(?:,?\\s*$_yr)?', caseSensitive: false);
 final _monthDay = RegExp('\\b$_mon\\s+(\\d{1,2})$_ord(?:,?\\s*$_yr)?(?!\\d)', caseSensitive: false);
 
 /// Every pattern above, to blank dates out of a text.
 final _dateRe = RegExp(
-    [_numRange, _dayRange, _monthRange, _numDate, _dayMonth, _monthDay].map((r) => r.pattern).join('|'),
+    [_numRange, _dayRange, _monthRange, _monthDayRange, _numDate, _dayMonth, _monthDay].map((r) => r.pattern).join('|'),
     caseSensitive: false);
 
 /// An exam's dates as a notice prints them: one day, or a window ([end] set).
@@ -182,6 +186,9 @@ EventWindow? extractEventWindow(String text, {DateTime? reference}) {
   }
   for (final m in _monthRange.allMatches(text)) {
     add(m, _range(n(m[2])!, null, null, n(m[3])!, mon(m[1])!, n(m[4]), ref), range: true);
+  }
+  for (final m in _monthDayRange.allMatches(text)) {
+    add(m, _range(n(m[2])!, mon(m[1]), n(m[3]), n(m[5])!, mon(m[4])!, n(m[6]), ref), range: true);
   }
   for (final m in _numDate.allMatches(text)) {
     add(m, _window(_valid(n(m[3])!, n(m[2])!, n(m[1])!), null), range: false);

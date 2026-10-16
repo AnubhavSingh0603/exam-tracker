@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../domain/relevance.dart';
+import '../domain/requirements.dart';
 import '../models/feed.dart';
 import '../models/job_preferences.dart';
 import '../models/tracked_application.dart';
@@ -161,27 +162,40 @@ final nearMissJobsProvider = Provider<List<FeedItem>>(
 
 String? _myLevel(Ref ref) => ref.watch(profileProvider).dataOrNull?.qualificationTier;
 
+/// Your job preferences, with the professional qualifications your profile already
+/// shows (a B.Ed or MBBS degree, "GNM" typed under Others) switched on.
+final effectiveJobPreferencesProvider = Provider<JobPreferences>((ref) {
+  final prefs = ref.watch(jobPreferencesProvider).dataOrNull ?? JobPreferences.defaults;
+  final fromProfile = qualificationsFromProfile(ref.watch(profileProvider).dataOrNull);
+  return fromProfile.isEmpty ? prefs : prefs.copyWith(qualifications: {...prefs.qualifications, ...fromProfile});
+});
+
 /// Ranked with your preferences and history (Jobs tab adds its own sort and filter).
 final rankedJobsProvider = Provider<List<RankedJob>>((ref) => rankJobs(
       ref.watch(openJobsProvider),
-      ref.watch(jobPreferencesProvider).dataOrNull ?? JobPreferences.defaults,
+      ref.watch(effectiveJobPreferencesProvider),
       ref.watch(affinityProvider),
       myLevel: _myLevel(ref),
     ));
 
 final rankedNearMissProvider = Provider<List<RankedJob>>((ref) => rankJobs(
       ref.watch(nearMissJobsProvider),
-      ref.watch(jobPreferencesProvider).dataOrNull ?? JobPreferences.defaults,
+      ref.watch(effectiveJobPreferencesProvider),
       ref.watch(affinityProvider),
       myLevel: _myLevel(ref),
     ));
 
-/// How many open jobs your preferences hide (shown so nothing feels lost).
-final hiddenJobCountProvider = Provider<int>((ref) {
-  final prefs = ref.watch(jobPreferencesProvider).dataOrNull ?? JobPreferences.defaults;
+/// Open jobs your preferences hide, each with why (listed so nothing feels lost).
+final hiddenJobsProvider = Provider<List<(FeedItem, String)>>((ref) {
+  final prefs = ref.watch(effectiveJobPreferencesProvider);
   final level = _myLevel(ref);
-  return ref.watch(openJobsProvider).where((i) => hiddenBecause(i, prefs, myLevel: level) != null).length;
+  return [
+    for (final item in ref.watch(openJobsProvider))
+      if (hiddenBecause(item, prefs, myLevel: level) case final reason?) (item, reason),
+  ];
 });
+
+final hiddenJobCountProvider = Provider<int>((ref) => ref.watch(hiddenJobsProvider).length);
 
 /// Today keeps it short: the best few, never a wall of cards.
 const kTodayMatches = 3;

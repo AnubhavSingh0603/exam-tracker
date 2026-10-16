@@ -22,6 +22,13 @@ void main() {
       expect(w('Tier 1 October 12 to 19'), cgl); // not "1 October"
     });
 
+    test('SSC CGL 2026 Tier 1 as SSC words it (month names and years on both sides)', () {
+      final tier1 = (start: DateTime(2026, 9, 30), end: DateTime(2026, 10, 30));
+      expect(w('SSC CGL Tier 1 Exam 2026 from September 30, 2026 to October 30, 2026.'), tier1);
+      expect(w('Tier 1 Exam Dates: September 30, 2026 – October 30, 2026'), tier1);
+      expect(w('Tier 1: Sep 30 - Oct 30, 2026'), tier1);
+    });
+
     test('windows across months and years', () {
       expect(w('CBT 28 Nov to 3 Dec 2026'), (start: DateTime(2026, 11, 28), end: DateTime(2026, 12, 3)));
       expect(w('CBT 28 to 3 December 2026'), (start: DateTime(2026, 11, 28), end: DateTime(2026, 12, 3)));

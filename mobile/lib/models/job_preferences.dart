@@ -65,6 +65,7 @@ class JobPreferences {
     this.hideBelowMyLevel = true,
     this.minMonthlyPay = 0,
     this.hiddenTypes = const {},
+    this.qualifications = const {},
     this.savedAt,
   });
 
@@ -80,6 +81,11 @@ class JobPreferences {
 
   /// e.g. {'apprenticeship', 'internship'}.
   final Set<String> hiddenTypes;
+
+  /// Professional qualifications you have (Profession keys: 'teaching', 'tet',
+  /// 'nursing', 'doctor'…). Posts that need one you don't have are hidden. Ones
+  /// your profile's degree already shows count too (qualificationsFromProfile).
+  final Set<String> qualifications;
   final DateTime? savedAt;
 
   static const defaults = JobPreferences();
@@ -91,6 +97,7 @@ class JobPreferences {
     bool? hideBelowMyLevel,
     int? minMonthlyPay,
     Set<String>? hiddenTypes,
+    Set<String>? qualifications,
     DateTime? savedAt,
   }) =>
       JobPreferences(
@@ -100,6 +107,7 @@ class JobPreferences {
         hideBelowMyLevel: hideBelowMyLevel ?? this.hideBelowMyLevel,
         minMonthlyPay: minMonthlyPay ?? this.minMonthlyPay,
         hiddenTypes: hiddenTypes ?? this.hiddenTypes,
+        qualifications: qualifications ?? this.qualifications,
         savedAt: savedAt ?? this.savedAt,
       );
 
@@ -110,6 +118,7 @@ class JobPreferences {
         'hide_below_my_level': hideBelowMyLevel,
         'min_monthly_pay': minMonthlyPay,
         'hidden_types': hiddenTypes.toList(),
+        'qualifications': qualifications.toList(),
         if (savedAt != null) 'saved_at': savedAt!.toUtc().toIso8601String(),
       };
 
@@ -122,6 +131,7 @@ class JobPreferences {
       hideBelowMyLevel: j['hide_below_my_level'] as bool? ?? true,
       minMonthlyPay: (j['min_monthly_pay'] as num?)?.toInt() ?? 0,
       hiddenTypes: strings(j['hidden_types']),
+      qualifications: strings(j['qualifications']),
       savedAt: DateTime.tryParse(j['saved_at'] as String? ?? ''),
     );
   }

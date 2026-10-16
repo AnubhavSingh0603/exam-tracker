@@ -11,7 +11,7 @@ import '../theme/app_theme.dart';
 import '../widgets/common.dart';
 import '../widgets/job_card.dart';
 import '../widgets/motion.dart';
-import 'settings_screen.dart';
+import 'hidden_jobs_screen.dart';
 
 enum _View { forYou, nearMiss, notForMe }
 
@@ -159,8 +159,8 @@ class _JobsScreenState extends ConsumerState<JobsScreen> {
                   Expanded(
                     child: hiddenByPrefs > 0 && _view == _View.forYou
                         ? InkWell(
-                            onTap: () => Navigator.of(context).push(MaterialPageRoute<void>(
-                                builder: (_) => const SettingsScreen(initialTab: SettingsTab.jobs))),
+                            onTap: () => Navigator.of(context)
+                                .push(MaterialPageRoute<void>(builder: (_) => const HiddenJobsScreen())),
                             child: Text('$hiddenByPrefs hidden by your preferences ›',
                                 style: Theme.of(context)
                                     .textTheme

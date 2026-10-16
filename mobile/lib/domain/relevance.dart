@@ -9,6 +9,7 @@ import '../models/feed.dart';
 import '../models/job_preferences.dart';
 import '../models/jobs_data.dart';
 import 'qualification_taxonomy.dart';
+import 'requirements.dart';
 
 // -----------------------------------------------------------------------------
 // Features: what a job "is", for learning from decisions
@@ -145,16 +146,20 @@ class Affinity {
 // Filters: jobs you'd never apply to
 // -----------------------------------------------------------------------------
 
-/// Why a job is hidden, or null when it stays.
+/// Why a job is hidden, in a few words for the hidden-jobs list, or null when it stays.
 String? hiddenBecause(FeedItem item, JobPreferences prefs, {required String? myLevel}) {
-  if (prefs.hidden.contains(JobCategory.fromWire(item.category))) return 'category';
+  final category = JobCategory.fromWire(item.category);
+  if (prefs.hidden.contains(category)) return 'You hid ${category.label}';
   final type = item.job?.employmentType;
-  if (type != null && prefs.hiddenTypes.contains(type)) return 'type';
+  if (type != null && prefs.hiddenTypes.contains(type)) return 'You hid ${type.replaceAll('_', ' ')} jobs';
   final pay = item.monthlyPay;
-  if (prefs.minMonthlyPay > 0 && pay != null && pay < prefs.minMonthlyPay) return 'pay';
+  if (prefs.minMonthlyPay > 0 && pay != null && pay < prefs.minMonthlyPay) return 'Pay below your minimum';
   final language = demandedLanguage(item);
-  if (language != null && !prefs.languages.contains(language)) return 'language';
-  if (prefs.hideBelowMyLevel && isBelowLevel(item, myLevel)) return 'level';
+  if (language != null && !prefs.languages.contains(language)) return 'Needs $language';
+  // What the qualification text adds: B.Ed / TET, "knowledge of Marathi"…
+  final unmet = unmetRequirementForJob(item, prefs);
+  if (unmet != null) return unmet;
+  if (prefs.hideBelowMyLevel && isBelowLevel(item, myLevel)) return 'Needs only 10th pass or less';
   return null;
 }
 
@@ -289,7 +294,7 @@ List<RankedJob> rankJobs(
   JobSort sort = JobSort.bestMatch,
 }) {
   final ranked = [
-    for (final item in items)
+    for (final item in items.map((i) => keepPostsYouMeet(i, prefs)))
       if (hiddenBecause(item, prefs, myLevel: myLevel) == null) rankJob(item, prefs, affinity),
   ];
   int byDeadline(RankedJob a, RankedJob b) => a.item.deadline.compareTo(b.item.deadline);

@@ -109,6 +109,29 @@ class FeedItem {
   /// Every post of [job] you qualify for, most seats first ([bestPost] is the first).
   final List<FeedPost> posts;
 
+  /// The same job showing only [kept] (a subset of [posts]); the headline post is
+  /// re-picked from them, most seats you can reach first.
+  FeedItem withPosts(List<FeedPost> kept) {
+    final best = kept.contains(bestPost)
+        ? bestPost
+        : (kept.toList()..sort((a, b) => b.totalReachableSeats.compareTo(a.totalReachableSeats))).first;
+    return FeedItem(
+      jobPostId: jobPostId,
+      organization: organization,
+      examName: examName,
+      deadline: deadline,
+      urgency: urgency,
+      nextStep: nextStep,
+      bestPost: best,
+      portalUrl: portalUrl,
+      applyUrl: applyUrl,
+      matchKind: matchKind,
+      timelineJson: timelineJson,
+      job: job,
+      posts: kept,
+    );
+  }
+
   /// The published post behind [bestPost].
   PublishedPost? get bestPublishedPost {
     for (final p in job?.posts ?? const <PublishedPost>[]) {
