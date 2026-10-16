@@ -13,9 +13,10 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../config/env.dart';
 
-/// Android versionCode = release number × 10 + ABI digit (set in build.gradle.kts),
-/// so every newer release outranks every older one, split or universal.
-int releaseNumberOf(int androidVersionCode) => androidVersionCode ~/ 10;
+/// The release number (pubspec build number) inside an installed version code.
+/// Universal APKs get release × 10; Flutter's split APKs add ABI × 1000 on top
+/// (arm64 0.9.2 = 2121), so the thousands are dropped first. Good up to release 99.
+int releaseNumberOf(int androidVersionCode) => (androidVersionCode % 1000) ~/ 10;
 
 final _sha256 = RegExp(r'^[0-9a-f]{64}$');
 
@@ -61,7 +62,9 @@ class UpdateInfo {
     final asset = (apks[abi] ?? apks['universal']) as Map<String, dynamic>?;
     if (asset == null) return null;
     return UpdateInfo(
-      versionCode: (j['version_code'] as num).toInt(),
+      // `release` is the real number; `version_code` is inflated for apps up to
+      // 0.10.0, whose own arithmetic over-counted (see the release workflow).
+      versionCode: ((j['release'] ?? j['version_code']) as num).toInt(),
       versionName: j['version_name'] as String,
       minSupportedVersionCode: (j['min_supported_version_code'] as num?)?.toInt() ?? 1,
       releaseNotes: j['release_notes'] as String? ?? '',

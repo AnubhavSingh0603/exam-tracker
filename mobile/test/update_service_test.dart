@@ -14,6 +14,10 @@ void main() {
     expect(releaseNumberOf(40), 4); // universal
     expect(releaseNumberOf(42), 4); // arm64-v8a split of the same release
     expect(releaseNumberOf(50) > releaseNumberOf(43), isTrue); // newer universal beats older split
+    // What the published split APKs really carry: Flutter adds ABI × 1000.
+    expect(releaseNumberOf(2121), 12); // arm64 0.9.2
+    expect(releaseNumberOf(1131), 13); // armeabi-v7a 0.10.0
+    expect(releaseNumberOf(120), 12); // universal 0.9.2
   });
 
   test('manifest picks the device ABI, falls back to universal', () {
@@ -89,6 +93,46 @@ void main() {
     test('unreachable GitHub: quiet automatically, an error when asked (not "up to date")', () async {
       expect(await service(offline: true).check(force: true), isNull);
       await expectLater(service(offline: true).checkNow(), throwsA(isA<UpdateCheckFailed>()));
+    });
+  });
+
+  group('real split-APK version codes', () {
+    // What the release workflow now publishes for release 13 (0.10.0).
+    final manifest = jsonEncode({
+      'release': 13,
+      'version_code': 1013,
+      'version_name': '0.10.0',
+      'apks': {
+        'universal': {'url': 'https://github.com/jobsummit/JobSummit/releases/download/v0.10.0/a.apk', 'sha256': _sha},
+      },
+    });
+
+    UpdateService service() => UpdateService(
+          client: MockClient((_) async => http.Response(manifest, 200)),
+          manifestUrl: 'https://github.com/jobsummit/JobSummit/releases/latest/download/latest.json',
+          enabled: true,
+        );
+
+    void installed(String versionCode) {
+      PackageInfo.setMockInitialValues(
+          appName: 'JobSummit', packageName: 'p', version: '0.9.2', buildNumber: versionCode, buildSignature: '');
+      SharedPreferences.setMockInitialValues({});
+    }
+
+    test('arm64 0.9.2 (version code 2121) is offered 0.10.0', () async {
+      installed('2121');
+      expect((await service().checkNow())?.info.versionName, '0.10.0');
+    });
+
+    test('arm64 0.10.0 (2131) is up to date', () async {
+      installed('2131');
+      expect(await service().checkNow(), isNull);
+    });
+
+    test('apps already on phones (code ~/ 10) also see it, through the inflated version_code', () {
+      final oldInstalled = 2121 ~/ 10; // what 0.10.0 and older compute
+      expect(1013 > oldInstalled, isTrue);
+      expect(1013 > 4131 ~/ 10, isTrue); // even an x86_64 split
     });
   });
 }

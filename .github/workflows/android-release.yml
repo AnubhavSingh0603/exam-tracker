@@ -140,8 +140,14 @@ jobs:
               sums.append(f"{digest}  {name}")
               apks[abi] = {"url": f"https://github.com/{repo}/releases/download/{tag}/{name}",
                            "sha256": digest, "size_bytes": len(data)}
+          release = int(os.environ["BUILD_NUMBER"])
           manifest = {
-              "version_code": int(os.environ["BUILD_NUMBER"]),
+              "release": release,
+              # Apps up to 0.10.0 read their own split-APK version code (e.g. 2121) as
+              # release 212 and compare it with this field, so they would never see an
+              # update. 1000 + release beats every value they can hold (at most ~413).
+              # Newer apps read "release" instead.
+              "version_code": 1000 + release,
               "version_name": version,
               "min_supported_version_code": int(os.environ.get("MIN_SUPPORTED") or 1),
               "release_notes": notes or f"Version {version}",

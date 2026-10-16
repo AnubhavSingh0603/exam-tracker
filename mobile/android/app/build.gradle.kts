@@ -86,13 +86,13 @@ kotlin {
 }
 
 // --- Version codes -------------------------------------------------------------
-// versionCode = <pubspec build number> × 10 + ABI digit (universal = 0).
-// Flutter's own split scheme (1000 × ABI + code) would make a universal APK look
-// *older* than a split one. With ×10, every newer release outranks every older one,
-// whether the phone has the universal or a split APK, so the updater never hits a
-// "downgrade" refusal. The app recovers the release number with versionCode ~/ 10
-// (update_service.dart). Registered after the Flutter plugin, so this runs last.
-// Verify with: apkanalyzer manifest version-code <apk>
+// Intended: <pubspec build number> × 10 + ABI digit. What the published APKs really
+// get (checked with aapt2 on releases 0.7.0–0.10.0): universal = build × 10, but the
+// split APKs also get Flutter's ABI × 1000 on top (arm64 0.9.2 = 2121, v7a = 1121).
+// Both still rise with every release, so updates install; do NOT "fix" this to
+// smaller numbers, or phones holding 2xxx codes would refuse the next update as a
+// downgrade. The app reads the release as (code % 1000) ~/ 10 (update_service.dart).
+// Verify with: aapt2 dump badging <apk> | head -1
 val abiDigit = mapOf("armeabi-v7a" to 1, "arm64-v8a" to 2, "x86_64" to 3)
 androidComponents {
     onVariants { variant ->
