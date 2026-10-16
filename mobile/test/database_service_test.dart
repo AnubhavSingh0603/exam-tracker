@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:exam_tracker/models/tracked_application.dart';
 import 'package:exam_tracker/models/vault_entry.dart';
 import 'package:exam_tracker/services/database_service.dart';
+import 'package:exam_tracker/services/local_cipher.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
@@ -25,9 +26,10 @@ void main() {
       );
 
   setUpAll(sqfliteFfiInit);
+  final cipher = LocalCipher(List.filled(32, 7));
 
   setUp(() async {
-    db = await DatabaseService.open(factory: databaseFactoryFfi, path: inMemoryDatabasePath);
+    db = await DatabaseService.open(factory: databaseFactoryFfi, path: inMemoryDatabasePath, cipher: () async => cipher);
   });
 
   tearDown(() => db.close());
@@ -62,6 +64,35 @@ void main() {
     loaded = (await db.getApplication('s'))!;
     expect(loaded.loginUrl, 'https://ibpsreg.ibps.in/x');
     expect(loaded.officialUrl, 'https://www.ibps.in');
+  });
+
+  test('Reg/Roll numbers are stored encrypted, read back plain, and go to the backup plain', () async {
+    await db.upsertApplication(app('a'));
+    await db.upsertVault(const VaultEntry(appId: 'a', registrationId: 'REG123', rollNumber: '9876'));
+    final raw = await db.rawVaultRowsForTest();
+    expect(raw.single['registration_id'], startsWith('v1:'));
+    expect(raw.single.values.join(' '), isNot(contains('REG123')));
+    expect((await db.getVault('a'))!.rollNumber, '9876');
+    expect((await db.exportVaultRows()).single['registration_id'], 'REG123');
+  });
+
+  test('numbers saved before encryption are encrypted at start, quietly for the backup', () async {
+    await db.upsertApplication(app('a'));
+    await db.rawInsertVaultForTest({'app_id': 'a', 'registration_id': 'OLD1', 'roll_number': null, 'notes': null, 'updated_at': 5});
+    expect(await db.encryptStoredIds(), 1);
+    final raw = (await db.rawVaultRowsForTest()).single;
+    expect(raw['registration_id'], startsWith('v1:'));
+    expect(raw['updated_at'], 5);
+    expect((await db.getVault('a'))!.registrationId, 'OLD1');
+    expect(await db.encryptStoredIds(), 0); // only once
+  });
+
+  test('a lost key reads as empty instead of crashing', () async {
+    final sealed = await cipher.encrypt('REG123');
+    final otherPhoneKey = LocalCipher(List.filled(32, 9));
+    expect(await otherPhoneKey.decryptOrNull(sealed), isNull);
+    expect(await cipher.decryptOrNull(sealed), 'REG123');
+    expect(await otherPhoneKey.decryptOrNull('PLAIN'), 'PLAIN'); // from before encryption
   });
 
   test('upsert updates in place and keeps the vault (no REPLACE cascade)', () async {
@@ -165,7 +196,7 @@ void main() {
         ));
     await v1.close();
 
-    final upgraded = await DatabaseService.open(factory: databaseFactoryFfi, path: path);
+    final upgraded = await DatabaseService.open(factory: databaseFactoryFfi, path: path, cipher: () async => cipher);
     final old = (await upgraded.getApplication('old'))!;
     expect(old.examName, 'RRB NTPC');
     expect(old.watcherStatus, isNull);

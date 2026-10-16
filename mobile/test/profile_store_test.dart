@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:exam_tracker/models/user_profile.dart';
 import 'package:exam_tracker/services/profile_store.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -15,7 +16,24 @@ void main() {
     experienceYears: 1,
   );
 
-  setUp(() => SharedPreferences.setMockInitialValues({}));
+  setUp(() {
+    SharedPreferences.setMockInitialValues({});
+    FlutterSecureStorage.setMockInitialValues({});
+  });
+
+  test('a profile in plain settings moves to encrypted storage and the plain copy is deleted', () async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('profile.cache', jsonEncode({'profile': profile.toJson(), 'saved_at': '2026-10-13T08:00:00Z'}));
+    expect((await ProfileStore.read())?.category, ReservationCategory.obc);
+    expect(prefs.getString('profile.cache'), isNull);
+    expect(await const FlutterSecureStorage().read(key: 'profile.cache'), contains('B_TECH'));
+    expect((await ProfileStore.read())?.degreeTitle, 'B_TECH'); // still there next time
+  });
+
+  test('saving never leaves a plain copy', () async {
+    await ProfileStore.write(profile);
+    expect((await SharedPreferences.getInstance()).getString('profile.cache'), isNull);
+  });
 
   test('profiles saved before backups existed (bare JSON) still load, without a date', () async {
     final prefs = await SharedPreferences.getInstance();

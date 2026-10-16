@@ -1,8 +1,10 @@
+import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
 import 'package:sqflite/sqflite.dart';
 
 import '../models/tracked_application.dart';
 import '../models/vault_entry.dart';
+import 'local_cipher.dart';
 
 /// Reference to an event this app wrote into the Android calendar.
 class CalendarEventRef {
@@ -21,15 +23,19 @@ class CalendarEventRef {
 
 /// Offline-first local store. All timestamps are UTC epoch milliseconds.
 class DatabaseService {
-  DatabaseService._(this._db);
+  DatabaseService._(this._db, this._cipher);
 
   final Database _db;
+
+  /// Encrypts Reg/Roll numbers and notes at rest (key in the Keystore-backed store).
+  final Future<LocalCipher> Function() _cipher;
 
   static const _fileName = 'exam_tracker.db';
   static const _version = 6;
 
   /// [factory]/[path] are injectable so tests can use sqflite_common_ffi in memory.
-  static Future<DatabaseService> open({DatabaseFactory? factory, String? path}) async {
+  static Future<DatabaseService> open(
+      {DatabaseFactory? factory, String? path, Future<LocalCipher> Function()? cipher}) async {
     final f = factory ?? databaseFactory;
     final dbPath = path ?? p.join(await f.getDatabasesPath(), _fileName);
     final db = await f.openDatabase(
@@ -41,7 +47,7 @@ class DatabaseService {
         onUpgrade: _onUpgrade,
       ),
     );
-    return DatabaseService._(db);
+    return DatabaseService._(db, cipher ?? LocalCipher.shared);
   }
 
   static Future<void> _onCreate(Database db, int version) async {
@@ -191,6 +197,49 @@ class DatabaseService {
   ];
   static const _vaultColumns = ['app_id', 'registration_id', 'roll_number', 'notes', 'updated_at'];
 
+  /// Vault columns stored encrypted.
+  static const _secretColumns = ['registration_id', 'roll_number', 'notes'];
+
+  Future<Map<String, Object?>> _sealRow(Map<String, Object?> row) async {
+    final cipher = await _cipher();
+    return {
+      ...row,
+      for (final k in _secretColumns)
+        if (row.containsKey(k)) k: await cipher.encryptOrNull(row[k]),
+    };
+  }
+
+  Future<Map<String, Object?>> _openRow(Map<String, Object?> row) async {
+    final cipher = await _cipher();
+    return {
+      ...row,
+      for (final k in _secretColumns)
+        if (row.containsKey(k)) k: await cipher.decryptOrNull(row[k]),
+    };
+  }
+
+  @visibleForTesting
+  Future<List<Map<String, Object?>>> rawVaultRowsForTest() => _db.query('credentials_vault');
+
+  @visibleForTesting
+  Future<void> rawInsertVaultForTest(Map<String, Object?> row) => _db.insert('credentials_vault', row);
+
+  /// Encrypts Reg/Roll numbers saved before they were encrypted (once, at start).
+  /// Leaves `updated_at` alone, so the backup doesn't see a change.
+  Future<int> encryptStoredIds() async {
+    var count = 0;
+    for (final row in await _db.query('credentials_vault')) {
+      final plain = [for (final k in _secretColumns) row[k]]
+          .whereType<String>()
+          .any((v) => v.isNotEmpty && !LocalCipher.isEncrypted(v));
+      if (!plain) continue;
+      await _db.update('credentials_vault', Map.of(await _sealRow(Map.of(row)))..remove('app_id'),
+          where: 'app_id = ?', whereArgs: [row['app_id']]);
+      count++;
+    }
+    return count;
+  }
+
   static Map<String, Object?> _only(Map<String, Object?> row, List<String> columns) => {
         for (final c in columns)
           if (row.containsKey(c)) c: row[c]
@@ -200,8 +249,9 @@ class DatabaseService {
   Future<List<Map<String, Object?>>> exportApplicationRows() async =>
       [for (final r in await _db.rawQuery('$_selectApps ORDER BY a.created_at')) Map.of(r)];
 
+  /// Decrypted: the backup carries the numbers themselves.
   Future<List<Map<String, Object?>>> exportVaultRows() async =>
-      [for (final r in await _db.query('credentials_vault')) Map.of(r)];
+      [for (final r in await _db.query('credentials_vault')) await _openRow(Map.of(r))];
 
   /// Writes merged backup rows in one transaction: applications are updated in
   /// place or inserted (never REPLACE, which would cascade-delete their vault rows
@@ -210,8 +260,9 @@ class DatabaseService {
     required Iterable<Map<String, Object?>> applications,
     required Iterable<Map<String, Object?>> vault,
     Iterable<String> removeIds = const [],
-  }) =>
-      _db.transaction((txn) async {
+  }) async {
+    final sealedVault = [for (final row in vault) await _sealRow(_only(row, _vaultColumns))];
+    await _db.transaction((txn) async {
         for (final id in removeIds) {
           await txn.delete('tracked_applications', where: 'id = ?', whereArgs: [id]);
         }
@@ -225,11 +276,11 @@ class DatabaseService {
           );
           if (updated == 0) await txn.insert('tracked_applications', data);
         }
-        for (final row in vault) {
-          await txn.insert('credentials_vault', _only(row, _vaultColumns),
-              conflictAlgorithm: ConflictAlgorithm.replace);
+        for (final row in sealedVault) {
+          await txn.insert('credentials_vault', row, conflictAlgorithm: ConflictAlgorithm.replace);
         }
       });
+  }
 
   // ---------------------------------------------------------------------------
   // tracked_applications
@@ -346,16 +397,16 @@ class DatabaseService {
 
   Future<VaultEntry?> getVault(String appId) async {
     final rows = await _db.query('credentials_vault', where: 'app_id = ?', whereArgs: [appId], limit: 1);
-    return rows.isEmpty ? null : VaultEntry.fromRow(rows.first);
+    return rows.isEmpty ? null : VaultEntry.fromRow(await _openRow(rows.first));
   }
 
   /// The vault row has no dependants, so REPLACE is safe here.
   /// Every saved Reg/Roll number ("Forgot PIN").
   Future<void> deleteAllVault() => _db.delete('credentials_vault');
 
-  Future<void> upsertVault(VaultEntry entry) => _db.insert(
+  Future<void> upsertVault(VaultEntry entry) async => _db.insert(
         'credentials_vault',
-        entry.toRow(DateTime.now()),
+        await _sealRow(entry.toRow(DateTime.now())),
         conflictAlgorithm: ConflictAlgorithm.replace,
       );
 

@@ -18,6 +18,11 @@ Future<void> main() async {
   tzdata.initializeTimeZones();
   final db = await DatabaseService.open();
   try {
+    await db.encryptStoredIds(); // Reg/Roll numbers saved before they were encrypted
+  } catch (_) {
+    // Stays readable as it was; tried again at the next start.
+  }
+  try {
     await GoogleAccountService.initialize(); // Google sign-in for the Drive backup; no-op if not set up
   } catch (_) {
     // A misconfigured OAuth client must not stop the offline app from starting.
