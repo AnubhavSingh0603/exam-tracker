@@ -38,15 +38,14 @@ const _ssc = 'Staff Selection Commission';
 const _sscWeb = 'https://ssc.gov.in';
 const _sscLogin = 'https://ssc.gov.in/login';
 const _upsc = 'Union Public Service Commission';
-const _upscWeb = 'https://upsc.gov.in';
-const _upscLogin = 'https://upsconline.nic.in';
+const _upscWeb = 'https://www.upsc.gov.in';
 const _ibps = 'Institute of Banking Personnel Selection';
 const _ibpsWeb = 'https://www.ibps.in';
 const _sbi = 'State Bank of India';
 const _sbiWeb = 'https://sbi.co.in/web/careers';
 const _rrb = 'Railway Recruitment Boards';
 const _rrbWeb = 'https://www.rrbcdg.gov.in';
-const _rrbLogin = 'https://www.rrbapply.gov.in';
+const _rrbLogin = 'https://www.rrbapply.gov.in/#/auth/landing';
 const _rbi = 'Reserve Bank of India';
 const _rbiWeb = 'https://opportunities.rbi.org.in';
 
@@ -86,30 +85,30 @@ const List<CatalogExam> examCatalog = [
 
   // ---- UPSC
   CatalogExam('upsc-cse', 'UPSC Civil Services (IAS)', _upsc,
-      officialUrl: _upscWeb, loginUrl: _upscLogin, stages: _pcs,
+      officialUrl: _upscWeb, stages: _pcs,
       aliases: ['civil services examination', 'ias', 'upsc cse']),
   CatalogExam('upsc-ese', 'UPSC Engineering Services (ESE)', _upsc,
-      officialUrl: _upscWeb, loginUrl: _upscLogin, stages: ['Prelims', 'Mains', 'Personality test'],
+      officialUrl: _upscWeb, stages: ['Prelims', 'Mains', 'Personality test'],
       aliases: ['engineering services examination', 'upsc ies', 'upsc ese']),
   CatalogExam('upsc-cds', 'UPSC CDS', _upsc,
-      officialUrl: _upscWeb, loginUrl: _upscLogin, stages: ['Written exam', 'SSB interview'],
+      officialUrl: _upscWeb, stages: ['Written exam', 'SSB interview'],
       aliases: ['combined defence services']),
   CatalogExam('upsc-nda', 'UPSC NDA', _upsc,
-      officialUrl: _upscWeb, loginUrl: _upscLogin, stages: ['Written exam', 'SSB interview'],
+      officialUrl: _upscWeb, stages: ['Written exam', 'SSB interview'],
       aliases: ['national defence academy']),
   CatalogExam('upsc-capf', 'UPSC CAPF (AC)', _upsc,
-      officialUrl: _upscWeb, loginUrl: _upscLogin, stages: ['Written exam', 'PET / Medical', 'Interview'],
+      officialUrl: _upscWeb, stages: ['Written exam', 'PET / Medical', 'Interview'],
       aliases: ['central armed police forces', 'assistant commandant']),
   CatalogExam('upsc-cms', 'UPSC Combined Medical Services', _upsc,
-      officialUrl: _upscWeb, loginUrl: _upscLogin, stages: ['CBT', 'Personality test'],
+      officialUrl: _upscWeb, stages: ['CBT', 'Personality test'],
       aliases: ['combined medical services', 'upsc cms']),
   CatalogExam('upsc-epfo', 'UPSC EPFO', _upsc,
-      officialUrl: _upscWeb, loginUrl: _upscLogin, stages: ['Recruitment test', 'Interview'],
+      officialUrl: _upscWeb, stages: ['Recruitment test', 'Interview'],
       aliases: ['enforcement officer', 'accounts officer epfo', 'apfc']),
   CatalogExam('upsc-geo', 'UPSC Geo-Scientist', _upsc,
-      officialUrl: _upscWeb, loginUrl: _upscLogin, stages: _pcs, aliases: ['combined geo-scientist', 'geo scientist']),
+      officialUrl: _upscWeb, stages: _pcs, aliases: ['combined geo-scientist', 'geo scientist']),
   CatalogExam('upsc-ies-iss', 'UPSC IES / ISS', _upsc,
-      officialUrl: _upscWeb, loginUrl: _upscLogin, stages: ['Written exam', 'Interview'],
+      officialUrl: _upscWeb, stages: ['Written exam', 'Interview'],
       aliases: ['indian economic service', 'indian statistical service']),
 
   // ---- Banking & insurance
@@ -253,7 +252,7 @@ const List<CatalogExam> examCatalog = [
   CatalogExam('appsc', 'APPSC Group 1 / 2', 'Andhra Pradesh PSC',
       officialUrl: 'https://psc.ap.gov.in', stages: _pcs, aliases: ['appsc']),
   CatalogExam('tgpsc', 'TGPSC Group 1 / 2', 'Telangana PSC',
-      officialUrl: 'https://www.tspsc.gov.in', stages: _pcs, aliases: ['tspsc', 'tgpsc']),
+      officialUrl: 'https://websitenew.tgpsc.gov.in', stages: _pcs, aliases: ['tspsc', 'tgpsc']),
   CatalogExam('opsc', 'OPSC OCS', 'Odisha PSC', officialUrl: 'https://www.opsc.gov.in', stages: _pcs,
       aliases: ['opsc', 'odisha civil services']),
   CatalogExam('gpsc', 'GPSC Class 1 / 2', 'Gujarat PSC',
