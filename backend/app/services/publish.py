@@ -20,11 +20,12 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.domain.enums import ItemKind, ItemStatus
+from app.domain.enums import ExamMilestone, ItemKind, ItemStatus
 from app.domain.qualifications import QualificationLevel
 from app.models import DiscoveredItem, JobPost, PostDetail
 from app.services.exam_watcher import classify_milestone
 from app.services.lifecycle import timeline_out
+from app.services.scraper_service import SECTION_FLAG
 from app.services.streams import infer_requirement
 
 SCHEMA_VERSION = 1
@@ -159,26 +160,45 @@ async def build_jobs_file(session: AsyncSession, *, now: datetime | None = None)
     return {"schema": SCHEMA_VERSION, "generated_at": now.isoformat(), "jobs": [job_json(j) for j in jobs]}
 
 
+def _section_milestone(item: DiscoveredItem) -> ExamMilestone | None:
+    for flag in item.keywords or []:
+        if flag.startswith(SECTION_FLAG):
+            try:
+                return ExamMilestone(flag[len(SECTION_FLAG) :])
+            except ValueError:
+                return None
+    return None
+
+
 async def build_notices_file(session: AsyncSession, *, now: datetime | None = None) -> dict[str, Any]:
     now = now or datetime.now(UTC)
     items = await session.scalars(
         select(DiscoveredItem)
         .where(
             DiscoveredItem.kind.in_([ItemKind.ALERT, ItemKind.OTHER]),
-            DiscoveredItem.status != ItemStatus.BASELINE,
+            # First-crawl ("baseline") notices count too: an admit card already out
+            # when a source is added is exactly what a tracked exam needs.
+            DiscoveredItem.status != ItemStatus.SKIPPED,
             DiscoveredItem.created_at >= now - NOTICES_WINDOW,
         )
         .order_by(DiscoveredItem.created_at.desc())
     )
     notices = []
+    seen: set[str] = set()  # a post listed in two sections is one notice
     for item in items:
-        milestone = classify_milestone(item.title)
+        if item.url in seen:
+            continue
+        milestone = classify_milestone(item.title) or _section_milestone(item)
         if milestone is None:
             continue  # navigation links, tenders, syllabi...
+        seen.add(item.url)
         notices.append(
             {
                 "title": item.title,
-                "url": item.url,
+                "url": item.url,  # the notice's identity (never changes)
+                # The official link from the notice's page (admit card download,
+                # answer key, result), when found: what the app's button opens.
+                "link": item.apply_url if item.kind == ItemKind.ALERT and item.apply_url else None,
                 "milestone": milestone.value,
                 "published_at": _iso(item.published_at),
                 "seen_at": _iso(item.created_at),

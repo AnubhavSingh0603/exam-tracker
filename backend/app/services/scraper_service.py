@@ -23,6 +23,7 @@ fall back to the generic DOM parser when their selectors find nothing.
 from __future__ import annotations
 
 import hashlib
+import html
 import json
 import logging
 import random
@@ -31,7 +32,7 @@ import uuid
 from collections.abc import Iterable
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime, timedelta
-from urllib.parse import urljoin, urlsplit, urlunsplit
+from urllib.parse import parse_qs, urljoin, urlsplit, urlunsplit
 from zoneinfo import ZoneInfo
 
 from bs4 import BeautifulSoup, Tag
@@ -156,6 +157,66 @@ def classify(link: Link) -> tuple[ItemKind, list[str]]:
     if (link.pdf_hint or _looks_like_pdf_url(link.url)) and recruitment and not noise:
         return ItemKind.NOTIFICATION_PDF, flags
     return ItemKind.OTHER, flags
+
+
+# Aggregator sections that are notices by definition: a post listed under "Admit
+# Card" is an admit-card notice even when its title is just "SSC CGL 2026 Tier-1".
+_SECTION_MARKERS = (
+    ("admit-card", "admit_card"),
+    ("admitcard", "admit_card"),
+    ("answer-key", "answer_key"),
+    ("answerkey", "answer_key"),
+    ("result", "result"),
+)
+SECTION_FLAG = "section:"
+
+
+def section_milestone(source_url: str) -> str | None:
+    """'admit_card' / 'answer_key' / 'result' for a source that is such a section: a
+    section page (/admit-card/) or an API seed marked with section=admit-card."""
+    parts = urlsplit(source_url)
+    marked = parse_qs(parts.query).get("section", [""])[0].lower()
+    for marker, milestone in _SECTION_MARKERS:
+        if marked and marked.startswith(marker):
+            return milestone
+    for segment in (s for s in parts.path.lower().split("/") if s):
+        for marker, milestone in _SECTION_MARKERS:
+            if segment == marker or segment.startswith(marker):
+                return milestone
+    return None
+
+
+# On a notice's page, the row whose label names the action ("Download Admit Card |
+# Click Here") holds the official link.
+_ACTION_LABELS = {
+    "admit_card": re.compile(r"admit card|hall ticket|call letter|city (?:intimation|slip)|exam city", re.I),
+    "answer_key": re.compile(r"answer key|response sheet|objection", re.I),
+    "result": re.compile(r"result|merit list|score ?card|cut ?off|marks", re.I),
+}
+
+
+def find_notice_link(html: bytes | str, base_url: str, milestone: str) -> str | None:
+    """The official link for the notice's action (the admit card download, the answer
+    key, the result) from the page's link table, or None."""
+    label_re = _ACTION_LABELS.get(milestone)
+    if label_re is None:
+        return None
+    soup = _soup(html)
+    for tr in soup.find_all("tr"):
+        if tr.find("tr") is not None or len(tr.find_all(["td", "th"], recursive=False)) > 3:
+            continue  # layout tables wrap the whole page; we want the short link rows
+        label = clean_text(tr.get_text(" ", strip=True), 200)
+        if len(label) > 120 or not label_re.search(label):
+            continue
+        for a in tr.find_all("a", href=True):
+            url = canonical_url(urljoin(base_url, str(a["href"])))
+            parts = urlsplit(url)
+            if parts.scheme not in ("http", "https") or is_social_link(url):
+                continue
+            if _is_sarkari_result(parts.netloc) and "/wp-content/uploads/" not in parts.path:
+                continue  # back into the aggregator itself
+            return url
+    return None
 
 
 # =============================================================================
@@ -496,6 +557,58 @@ def parse_ssc_api(body: bytes | str, base_url: str) -> list[Link]:  # noqa: ARG0
     return out
 
 
+# What a post title announces, latest stage first ("Admit Card ... Result Out" is a result).
+_NOTICE_KINDS = (
+    ("result", re.compile(r"\bresult|merit list|score ?card|cut ?off", re.I)),
+    ("answer_key", re.compile(r"answer key|response sheet", re.I)),
+    (
+        "admit_card",
+        re.compile(r"admit card|hall ticket|call letter|exam city|city (?:slip|intimation)", re.I),
+    ),
+    ("exam_date", re.compile(r"exam date|exam schedule|time ?table", re.I)),
+)
+
+_STAGE_TOKEN = re.compile(
+    r"\b(tier|phase|paper|cbt|stage)[\s-]*(i{1,3}v?|iv|v|\d)\b|\b(prelims?|preliminary|pre|mains|interview|final)\b",
+    re.I,
+)
+
+
+def notice_key(title: str, section: str | None) -> str:
+    """What a notice on a reused page is about: 'admit_card-tier-i', 'result-final'.
+    The site keeps one page per exam (/ssc-cgl-2026/) and updates it from admit card to
+    answer key to result, so the page address alone can't tell the notices apart."""
+    kind = next((k for k, rx in _NOTICE_KINDS if rx.search(title)), None) or section or "notice"
+    stage = _STAGE_TOKEN.search(title)
+    if stage is None:
+        return kind
+    token = (stage.group(1) and f"{stage.group(1)}-{stage.group(2)}") or stage.group(3)
+    return f"{kind}-{token.lower()}"
+
+
+def parse_wordpress_posts(body: bytes | str, base_url: str) -> list[Link]:
+    """A WordPress category through its public REST API (/wp-json/wp/v2/posts): stable
+    JSON instead of theme markup. Each post becomes one notice per stage it announces."""
+    section = section_milestone(base_url)
+    out: list[Link] = []
+    for post in json.loads(body) or []:
+        link = str(post.get("link") or "")
+        title = clean_text(html.unescape(str((post.get("title") or {}).get("rendered") or "")), 300)
+        if not link.startswith("http") or not title:
+            continue
+        sep = "&" if "?" in link else "?"
+        out.append(
+            Link(
+                url=f"{canonical_url(link)}{sep}notice={notice_key(title, section)}",
+                title=title,
+                context=title,
+                published_at=_parse_iso(post.get("modified") or post.get("date")),
+                detail_page=True,
+            )
+        )
+    return out
+
+
 def _parse_ddmmyyyy(text: str) -> datetime | None:
     m = re.search(r"(\d{1,2})[/-](\d{1,2})[/-](\d{4})", text)
     if not m:
@@ -553,6 +666,7 @@ LIST_PARSERS = {
     ParserKey.SARKARI_RESULT: parse_sarkari_result_list,
     ParserKey.FREE_JOB_ALERT: parse_free_job_alert_list,
     ParserKey.SSC_API: parse_ssc_api,
+    ParserKey.WORDPRESS_POSTS: parse_wordpress_posts,
 }
 DETAIL_PARSERS = {
     ParserKey.SARKARI_RESULT: parse_sarkari_result_detail,
@@ -688,6 +802,11 @@ class SourceCrawler:
                 continue
             known.add(link.url)
             kind, flags = classify(link)
+            # A post listed in an Admit Card / Answer Key / Result section is that notice,
+            # whatever its title says (not a job page to mine for a notification).
+            section = section_milestone(source.url)
+            if section and link.detail_page:
+                kind, flags = ItemKind.ALERT, [*flags, f"{SECTION_FLAG}{section}"]
             actionable = kind in (ItemKind.NOTIFICATION_PDF, ItemKind.DETAIL_PAGE)
             closed = closed_note(f"{link.title} {link.context}", today) if actionable else None
             if kind is ItemKind.OTHER:

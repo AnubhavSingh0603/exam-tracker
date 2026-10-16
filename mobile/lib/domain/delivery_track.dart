@@ -94,8 +94,8 @@ DeliveryTrack buildDeliveryTrack(TrackedApplication app, DateTime now) {
       details: v.details,
       actions: [
         ...v.actions,
-        if (found != null && !v.actions.any((a) => a.url == found.url))
-          StageAction(_watcherActions[i]!, found.url, primary: v.actions.every((a) => !a.primary)),
+        if (found != null && !v.actions.any((a) => a.url == found.open))
+          StageAction(_watcherActions[i]!, found.open, primary: v.actions.every((a) => !a.primary)),
       ],
     ));
   }

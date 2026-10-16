@@ -54,11 +54,22 @@ SEEDS: tuple[Seed, ...] = (
             f"https://sarkariresult.com.cm/{path}/",
             ParserKey.SARKARI_RESULT,
         )
-        for label, path in (
-            ("Latest Jobs", "latest-jobs"),
-            ("Admit Cards", "admit-card"),
-            ("Answer Keys", "answer-key"),
-            ("Results", "result"),
+        for label, path in (("Latest Jobs", "latest-jobs"),)
+    ),
+    # Its Admit Card / Answer Key / Result sections through the site's public WordPress
+    # API (categories 3, 4, 6): the section pages' markup lists no posts we can read.
+    # "section=" is ignored by WordPress and tells the pipeline which notices these are.
+    *(
+        Seed(
+            f"SarkariResult.com.cm (unofficial) · {label}",
+            f"https://sarkariresult.com.cm/wp-json/wp/v2/posts?categories={category}&per_page=50"
+            f"&_fields=id,date,modified,link,title&section={section}",
+            ParserKey.WORDPRESS_POSTS,
+        )
+        for label, category, section in (
+            ("Admit Cards", 3, "admit-card"),
+            ("Answer Keys", 4, "answer-key"),
+            ("Results", 6, "result"),
         )
     ),
     Seed("SSC · Notice Board", SSC_NOTICE_BOARD_API, ParserKey.SSC_API),
@@ -67,8 +78,18 @@ SEEDS: tuple[Seed, ...] = (
 )
 
 
+# Seeds replaced by better ones: switched off (kept for their history).
+RETIRED_SEED_URLS = frozenset(
+    f"https://sarkariresult.com.cm/{path}/" for path in ("admit-card", "answer-key", "result")
+)
+
+
 async def ensure_seed_sources(session: AsyncSession) -> int:
     """Insert missing seeds; never re-enables a seed the owner disabled."""
+    for retired in await session.scalars(
+        select(Source).where(Source.kind == SourceKind.SEED, Source.url.in_(RETIRED_SEED_URLS))
+    ):
+        retired.enabled = False
     existing = set(await session.scalars(select(Source.url).where(Source.kind == SourceKind.SEED)))
     added = 0
     for seed in SEEDS:

@@ -31,17 +31,25 @@ from app.core.config import get_settings  # noqa: E402
 from app.db.base import Base  # noqa: E402
 from app.db.session import SessionLocal, engine  # noqa: E402
 from app.domain.enums import ItemKind, ItemStatus  # noqa: E402
-from app.models import DiscoveredItem, JobPost  # noqa: E402
+from app.models import DiscoveredItem, JobPost, Source  # noqa: E402
 from app.services.discovery_pipeline import (  # noqa: E402
     MAX_ATTEMPTS,
     follow_detail_pages,
     ingest_pending_pdfs,
+    resolve_notice_links,
     run_due_crawls,
 )
 from app.services.http_fetcher import Fetcher  # noqa: E402
 from app.services.pdf_parser import quota_left, usage  # noqa: E402
 from app.services.publish import SCHEMA_VERSION, build_jobs_file, build_notices_file  # noqa: E402
-from app.services.scraper_service import WATCHLIST, closing_date, local_today, watchlist_name  # noqa: E402
+from app.services.scraper_service import (  # noqa: E402
+    SECTION_FLAG,
+    WATCHLIST,
+    closing_date,
+    local_today,
+    section_milestone,
+    watchlist_name,
+)
 from app.services.seeds import ensure_seed_sources  # noqa: E402
 
 log = logging.getLogger("pipeline")
@@ -61,6 +69,7 @@ ADDED_COLUMNS = (
     "ALTER TABLE job_posts ADD COLUMN IF NOT EXISTS employment_type VARCHAR(20)",
     "ALTER TABLE post_details ADD COLUMN IF NOT EXISTS pay_scale VARCHAR(300)",
     "ALTER TABLE post_details ADD COLUMN IF NOT EXISTS monthly_pay_min INTEGER",
+    "ALTER TYPE parser_key ADD VALUE IF NOT EXISTS 'wordpress_posts'",
 )
 
 
@@ -96,6 +105,33 @@ SETUP_ERRORS = (
     "%Timeout%",
     "%ConnectError%",
 )
+
+
+async def reclassify_section_notices() -> int:
+    """Posts from Admit Card / Answer Key / Result sections that earlier runs filed as job
+    pages become the notices they are (published in notices.json, links resolved).
+    Idempotent: nothing left to change after the first run."""
+    async with SessionLocal() as session:
+        changed = 0
+        for source in await session.scalars(select(Source)):
+            section = section_milestone(source.url)
+            if section is None:
+                continue
+            items = await session.scalars(
+                select(DiscoveredItem).where(
+                    DiscoveredItem.source_id == source.id, DiscoveredItem.kind == ItemKind.DETAIL_PAGE
+                )
+            )
+            for item in items:
+                item.kind = ItemKind.ALERT
+                if item.status != ItemStatus.BASELINE:
+                    item.status = ItemStatus.DONE
+                item.keywords = [*(item.keywords or []), f"{SECTION_FLAG}{section}"]
+                item.attempts = 0  # let resolve_notice_links open it for the official link
+                item.apply_url = None
+                changed += 1
+        await session.commit()
+        return changed
 
 
 async def reopen_open_jobs(now: datetime) -> int:
@@ -209,9 +245,12 @@ async def run(out: Path, ingest_rounds: int, ingest_minutes: int = 25) -> dict[s
     stats: dict[str, object] = {"schema": SCHEMA_VERSION, "started_at": started.isoformat()}
     try:
         stats["jobs_reopened"] = await reopen_open_jobs(started)
+        stats["notices_reclassified"] = await reclassify_section_notices()
         stats["sources_crawled"] = await run_due_crawls(SessionLocal, fetcher, settings)
         async with SessionLocal() as session:
             stats["detail_pages"] = await follow_detail_pages(session, fetcher, settings)
+        async with SessionLocal() as session:
+            stats["notice_links"] = await resolve_notice_links(session, fetcher)
 
         ingested = 0
         stats["gemini_quota_exhausted"] = False

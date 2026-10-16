@@ -90,6 +90,7 @@ class ParserKey(StrEnum):
     FREE_JOB_ALERT = "free_job_alert"
     SSC_API = "ssc_api"
     TELEGRAM = "telegram"
+    WORDPRESS_POSTS = "wordpress_posts"  # a WordPress site's /wp-json/wp/v2/posts (one category)
 
 
 class ItemKind(StrEnum):

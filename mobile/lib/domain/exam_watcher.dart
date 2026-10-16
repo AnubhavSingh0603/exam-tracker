@@ -8,6 +8,7 @@ library;
 import 'package:flutter/foundation.dart';
 
 import '../models/tracked_application.dart';
+import 'exam_catalog.dart';
 
 /// Backend `ExamMilestone` wire values.
 enum Milestone {
@@ -316,7 +317,33 @@ bool namesThisExam(String text, String examName, String? organization) {
   final examYears = _years(examName);
   final textYears = _years(text);
   if (examYears.isNotEmpty && textYears.isNotEmpty && examYears.intersection(textYears).isEmpty) return false;
-  return alertMatchesExam(text, examName, organization);
+  if (alertMatchesExam(text, examName, organization)) return true;
+  // "SSC Combined Graduate Level Tier 1 Admit Card" is "SSC CGL": the exam list knows
+  // both names (and needs the board named too, so look-alikes don't match).
+  final mine = matchCatalogExam('$examName ${organization ?? ''}');
+  return mine != null && matchCatalogExam(text)?.id == mine.id;
+}
+
+const _romanStage = {'i': '1', 'ii': '2', 'iii': '3', 'iv': '4', 'v': '5'};
+
+/// "tier-1", "cbt-2", "prelims", "mains", "interview", or null when none is named.
+String? stageKey(String text) {
+  final t = text.toLowerCase();
+  final m = RegExp(r'\b(tier|phase|paper|cbt|stage)[\s-]*(iv|v|i{1,3}|\d)\b').firstMatch(t);
+  if (m != null) return '${m.group(1)}-${_romanStage[m.group(2)] ?? m.group(2)}';
+  if (RegExp(r'\b(?:prelim\w*|preliminary|pre)\b').hasMatch(t)) return 'prelims';
+  if (RegExp(r'\bmains?\b').hasMatch(t)) return 'mains';
+  if (RegExp(r'\b(?:interview|personality test)\b').hasMatch(t)) return 'interview';
+  return null;
+}
+
+/// A notice about another stage than the one tracked ("Tier 1 Admit Card" for an
+/// exam tracked at Tier-2). One naming no stage is about the whole exam.
+bool namesAnotherStage(String text, String? trackedStage) {
+  if (trackedStage == null) return false;
+  final mine = stageKey(trackedStage);
+  final theirs = stageKey(text);
+  return mine != null && theirs != null && mine != theirs;
 }
 
 /// A recruitment's own page (".../cen-03-2026/") rather than a whole notice board:
@@ -332,11 +359,14 @@ bool isExamSpecificPage(String url) {
 /// A link on a page (or in notices.json) with the text around it.
 @immutable
 class PageLink {
-  const PageLink({required this.url, required this.title, this.context = ''});
+  const PageLink({required this.url, required this.title, this.context = '', this.link});
 
   final String url;
   final String title;
   final String context;
+
+  /// notices.json: the official link the pipeline found on the notice's page.
+  final String? link;
 }
 
 final _tracking = RegExp(r'^(utm_|fbclid|gclid|ref$|amp$)');
@@ -367,6 +397,7 @@ class DetectedUpdate {
     required this.source,
     this.eventDate,
     this.eventEnd,
+    this.link,
   });
 
   final Milestone milestone;
@@ -374,6 +405,11 @@ class DetectedUpdate {
   final String url;
   final UpdateSource source;
   final DateTime? eventDate;
+
+  /// The official link for it (admit card download, answer key, result), if known.
+  final String? link;
+
+  String get open => link ?? url;
 
   /// Last day, when the notice gives a window ("12–19 October").
   final DateTime? eventEnd;
@@ -388,6 +424,7 @@ List<DetectedUpdate> detectUpdates(
   required bool examSpecificPage,
   required Set<String> knownUrls,
   DateTime? now,
+  String? stage,
 }) {
   final found = <DetectedUpdate>[];
   final seen = {...knownUrls};
@@ -400,6 +437,7 @@ List<DetectedUpdate> detectUpdates(
     if (milestone == null) continue;
     final textYears = _years(text);
     if (examYears.isNotEmpty && textYears.isNotEmpty && examYears.intersection(textYears).isEmpty) continue;
+    if (namesAnotherStage(text, stage)) continue; // a Tier 1 notice for an exam tracked at Tier-2
     if (!examSpecificPage && !namesThisExam(text, examName, organization)) continue;
     seen.add(url);
     final title = link.title.isEmpty ? text : link.title;
@@ -411,6 +449,7 @@ List<DetectedUpdate> detectUpdates(
       source: source,
       eventDate: window?.start,
       eventEnd: window?.end,
+      link: link.link,
     ));
   }
   return found;
@@ -460,24 +499,24 @@ Map<String, dynamic> fillTimeline(Map<String, dynamic> timeline, DetectedUpdate 
 
   switch (u.milestone) {
     case Milestone.admitCard:
-      t['admit_card_url'] = u.url;
+      t['admit_card_url'] = u.open;
       firstDate('admit_card_release');
       // "Admit Card (Exam on 14.12.2026)": the printed date is the exam date, if none is known yet.
       if (usable && t['exam_start'] == null) setExam();
     case Milestone.examSchedule || Milestone.postponed:
-      if (text.contains('city') || text.contains('intimation')) t['exam_city_slip_url'] = u.url;
+      if (text.contains('city') || text.contains('intimation')) t['exam_city_slip_url'] = u.open;
       if (usable) setExam(); // a newer schedule/postponement notice wins
     case Milestone.answerKey:
       if (text.contains('objection') || text.contains('challenge')) {
-        t['challenge_portal_url'] = u.url;
+        t['challenge_portal_url'] = u.open;
       } else if (text.contains('question paper')) {
-        t['question_paper_url'] = u.url;
+        t['question_paper_url'] = u.open;
       } else {
-        t['answer_key_url'] = u.url;
+        t['answer_key_url'] = u.open;
         firstDate('answer_key_release');
       }
     case Milestone.result:
-      t[text.contains('score') ? 'scorecard_url' : 'merit_list_url'] = u.url;
+      t[text.contains('score') ? 'scorecard_url' : 'merit_list_url'] = u.open;
       firstDate('result_date');
   }
   return t;
@@ -502,7 +541,13 @@ Map<String, dynamic> refreshExamDates(Map<String, dynamic> timeline, List<ExamUp
     t = fillTimeline(
       t,
       DetectedUpdate(
-          milestone: m, title: u.title, url: u.url, source: UpdateSource.aggregator, eventDate: w.start, eventEnd: end),
+          milestone: m,
+          title: u.title,
+          url: u.url,
+          source: UpdateSource.aggregator,
+          eventDate: w.start,
+          eventEnd: end,
+          link: u.link),
       seen,
     );
   }

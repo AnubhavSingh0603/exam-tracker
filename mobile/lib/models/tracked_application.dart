@@ -51,11 +51,21 @@ class ExamUpdate {
     this.eventDate,
     this.detectedAt,
     this.source,
+    this.link,
   });
 
   final String milestone; // admit_card | exam_schedule | postponed | answer_key | result
   final String title;
+
+  /// The notice's identity (an aggregator's page for it).
   final String url;
+
+  /// The official link from that page (the admit card download, the answer key, the
+  /// result), when the pipeline found one.
+  final String? link;
+
+  /// What a tap opens: the official link, else the notice's page.
+  String get open => link ?? url;
   final DateTime? eventDate;
   final DateTime? detectedAt;
   final String? source; // official | aggregator
@@ -75,6 +85,7 @@ class ExamUpdate {
         eventDate: _day(j['event_date']),
         detectedAt: j['detected_at'] is String ? DateTime.tryParse(j['detected_at'] as String) : null,
         source: j['source'] as String?,
+        link: j['link'] as String?,
       );
 
   Map<String, Object?> toJson() => {
@@ -84,6 +95,7 @@ class ExamUpdate {
         'event_date': eventDate == null ? null : _iso(eventDate!),
         'detected_at': detectedAt?.toUtc().toIso8601String(),
         'source': source,
+        if (link != null) 'link': link,
       };
 }
 

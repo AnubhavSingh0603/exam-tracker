@@ -11,8 +11,8 @@ import logging
 import uuid
 from collections import defaultdict
 from collections.abc import Callable
-from datetime import UTC, datetime
-from urllib.parse import urlsplit
+from datetime import UTC, datetime, timedelta
+from urllib.parse import parse_qs, urlsplit
 
 from bs4 import BeautifulSoup
 from sqlalchemy import func, or_, select, update
@@ -32,11 +32,13 @@ from app.services.pdf_parser import (
 )
 from app.services.scraper_service import (
     DETAIL_PARSERS,
+    SECTION_FLAG,
     SourceCrawler,
     classify,
     clean_text,
     closed_note,
     find_apply_link,
+    find_notice_link,
     job_priority,
     local_today,
 )
@@ -91,6 +93,62 @@ async def run_due_crawls(
 # -----------------------------------------------------------------------------
 # 2. Aggregator detail pages -> official notification PDF links
 # -----------------------------------------------------------------------------
+
+
+NOTICE_LINKS_PER_RUN = 80
+NOTICE_LINK_WINDOW_DAYS = 21
+
+
+def notice_kind(item: DiscoveredItem) -> str | None:
+    """What the post itself announces (from its ?notice= key), else its section: a
+    post filed under Results that is really an answer key wants the answer-key link."""
+    key = parse_qs(urlsplit(item.url).query).get("notice", [""])[0]
+    kind = next((k for k in ("admit_card", "answer_key", "result", "exam_date") if key.startswith(k)), None)
+    if kind == "exam_date":
+        return "admit_card"  # an exam date's useful link is the admit card / login
+    return kind or notice_section(item)
+
+
+def notice_section(item: DiscoveredItem) -> str | None:
+    """'admit_card' / 'answer_key' / 'result' for a notice found in such a section."""
+    for flag in item.keywords or []:
+        if flag.startswith(SECTION_FLAG):
+            return flag[len(SECTION_FLAG) :]
+    return None
+
+
+async def resolve_notice_links(
+    session: AsyncSession, fetcher: Fetcher, *, limit: int = NOTICE_LINKS_PER_RUN
+) -> int:
+    """For notices from Admit Card / Answer Key / Result sections, opens the post once
+    (twice at most) and keeps the official link from its link table in apply_url: the
+    app's button then goes to the admit card itself, not to the aggregator's page."""
+    since = datetime.now(UTC) - timedelta(days=NOTICE_LINK_WINDOW_DAYS)
+    candidates = await session.scalars(
+        select(DiscoveredItem)
+        .where(
+            DiscoveredItem.kind == ItemKind.ALERT,
+            DiscoveredItem.apply_url.is_(None),
+            DiscoveredItem.attempts < 2,
+            DiscoveredItem.created_at >= since,
+        )
+        .order_by(DiscoveredItem.created_at.desc())
+        .limit(limit * 3)
+    )
+    resolved = 0
+    for item in [i for i in candidates if notice_section(i)][:limit]:
+        item.attempts += 1
+        try:
+            res = await fetcher.get(item.url, max_bytes=get_settings().max_page_bytes)
+        except FetchError:
+            await session.commit()
+            continue
+        link = find_notice_link(res.body, res.url, notice_kind(item) or "")
+        if link:
+            item.apply_url = link[:2000]
+            resolved += 1
+        await session.commit()
+    return resolved
 
 
 async def follow_detail_pages(

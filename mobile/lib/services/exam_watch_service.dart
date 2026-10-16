@@ -76,6 +76,7 @@ class ExamWatchService {
             examSpecificPage: isExamSpecificPage(portal),
             knownUrls: known,
             now: at,
+            stage: app.tierName,
           ));
         }
       }
@@ -87,6 +88,7 @@ class ExamWatchService {
         examSpecificPage: false,
         knownUrls: {...known, for (final d in detected) d.url},
         now: at,
+        stage: app.tierName,
       ));
       if (detected.isEmpty) continue;
       findings.add(await _record(app, detected, at));
@@ -103,6 +105,7 @@ class ExamWatchService {
           milestone: d.milestone.wire,
           title: d.title,
           url: d.url,
+          link: d.link,
           eventDate: d.eventDate,
           detectedAt: at,
           source: d.source.name,
@@ -131,7 +134,7 @@ class ExamWatchService {
       return [
         for (final n in (data['notices'] as List<dynamic>? ?? const []))
           if (n is Map<String, dynamic> && n['url'] is String)
-            PageLink(url: n['url'] as String, title: n['title'] as String? ?? ''),
+            PageLink(url: n['url'] as String, title: n['title'] as String? ?? '', link: n['link'] as String?),
       ];
     } catch (_) {
       return const []; // offline or the pipeline hasn't run yet: portals still get checked

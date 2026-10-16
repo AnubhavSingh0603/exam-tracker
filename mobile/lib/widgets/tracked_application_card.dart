@@ -541,7 +541,7 @@ class _LatestNotice extends StatelessWidget {
   Widget build(BuildContext context) {
     final text = Theme.of(context).textTheme;
     return InkWell(
-      onTap: () => openExternal(context, update.url),
+      onTap: () => openExternal(context, update.open),
       borderRadius: BorderRadius.circular(AppRadii.control),
       child: Padding(
         padding: const EdgeInsets.symmetric(vertical: 4),

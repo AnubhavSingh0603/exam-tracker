@@ -40,7 +40,7 @@ Future<int> runWatchAndNotify(DatabaseService db, {bool force = false}) async {
         count++;
         final (title, body) = notificationText(u.milestone, f.after.examName, u.title);
         await NotificationService.show(
-            key: '${f.after.id}-${u.milestone.wire}', title: title, body: body, url: u.url);
+            key: '${f.after.id}-${u.milestone.wire}', title: title, body: body, url: u.open);
       }
       if (f.after.calendarSynced && f.after.effectiveExamAt != f.before.effectiveExamAt) {
         try {
