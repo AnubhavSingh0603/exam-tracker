@@ -14,8 +14,20 @@ void showCalmSnack(BuildContext context, String message, {SnackBarAction? action
 
 /// Copies [value]. Sensitive values are wiped from the clipboard after 45 s,
 /// but only if the user hasn't copied something else in the meantime.
+const _clipboard = MethodChannel('jobsummit/clipboard');
+
 Future<void> copyToClipboard(BuildContext context, String label, String value, {bool sensitive = false}) async {
-  await Clipboard.setData(ClipboardData(text: value));
+  if (sensitive) {
+    // Marked sensitive (no preview, kept out of keyboard clipboard history); a plain
+    // copy where that isn't available (tests, other platforms).
+    try {
+      await _clipboard.invokeMethod<void>('copySensitive', {'text': value});
+    } catch (_) {
+      await Clipboard.setData(ClipboardData(text: value));
+    }
+  } else {
+    await Clipboard.setData(ClipboardData(text: value));
+  }
   unawaited(HapticFeedback.lightImpact());
   if (sensitive) {
     Timer(_sensitiveClearAfter, () async {
