@@ -205,11 +205,28 @@ class TrackedApplication {
   /// Exam date the user entered, else the one the notification announced.
   DateTime? get effectiveExamAt => examAt ?? timeline?.examStart;
 
-  /// The date that matters *now* for this application.
-  DateTime? get focusDate => switch (status) {
-        ApplicationStatus.applied => effectiveExamAt ?? deadline,
-        ApplicationStatus.admitCardLive || ApplicationStatus.examScheduled => effectiveExamAt,
-      };
+  /// Last day of the exam: a window's end ("12–19 October"), else its one day. A
+  /// date the user entered wins over the notice's.
+  DateTime? get examEnd => examAt ?? timeline?.examEnd ?? timeline?.examStart;
+
+  /// The exam has happened (its last day is over).
+  bool examOver(DateTime now) {
+    final end = examEnd;
+    return end != null && now.isAfter(DateTime(end.year, end.month, end.day, 23, 59, 59));
+  }
+
+  /// The date that matters *now*: the exam until it is over (its last day once a
+  /// window has started), else an application deadline still ahead. Null once the
+  /// exam is done: what comes next (answer key, result) has no fixed date.
+  DateTime? focusDateAt(DateTime now) {
+    final start = effectiveExamAt;
+    if (start != null) {
+      if (examOver(now)) return null;
+      return now.isBefore(start) ? start : examEnd;
+    }
+    final due = deadline;
+    return status == ApplicationStatus.applied && due != null && due.isAfter(now) ? due : null;
+  }
 
   /// Where you log in to pay, correct the form or download the admit card: the
   /// application page, else the official website.

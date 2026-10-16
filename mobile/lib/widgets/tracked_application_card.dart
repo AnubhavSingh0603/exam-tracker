@@ -22,7 +22,7 @@ enum _SyncState { idle, syncing, done }
 
 enum _Panel { none, progress, credentials }
 
-enum _MenuAction { admitCardLive, examScheduled, backToApplied, editLinks, delete }
+enum _MenuAction { admitCardLive, examScheduled, examDone, backToApplied, editLinks, delete }
 
 /// A tracked exam: name, where it is now and the one next step, copyable
 /// Reg/Roll numbers, Candidate login + Official site, and (tap the card) its
@@ -91,6 +91,16 @@ class _TrackedApplicationCardState extends ConsumerState<TrackedApplicationCard>
         await notifier.setStatus(app.id, ApplicationStatus.examScheduled, examAt: when);
         // Keep the phone calendar honest if it was already synced.
         if (app.calendarSynced && mounted) await _syncAfterReload();
+      case _MenuAction.examDone:
+        // The exam's own first day if it has passed, else yesterday: either way the
+        // track moves on to the answer key.
+        final today = DateTime.now();
+        final start = app.effectiveExamAt;
+        final yesterday = DateTime(today.year, today.month, today.day - 1, 12);
+        final when = start != null && start.isBefore(DateTime(today.year, today.month, today.day))
+            ? start
+            : yesterday;
+        await notifier.setStatus(app.id, ApplicationStatus.examScheduled, examAt: when);
       case _MenuAction.backToApplied:
         await notifier.setStatus(app.id, ApplicationStatus.applied);
       case _MenuAction.editLinks:
@@ -165,10 +175,12 @@ class _TrackedApplicationCardState extends ConsumerState<TrackedApplicationCard>
   Future<DateTime?> _pickExamDateTime() async {
     final now = DateTime.now();
     final initial = app.examAt?.toLocal() ?? now.add(const Duration(days: 30));
+    // Past dates too: an exam already written moves the track on to the answer key.
+    final first = now.subtract(const Duration(days: 365));
     final date = await showDatePicker(
       context: context,
-      initialDate: initial.isBefore(now) ? now : initial,
-      firstDate: now.subtract(const Duration(days: 1)),
+      initialDate: initial.isBefore(first) ? first : initial,
+      firstDate: first,
       lastDate: now.add(const Duration(days: 730)),
       helpText: 'Exam date',
     );
@@ -186,7 +198,7 @@ class _TrackedApplicationCardState extends ConsumerState<TrackedApplicationCard>
   Widget build(BuildContext context) {
     final text = Theme.of(context).textTheme;
     final colors = context.urgencyColors;
-    final focus = app.focusDate;
+    final focus = app.focusDateAt(widget.now);
     final track = buildDeliveryTrack(app, widget.now);
 
     return AppCard(
@@ -209,7 +221,7 @@ class _TrackedApplicationCardState extends ConsumerState<TrackedApplicationCard>
               const SizedBox(width: 8),
               Padding(
                 padding: const EdgeInsets.only(top: 4),
-                child: CountdownPill(due: focus, now: widget.now),
+                child: _DatePill(app: app, now: widget.now),
               ),
               PopupMenuButton<_MenuAction>(
                 tooltip: 'Update status, links or delete',
@@ -218,6 +230,8 @@ class _TrackedApplicationCardState extends ConsumerState<TrackedApplicationCard>
                   if (app.status != ApplicationStatus.admitCardLive)
                     const PopupMenuItem(value: _MenuAction.admitCardLive, child: Text('Admit card is out')),
                   const PopupMenuItem(value: _MenuAction.examScheduled, child: Text('Set exam date')),
+                  if (!app.examOver(widget.now))
+                    const PopupMenuItem(value: _MenuAction.examDone, child: Text('Exam is done')),
                   if (app.status != ApplicationStatus.applied)
                     const PopupMenuItem(value: _MenuAction.backToApplied, child: Text('Back to “Applied”')),
                   const PopupMenuItem(value: _MenuAction.editLinks, child: Text('Edit links')),
@@ -248,7 +262,7 @@ class _TrackedApplicationCardState extends ConsumerState<TrackedApplicationCard>
                   runSpacing: 8,
                   crossAxisAlignment: WrapCrossAlignment.center,
                   children: [
-                    _StatusBadge(app: app),
+                    _StatusBadge(app: app, track: track),
                     if (app.totalSeats != null)
                       SeatPill(
                         total: app.totalSeats!,
@@ -271,8 +285,12 @@ class _TrackedApplicationCardState extends ConsumerState<TrackedApplicationCard>
                 const SizedBox(height: 12),
                 Row(
                   children: [
-                    Expanded(child: _LinkButton(icon: AppIcon.login, label: 'Candidate login', url: app.loginUrl)),
-                    const SizedBox(width: 8),
+                    // With the track open, its card has the login (or a better step).
+                    if (_panel != _Panel.progress) ...[
+                      Expanded(
+                          child: _LinkButton(icon: AppIcon.login, label: 'Candidate login', url: app.loginUrl)),
+                      const SizedBox(width: 8),
+                    ],
                     Expanded(
                         child: _LinkButton(icon: AppIcon.applyOnline, label: 'Official site', url: app.officialUrl)),
                   ],
@@ -318,23 +336,25 @@ class _TrackedApplicationCardState extends ConsumerState<TrackedApplicationCard>
   }
 }
 
-/// Where the exam is now, as a small coloured badge in the header.
+/// Where the exam is now, as a small coloured badge in the header, read off the
+/// progress track (so it moves on when the exam's dates pass, not only on notices).
 /// 🟢 admit card · 🟡 exam · 🟣 answer key · 🔵 result.
 class _StatusBadge extends StatelessWidget {
-  const _StatusBadge({required this.app});
+  const _StatusBadge({required this.app, required this.track});
 
   final TrackedApplication app;
+  final DeliveryTrack track;
 
   @override
   Widget build(BuildContext context) {
-    final status = app.displayStatus;
-    final (Color color, AppIcon icon) = switch (status) {
-      TrackerStatus.applied => (AppPalette.textMuted, AppIcon.applied),
-      TrackerStatus.admitCardLive => (AppPalette.sage, AppIcon.admitCard),
-      TrackerStatus.examScheduled => (AppPalette.honey, AppIcon.examDay),
-      TrackerStatus.answerKeyLive => (AppPalette.lavender, AppIcon.answerKey),
-      TrackerStatus.resultDeclared => (AppPalette.periwinkle, AppIcon.result),
+    final (Color color, AppIcon icon) = switch (track.finished || track.offersNextTier ? 4 : track.activeIndex) {
+      1 => (AppPalette.sage, AppIcon.admitCard),
+      2 => (AppPalette.honey, AppIcon.examDay),
+      3 => (AppPalette.lavender, AppIcon.answerKey),
+      4 || 5 => (AppPalette.periwinkle, AppIcon.result),
+      _ => (AppPalette.textMuted, AppIcon.applied),
     };
+    final label = track.statusLabel;
     final stage = app.tierName;
     return Semantics(
       liveRegion: true,
@@ -350,15 +370,45 @@ class _StatusBadge extends StatelessWidget {
           children: [
             glyph(icon, size: 16, color: color),
             const SizedBox(width: 6),
-            Text(stage == null ? status.label : '$stage · ${status.label}',
-                style: Theme.of(context).textTheme.labelMedium?.copyWith(color: color)),
-            if (status == TrackerStatus.examScheduled && app.calendarSynced) ...[
+            Flexible(
+              child: Text(stage == null ? label : '$stage · $label',
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(context).textTheme.labelMedium?.copyWith(color: color)),
+            ),
+            if (track.activeIndex == 2 && app.calendarSynced) ...[
               const SizedBox(width: 6),
               glyph(AppIcon.calendarDone, size: 14, color: AppPalette.sage),
             ],
           ],
         ),
       ),
+    );
+  }
+}
+
+/// The card's date: "Starts 12 Oct" / "Till 19 Oct" for an exam window, a
+/// countdown for a single day, nothing once the exam is over (the badge then says
+/// what comes next).
+class _DatePill extends StatelessWidget {
+  const _DatePill({required this.app, required this.now});
+
+  final TrackedApplication app;
+  final DateTime now;
+
+  @override
+  Widget build(BuildContext context) {
+    final start = app.effectiveExamAt;
+    final end = app.examEnd;
+    if (start != null && app.examOver(now)) return const SizedBox.shrink();
+    final window = start != null &&
+        end != null &&
+        DateTime(end.year, end.month, end.day).isAfter(DateTime(start.year, start.month, start.day));
+    if (!window) return CountdownPill(due: app.focusDateAt(now), now: now);
+    final before = now.isBefore(start);
+    return CountdownPill(
+      due: before ? start : end,
+      now: now,
+      label: before ? 'Starts ${stageDateLabel(start)}' : 'Till ${stageDateLabel(end)}',
     );
   }
 }

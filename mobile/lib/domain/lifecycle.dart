@@ -55,8 +55,9 @@ bool _passed(DateTime? d, DateTime now) => d != null && now.isAfter(_endOfDay(d)
 /// on this phone (admit card link, exam date, status).
 List<StageView> computeLifecycle(TrackedApplication app, ExamTimeline? t, DateTime now) {
   final admitUrl = t?.admitCardUrl ?? app.admitCardUrl;
-  final examStart = t?.examStart ?? app.examAt;
-  final examEnd = t?.examEnd ?? examStart;
+  // A date the user entered ("Set exam date", "Exam is done") wins over the notice's.
+  final examStart = app.examAt ?? t?.examStart;
+  final examEnd = app.examAt ?? t?.examEnd ?? examStart;
   final resultOut = t?.meritListUrl != null || t?.scorecardUrl != null || _passed(t?.resultDate, now);
 
   // A later milestone implies the earlier ones are done.

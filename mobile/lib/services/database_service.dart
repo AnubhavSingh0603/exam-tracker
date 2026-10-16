@@ -294,6 +294,10 @@ class DatabaseService {
         whereArgs: [jobPostId],
       );
 
+  /// One application's timeline (dates re-read from its stored notices).
+  Future<void> saveAppTimeline(String id, String json) =>
+      _db.update('tracked_applications', {'timeline_json': json}, where: 'id = ?', whereArgs: [id]);
+
   /// What the exam watcher found for one application: status, notices, timeline.
   /// (`server_status` is a column name kept from the server era.)
   Future<void> saveWatcherState(

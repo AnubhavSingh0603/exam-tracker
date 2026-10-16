@@ -38,17 +38,20 @@ class _Pill extends StatelessWidget {
 
 /// "18 hrs left" tinted by urgency band.
 class CountdownPill extends StatelessWidget {
-  const CountdownPill({super.key, required this.due, required this.now});
+  const CountdownPill({super.key, required this.due, required this.now, this.label});
 
   final DateTime? due;
   final DateTime now;
+
+  /// Instead of the countdown ("Starts 12 Oct"); colour and glow still follow [due].
+  final String? label;
 
   @override
   Widget build(BuildContext context) {
     final colors = context.urgencyColors;
     final d = due;
     final urgency = urgencyFor(d, now);
-    final label = d == null ? 'No date yet' : countdownLabel(d, now);
+    final label = this.label ?? (d == null ? 'No date yet' : countdownLabel(d, now));
     // Only the last 24 hours breathe; nothing else on screen moves by itself.
     final lastDay = d != null && d.isAfter(now) && d.difference(now) <= const Duration(hours: 24);
     return LastDayGlow(

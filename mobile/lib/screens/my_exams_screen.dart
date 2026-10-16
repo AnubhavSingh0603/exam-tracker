@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../domain/delivery_track.dart';
+import '../domain/lifecycle.dart';
 import '../models/tracked_application.dart';
 import '../providers/providers.dart';
 import '../theme/app_theme.dart';
@@ -10,31 +12,23 @@ import '../widgets/app_icons.dart';
 import '../widgets/common.dart';
 import '../widgets/tracked_application_card.dart';
 
-/// The stages an applied exam moves through, one tab each.
-enum ExamStage {
-  applied('Applied'),
-  admitCard('Admit card'),
-  examSoon('Exam soon'),
-  results('Results'),
+/// Three tabs: everything still in progress, exams whose result is out, and the
+/// ones put away.
+enum ExamTab {
+  tracked('Tracked'),
+  resultsOut('Results out'),
   archived('Archived');
 
-  const ExamStage(this.label);
+  const ExamTab(this.label);
   final String label;
 }
 
-/// Where an exam sits right now. "Exam soon" = scheduled, or within 30 days.
-ExamStage stageOf(TrackedApplication a, DateTime now) {
-  if (a.archived) return ExamStage.archived;
-  return switch (a.displayStatus) {
-    TrackerStatus.answerKeyLive || TrackerStatus.resultDeclared => ExamStage.results,
-    TrackerStatus.admitCardLive => ExamStage.admitCard,
-    TrackerStatus.examScheduled => ExamStage.examSoon,
-    TrackerStatus.applied => switch (a.effectiveExamAt) {
-        final exam? when exam.isAfter(now) && exam.isBefore(now.add(const Duration(days: 30))) =>
-          ExamStage.examSoon,
-        _ => ExamStage.applied,
-      },
-  };
+/// Where an exam belongs: archived if put away, "Results out" once its result
+/// stop is done (including a stage whose next one can be tracked), else tracked.
+ExamTab tabOf(TrackedApplication a, DateTime now) {
+  if (a.archived) return ExamTab.archived;
+  final resultStop = buildDeliveryTrack(a, now).stops[4];
+  return resultStop.state == StageState.completed ? ExamTab.resultsOut : ExamTab.tracked;
 }
 
 class MyExamsScreen extends ConsumerWidget {
@@ -44,21 +38,19 @@ class MyExamsScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final all = ref.watch(trackedAppsProvider);
     final now = ref.watch(nowProvider);
-    final byStage = {for (final s in ExamStage.values) s: <TrackedApplication>[]};
+    final byTab = {for (final t in ExamTab.values) t: <TrackedApplication>[]};
     for (final a in all.dataOrNull ?? const <TrackedApplication>[]) {
-      byStage[stageOf(a, now)]!.add(a);
+      byTab[tabOf(a, now)]!.add(a);
     }
-    for (final list in byStage.values) {
-      list.sort((a, b) => (a.focusDate ?? DateTime(9999)).compareTo(b.focusDate ?? DateTime(9999)));
+    // Soonest date first; exams waiting on an answer key or result (no date) after.
+    for (final list in byTab.values) {
+      list.sort((a, b) =>
+          (a.focusDateAt(now) ?? DateTime(9999)).compareTo(b.focusDateAt(now) ?? DateTime(9999)));
     }
     final active = all.dataOrNull?.where((a) => !a.archived).length ?? 0;
-    // Open on the most pressing stage that has something in it.
-    final firstBusy = [ExamStage.admitCard, ExamStage.examSoon, ExamStage.results, ExamStage.applied]
-        .firstWhere((s) => byStage[s]!.isNotEmpty, orElse: () => ExamStage.applied);
 
     return DefaultTabController(
-      length: ExamStage.values.length,
-      initialIndex: firstBusy.index,
+      length: ExamTab.values.length,
       child: Column(
         children: [
           Padding(
@@ -69,22 +61,20 @@ class MyExamsScreen extends ConsumerWidget {
             ),
           ),
           TabBar(
-            isScrollable: true,
-            tabAlignment: TabAlignment.start,
             indicatorColor: AppPalette.periwinkle,
             labelColor: AppPalette.textPrimary,
             unselectedLabelColor: AppPalette.textMuted,
             dividerColor: AppPalette.outline,
             tabs: [
-              for (final s in ExamStage.values)
-                Tab(text: byStage[s]!.isEmpty ? s.label : '${s.label} ${byStage[s]!.length}'),
+              for (final t in ExamTab.values)
+                Tab(text: byTab[t]!.isEmpty ? t.label : '${t.label} ${byTab[t]!.length}'),
             ],
           ),
           Expanded(
             child: TabBarView(
               children: [
-                for (final s in ExamStage.values)
-                  _StageList(stage: s, apps: byStage[s]!, loading: all.isLoading, error: all.hasError),
+                for (final t in ExamTab.values)
+                  _StageList(tab: t, apps: byTab[t]!, loading: all.isLoading, error: all.hasError),
               ],
             ),
           ),
@@ -95,19 +85,17 @@ class MyExamsScreen extends ConsumerWidget {
 }
 
 class _StageList extends ConsumerWidget {
-  const _StageList({required this.stage, required this.apps, required this.loading, required this.error});
+  const _StageList({required this.tab, required this.apps, required this.loading, required this.error});
 
-  final ExamStage stage;
+  final ExamTab tab;
   final List<TrackedApplication> apps;
   final bool loading;
   final bool error;
 
-  String get _empty => switch (stage) {
-        ExamStage.applied => 'Nothing here yet. Swipe a job right after you apply, or add one yourself.',
-        ExamStage.admitCard => 'No admit cards out. You’ll be notified when one appears.',
-        ExamStage.examSoon => 'No exams in the next 30 days.',
-        ExamStage.results => 'Answer keys and results show up here.',
-        ExamStage.archived => 'Swipe an exam left to archive it once you’re done with it.',
+  String get _empty => switch (tab) {
+        ExamTab.tracked => 'Nothing here yet. Swipe a job right after you apply, or add one yourself.',
+        ExamTab.resultsOut => 'Exams move here once their result is out.',
+        ExamTab.archived => 'Swipe an exam left to archive it once you’re done with it.',
       };
 
   void _setArchived(BuildContext context, WidgetRef ref, TrackedApplication app, {required bool archived}) {
@@ -130,7 +118,7 @@ class _StageList extends ConsumerWidget {
         physics: const AlwaysScrollableScrollPhysics(),
         padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
         children: [
-          if (stage == ExamStage.applied)
+          if (tab == ExamTab.tracked)
             const Align(alignment: Alignment.centerRight, child: AddExamButton()),
           if (error)
             const MutedNote('Could not read local data. Restart the app.')

@@ -52,7 +52,16 @@ class ExamWatchService {
     final notices = await _notices();
     final pages = <String, List<PageLink>?>{}; // one fetch per portal per run
     final findings = <WatchFinding>[];
-    for (final app in apps) {
+    for (var app in apps) {
+      // Notices already seen are not detected again: re-read their dates instead.
+      if (app.updates.isNotEmpty) {
+        final base = app.timelineRaw ?? <String, dynamic>{'job_post_id': app.jobPostId ?? app.id};
+        final refreshed = refreshExamDates(base, app.updates, at);
+        if (jsonEncode(refreshed) != jsonEncode(base)) {
+          await _db.saveAppTimeline(app.id, jsonEncode(refreshed));
+          app = await _db.getApplication(app.id) ?? app;
+        }
+      }
       final known = {for (final u in app.updates) canonicalUrl(u.url)};
       final detected = <DetectedUpdate>[];
       final portal = app.portalUrl;
@@ -66,6 +75,7 @@ class ExamWatchService {
             source: UpdateSource.official,
             examSpecificPage: isExamSpecificPage(portal),
             knownUrls: known,
+            now: at,
           ));
         }
       }
@@ -76,6 +86,7 @@ class ExamWatchService {
         source: UpdateSource.aggregator,
         examSpecificPage: false,
         knownUrls: {...known, for (final d in detected) d.url},
+        now: at,
       ));
       if (detected.isEmpty) continue;
       findings.add(await _record(app, detected, at));

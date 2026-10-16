@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/foundation.dart';
 
 import '../models/tracked_application.dart';
@@ -31,13 +33,23 @@ class TrackStop {
 /// runner stops, and the one line and one action for that stop.
 @immutable
 class DeliveryTrack {
-  const DeliveryTrack({required this.stops, required this.activeIndex, required this.headline, this.action});
+  const DeliveryTrack({
+    required this.stops,
+    required this.activeIndex,
+    required this.headline,
+    required this.statusLabel,
+    this.action,
+  });
 
   final List<TrackStop> stops;
 
   /// The stop the runner halts at. All done (final result out) = the last stop.
   final int activeIndex;
   final String headline;
+
+  /// Short status for the card's badge: "Admit card out", "Exam starts 12 Oct",
+  /// "Answer key expected Nov", "Result out".
+  final String statusLabel;
 
   /// Opens a link, or (isNextTier stop) tracks the next tier.
   final StageAction? action;
@@ -64,7 +76,10 @@ const _watcherActions = [null, 'Download admit card', 'Exam notice', 'View answe
 /// exam watcher found.
 DeliveryTrack buildDeliveryTrack(TrackedApplication app, DateTime now) {
   final stages = computeLifecycle(app, app.timeline, now);
-  final reach = _watcherReach(app.displayStatus);
+  // Once the exam has started, the admit card stage is behind you.
+  final examStart = app.effectiveExamAt;
+  final examStarted = examStart != null && !now.isBefore(DateTime(examStart.year, examStart.month, examStart.day));
+  final reach = math.max(_watcherReach(app.displayStatus), examStarted ? 2 : 0);
 
   final stops = <TrackStop>[];
   for (var i = 0; i < stages.length; i++) {
@@ -108,6 +123,7 @@ DeliveryTrack buildDeliveryTrack(TrackedApplication app, DateTime now) {
     stops: stops,
     activeIndex: active,
     headline: _headline(app, stops, active, now),
+    statusLabel: _statusLabel(app, stops, active, now),
     action: _action(app, stops[active]),
   );
 }
@@ -138,6 +154,41 @@ StageAction? _action(TrackedApplication app, TrackStop stop) {
 
 String _cap(String s) => s.isEmpty ? s : s[0].toUpperCase() + s.substring(1);
 
+const _monthsLong = [
+  'January', 'February', 'March', 'April', 'May', 'June', //
+  'July', 'August', 'September', 'October', 'November', 'December',
+];
+
+/// When the answer key is likely: the announced date, else about three weeks after
+/// the exam's last day (how SSC, IBPS and RRB usually do it). Null without dates.
+DateTime? _answerKeyExpected(TrackedApplication app, List<TrackStop> stops) =>
+    stops[3].date ?? app.examEnd?.add(const Duration(days: 21));
+
+String _statusLabel(TrackedApplication app, List<TrackStop> stops, int active, DateTime now) {
+  final stop = stops[active];
+  final hasLink = stop.actions.isNotEmpty;
+  if (stop.isNextTier) return 'Result out · next: ${stop.label}';
+  if (stop.state == StageState.completed) return 'Result out';
+  switch (active) {
+    case 1:
+      return hasLink ? 'Admit card out' : 'Admit card awaited';
+    case 2:
+      final start = stop.date;
+      if (start == null) return 'Exam date awaited';
+      if (stop.dateEnd != null && !now.isBefore(start)) return 'Exam on, till ${stageDateLabel(stop.dateEnd!)}';
+      return stop.dateEnd != null ? 'Exam starts ${stageDateLabel(start)}' : 'Exam on ${stageDateLabel(start)}';
+    case 3:
+      if (hasLink) return 'Answer key out';
+      final expected = _answerKeyExpected(app, stops);
+      return expected == null ? 'Answer key awaited' : 'Answer key expected ${_monthsLong[expected.month - 1].substring(0, 3)}';
+    case 4:
+      final date = stop.date;
+      return date == null ? 'Result awaited' : 'Result expected ${_monthsLong[date.month - 1].substring(0, 3)}';
+    default:
+      return 'Applied';
+  }
+}
+
 String _headline(TrackedApplication app, List<TrackStop> stops, int active, DateTime now) {
   final tier = app.tierName;
   final p = tier == null ? '' : '$tier ';
@@ -166,8 +217,12 @@ String _headline(TrackedApplication app, List<TrackStop> stops, int active, Date
           ' Carry your admit card and photo ID.');
     case 3:
       if (!hasLink) {
-        return _cap('the ${p}answer key usually follows the exam'
-            '${date == null ? '' : ', expected around $when'}.');
+        if (date != null) return _cap('${p}exam is done. The answer key is expected around $when.');
+        final expected = _answerKeyExpected(app, stops);
+        return expected == null
+            ? _cap('${p}exam is done. We’ll tell you when the answer key is out.')
+            : _cap('${p}exam is done. Answer keys usually come about 3 weeks later, so expect it '
+                'around ${_monthsLong[expected.month - 1]}.');
       }
       final objection = app.timeline?.objectionDeadline;
       return objection != null && !now.isAfter(DateTime(objection.year, objection.month, objection.day, 23, 59))

@@ -85,34 +85,128 @@ Milestone? classifyMilestone(String text) {
 }
 
 const _monthNames = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
+
+// Pieces of the date patterns. Month names must be whole words, so "decision" or
+// "mayor" never read as a month.
+const _mon = r'(jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|june?|july?|aug(?:ust)?'
+    r'|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\b\.?';
+const _ord = r'(?:st|nd|rd|th)?';
+const _yr = r'((?:19|20)\d{2})';
+const _to = r'\s*(?:to|till|until|-|–|—|&|and)\s*';
+const _day = r'(?<![\w-])(\d{1,2})'; // not "Tier-1", not the "26" of "2026"
+
+// Windows: "12.10.2026 to 19.10.2026", "12–19 October 2026", "28 Nov to 3 Dec",
+// "October 12–19, 2026". Single dates: "14.12.2026", "3rd March 2027", "Oct 12, 2026".
+final _numRange = RegExp('\\b(\\d{1,2})[./-](\\d{1,2})[./-]$_yr$_to(\\d{1,2})[./-](\\d{1,2})[./-]$_yr\\b',
+    caseSensitive: false);
+final _dayRange = RegExp('$_day$_ord(?:\\s+$_mon(?:,?\\s*$_yr)?)?$_to(\\d{1,2})$_ord\\s+$_mon(?:,?\\s*$_yr)?',
+    caseSensitive: false);
+final _monthRange =
+    RegExp('\\b$_mon\\s+(\\d{1,2})$_ord$_to(\\d{1,2})$_ord(?:,?\\s*$_yr)?(?!\\d)', caseSensitive: false);
+final _numDate = RegExp('\\b(\\d{1,2})[./-](\\d{1,2})[./-]$_yr\\b', caseSensitive: false);
+final _dayMonth = RegExp('$_day$_ord\\s+$_mon(?:,?\\s*$_yr)?', caseSensitive: false);
+final _monthDay = RegExp('\\b$_mon\\s+(\\d{1,2})$_ord(?:,?\\s*$_yr)?(?!\\d)', caseSensitive: false);
+
+/// Every pattern above, to blank dates out of a text.
 final _dateRe = RegExp(
-  r'\b(\d{1,2})[./-](\d{1,2})[./-]((?:19|20)\d{2})\b'
-  r'|\b(\d{1,2})(?:st|nd|rd|th)?\s+(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?,?\s+((?:19|20)\d{2})\b',
-  caseSensitive: false,
-);
+    [_numRange, _dayRange, _monthRange, _numDate, _dayMonth, _monthDay].map((r) => r.pattern).join('|'),
+    caseSensitive: false);
+
+/// An exam's dates as a notice prints them: one day, or a window ([end] set).
+typedef EventWindow = ({DateTime start, DateTime? end});
+
+int _month(String name) => _monthNames.indexOf(name.substring(0, 3).toLowerCase()) + 1;
+
+DateTime? _valid(int y, int m, int d) {
+  if (m < 1 || m > 12 || d < 1 || d > 31 || y < 2000 || y > 2100) return null;
+  final date = DateTime(y, m, d);
+  return date.month == m ? date : null; // 31 Feb
+}
+
+/// A year for a date printed without one: the one that puts it closest to [ref].
+int _yearNear(int m, int d, DateTime ref) {
+  var best = ref.year;
+  var bestGap = 1 << 30;
+  for (final y in [ref.year - 1, ref.year, ref.year + 1]) {
+    final gap = DateTime(y, m, d).difference(ref).inDays.abs();
+    if (gap < bestGap) {
+      best = y;
+      bestGap = gap;
+    }
+  }
+  return best;
+}
+
+EventWindow? _window(DateTime? start, DateTime? end) {
+  if (start == null) return null;
+  if (end == null || end == start) return (start: start, end: null);
+  if (end.isBefore(start) || end.difference(start).inDays > 62) return null; // not one exam window
+  return (start: start, end: end);
+}
+
+/// From one range match: the end's month and year carry over to the start ("12–19
+/// October"), stepping back a month or year when the start would come after the end.
+EventWindow? _range(int d1, int? m1, int? y1, int d2, int m2, int? y2, DateTime ref) {
+  final endYear = y2 ?? y1 ?? _yearNear(m2, d2, ref);
+  final end = _valid(endYear, m2, d2);
+  if (end == null) return null;
+  var sm = m1 ?? m2;
+  var sy = y1 ?? endYear;
+  if (m1 == null && d1 > d2) sm -= 1; // "28 to 3 December"
+  if (sm == 0) {
+    sm = 12;
+    sy -= 1;
+  }
+  if (y1 == null && DateTime(sy, sm, d1).isAfter(end)) sy -= 1; // "28 Dec to 3 Jan 2027"
+  return _window(_valid(sy, sm, d1), end);
+}
+
+/// The exam date or window a notice prints first. Without a year, the year nearest
+/// [reference] (default: today). Where a single date and a window overlap ("Tier 1
+/// October 12–19"), the window wins.
+EventWindow? extractEventWindow(String text, {DateTime? reference}) {
+  final ref = reference ?? DateTime.now();
+  int? n(String? g) => g == null ? null : int.parse(g);
+  int? mon(String? g) => g == null ? null : _month(g);
+  final found = <(int, int, bool, EventWindow)>[];
+  void add(RegExpMatch m, EventWindow? w, {required bool range}) {
+    if (w != null) found.add((m.start, m.end, range, w));
+  }
+
+  for (final m in _numRange.allMatches(text)) {
+    final start = _valid(n(m[3])!, n(m[2])!, n(m[1])!);
+    add(m, _window(start, _valid(n(m[6])!, n(m[5])!, n(m[4])!)), range: true);
+  }
+  for (final m in _dayRange.allMatches(text)) {
+    add(m, _range(n(m[1])!, mon(m[2]), n(m[3]), n(m[4])!, mon(m[5])!, n(m[6]), ref), range: true);
+  }
+  for (final m in _monthRange.allMatches(text)) {
+    add(m, _range(n(m[2])!, null, null, n(m[3])!, mon(m[1])!, n(m[4]), ref), range: true);
+  }
+  for (final m in _numDate.allMatches(text)) {
+    add(m, _window(_valid(n(m[3])!, n(m[2])!, n(m[1])!), null), range: false);
+  }
+  for (final m in _dayMonth.allMatches(text)) {
+    final mo = mon(m[2])!, d = n(m[1])!;
+    add(m, _window(_valid(n(m[3]) ?? _yearNear(mo, d, ref), mo, d), null), range: false);
+  }
+  for (final m in _monthDay.allMatches(text)) {
+    final mo = mon(m[1])!, d = n(m[2])!;
+    add(m, _window(_valid(n(m[3]) ?? _yearNear(mo, d, ref), mo, d), null), range: false);
+  }
+  if (found.isEmpty) return null;
+  found.sort((a, b) => a.$1 != b.$1 ? a.$1.compareTo(b.$1) : b.$2.compareTo(a.$2));
+  final first = found.first;
+  for (final f in found) {
+    if (f.$3 && f.$1 < first.$2 && f.$2 > first.$1) return f.$4; // a window overlapping it
+  }
+  return first.$4;
+}
 
 /// First date printed in the notice ("Exam on 14.12.2026" -> 14 Dec 2026), day first.
-DateTime? extractEventDate(String text) {
-  for (final m in _dateRe.allMatches(text)) {
-    final int day;
-    final int month;
-    final int year;
-    if (m.group(1) != null) {
-      day = int.parse(m.group(1)!);
-      month = int.parse(m.group(2)!);
-      year = int.parse(m.group(3)!);
-    } else {
-      day = int.parse(m.group(4)!);
-      month = _monthNames.indexOf(m.group(5)!.toLowerCase()) + 1;
-      year = int.parse(m.group(6)!);
-    }
-    if (month < 1 || month > 12 || day < 1 || day > 31 || year < 2000 || year > 2100) continue;
-    final d = DateTime(year, month, day);
-    if (d.month != month) continue; // 31 Feb
-    return d;
-  }
-  return null;
-}
+/// For a window, its first day.
+DateTime? extractEventDate(String text, {DateTime? reference}) =>
+    extractEventWindow(text, reference: reference)?.start;
 
 final _yearRe = RegExp(r'\b(20\d\d)\b');
 
@@ -265,6 +359,7 @@ class DetectedUpdate {
     required this.url,
     required this.source,
     this.eventDate,
+    this.eventEnd,
   });
 
   final Milestone milestone;
@@ -272,6 +367,9 @@ class DetectedUpdate {
   final String url;
   final UpdateSource source;
   final DateTime? eventDate;
+
+  /// Last day, when the notice gives a window ("12–19 October").
+  final DateTime? eventEnd;
 }
 
 /// New milestone notices for one exam among a page's links.
@@ -282,6 +380,7 @@ List<DetectedUpdate> detectUpdates(
   required UpdateSource source,
   required bool examSpecificPage,
   required Set<String> knownUrls,
+  DateTime? now,
 }) {
   final found = <DetectedUpdate>[];
   final seen = {...knownUrls};
@@ -297,12 +396,14 @@ List<DetectedUpdate> detectUpdates(
     if (!examSpecificPage && !namesThisExam(text, examName, organization)) continue;
     seen.add(url);
     final title = link.title.isEmpty ? text : link.title;
+    final window = extractEventWindow(text, reference: now);
     found.add(DetectedUpdate(
       milestone: milestone,
       title: title.length > 300 ? title.substring(0, 300) : title,
       url: url,
       source: source,
-      eventDate: extractEventDate(text),
+      eventDate: window?.start,
+      eventEnd: window?.end,
     ));
   }
   return found;
@@ -335,21 +436,30 @@ Map<String, dynamic> fillTimeline(Map<String, dynamic> timeline, DetectedUpdate 
   final text = u.title.toLowerCase();
   final today = _isoDate(seenOn);
   void firstDate(String key) => t[key] ??= today;
+  // Dates up to 60 days back still count: a notice first seen mid-window or just
+  // after the exam is how the app learns the exam already happened.
+  final start = u.eventDate;
+  final end = u.eventEnd;
+  final usable = start != null &&
+      !(end ?? start).isBefore(DateTime(seenOn.year, seenOn.month, seenOn.day).subtract(const Duration(days: 60)));
+  void setExam() {
+    t['exam_start'] = _isoDate(start!);
+    if (end != null) {
+      t['exam_end'] = _isoDate(end);
+    } else {
+      t.remove('exam_end');
+    }
+  }
+
   switch (u.milestone) {
     case Milestone.admitCard:
       t['admit_card_url'] = u.url;
       firstDate('admit_card_release');
       // "Admit Card (Exam on 14.12.2026)": the printed date is the exam date, if none is known yet.
-      final d = u.eventDate;
-      if (d != null && !d.isBefore(DateTime(seenOn.year, seenOn.month, seenOn.day))) {
-        t['exam_start'] ??= _isoDate(d);
-      }
+      if (usable && t['exam_start'] == null) setExam();
     case Milestone.examSchedule || Milestone.postponed:
       if (text.contains('city') || text.contains('intimation')) t['exam_city_slip_url'] = u.url;
-      final d = u.eventDate;
-      if (d != null && !d.isBefore(DateTime(seenOn.year, seenOn.month, seenOn.day))) {
-        t['exam_start'] = _isoDate(d); // a newer schedule/postponement notice wins
-      }
+      if (usable) setExam(); // a newer schedule/postponement notice wins
     case Milestone.answerKey:
       if (text.contains('objection') || text.contains('challenge')) {
         t['challenge_portal_url'] = u.url;
@@ -362,6 +472,32 @@ Map<String, dynamic> fillTimeline(Map<String, dynamic> timeline, DetectedUpdate 
     case Milestone.result:
       t[text.contains('score') ? 'scorecard_url' : 'merit_list_url'] = u.url;
       firstDate('result_date');
+  }
+  return t;
+}
+
+/// Reads the dates of the stored schedule and admit-card notices again (oldest
+/// first, each as of when it was seen), so exams tracked before the date reader
+/// understood windows ("12–19 October") get their real start and end. Also undoes
+/// that older reader's slip of storing a window's last day as the exam date.
+Map<String, dynamic> refreshExamDates(Map<String, dynamic> timeline, List<ExamUpdate> updates, DateTime now) {
+  var t = {...timeline};
+  for (final u in updates.reversed) {
+    final m = Milestone.fromWire(u.milestone);
+    if (m == null || m == Milestone.answerKey || m == Milestone.result) continue;
+    final seen = u.detectedAt?.toLocal() ?? now;
+    final w = extractEventWindow(u.title, reference: seen);
+    if (w == null) continue;
+    final end = w.end;
+    if (m == Milestone.admitCard && end != null && t['exam_start'] == _isoDate(end) && t['exam_end'] == null) {
+      t.remove('exam_start'); // the old reader's "19 October" for "12–19 October"
+    }
+    t = fillTimeline(
+      t,
+      DetectedUpdate(
+          milestone: m, title: u.title, url: u.url, source: UpdateSource.aggregator, eventDate: w.start, eventEnd: end),
+      seen,
+    );
   }
   return t;
 }
