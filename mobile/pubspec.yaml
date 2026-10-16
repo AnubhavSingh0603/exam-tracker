@@ -2,7 +2,7 @@ name: exam_tracker
 description: ADHD-first tracker for Indian Govt/PSU recruitment exams.
 publish_to: "none"
 # +N is the release number the in-app updater compares (see RELEASING.md).
-version: 0.9.2+12
+version: 0.10.0+13
 
 environment:
   sdk: ">=3.6.0 <4.0.0"
@@ -35,7 +35,8 @@ dependencies:
   permission_handler: ">=11.3.1 <13.0.0"
 
   # In-app updates (direct/GitHub flavour only; disabled in store builds)
-  ota_update: ^7.1.0
+  self_update:
+    path: packages/self_update
   package_info_plus: ^8.1.0
   device_info_plus: ^11.1.0
   shared_preferences: ^2.3.3
@@ -44,6 +45,7 @@ dependencies:
   html: ^0.15.7
   flutter_svg: ^2.3.0
   share_plus: ^12.0.2
+  crypto: ^3.0.7
 
 dev_dependencies:
   flutter_test:

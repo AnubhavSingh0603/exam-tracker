@@ -1,11 +1,14 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 
+import 'package:crypto/crypto.dart';
 import 'package:device_info_plus/device_info_plus.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart' show PlatformException;
 import 'package:http/http.dart' as http;
-import 'package:ota_update/ota_update.dart';
 import 'package:package_info_plus/package_info_plus.dart';
+import 'package:self_update/self_update.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../config/env.dart';
@@ -107,15 +110,37 @@ class UpdateCheckFailed implements Exception {
   const UpdateCheckFailed();
 }
 
+/// The downloaded APK's checksum didn't match latest.json.
+class UpdateDamaged implements Exception {
+  const UpdateDamaged();
+}
+
+class _DigestSink implements Sink<Digest> {
+  late Digest value;
+
+  @override
+  void add(Digest data) => value = data;
+
+  @override
+  void close() {}
+}
+
 class UpdateService {
-  UpdateService({http.Client? client, String? manifestUrl, bool? enabled})
+  UpdateService({http.Client? client, String? manifestUrl, bool? enabled, SelfUpdate? installer})
       : _client = client ?? http.Client(),
         _manifestUrl = manifestUrl ?? Env.releaseManifestUrl,
-        _enabled = enabled ?? Env.updatesEnabled;
+        _enabled = enabled ?? Env.updatesEnabled,
+        _installer = installer ?? const SelfUpdate();
 
   final http.Client _client;
   final String _manifestUrl;
   final bool _enabled;
+  final SelfUpdate _installer;
+
+  /// Updates are possible in this build (the `direct` flavour).
+  bool get enabled => _enabled;
+
+  SelfUpdate get installer => _installer;
 
   static const checkInterval = Duration(hours: 12);
   static const _timeout = Duration(seconds: 8);
@@ -143,6 +168,10 @@ class UpdateService {
   /// "Check for updates" in Settings: the user asked, so an update put off
   /// with "Later" still shows. null = up to date. Throws [UpdateCheckFailed]
   /// when GitHub can't be reached, so that is not mistaken for "up to date".
+  /// The installed release number (see [releaseNumberOf]).
+  Future<int> installedRelease() async =>
+      releaseNumberOf(int.tryParse((await PackageInfo.fromPlatform()).buildNumber) ?? 0);
+
   Future<UpdateCheck?> checkNow() async {
     final package = await PackageInfo.fromPlatform();
     final installed = releaseNumberOf(int.tryParse(package.buildNumber) ?? 0);
@@ -164,42 +193,81 @@ class UpdateService {
     await prefs.setInt(_kSkipped, versionCode);
   }
 
-  /// Downloads, verifies the SHA-256, then opens the system installer.
-  /// Android additionally refuses the install unless it's signed with our key.
-  Stream<UpdateProgress> download(UpdateInfo info) async* {
+  static String _apkName(UpdateInfo info) => 'jobsummit-${info.versionCode}.apk';
+
+  String _apkPath(UpdateInfo info, String dir) => '$dir/${_apkName(info)}';
+
+  /// The APK for [info] if it was downloaded (and verified) before, else null.
+  Future<File?> downloaded(UpdateInfo info, String dir) async {
+    final file = File(_apkPath(info, dir));
+    if (!await file.exists()) return null;
+    if ((await sha256.bind(file.openRead()).first).toString() == info.sha256) return file;
+    await file.delete(); // damaged or replaced: fetch again
+    return null;
+  }
+
+  /// Downloads the APK into [dir], checking its SHA-256 as it arrives. Progress
+  /// 0..1, or null when the size is unknown. Throws [UpdateDamaged] on a bad
+  /// checksum; Android also refuses any APK not signed with our key.
+  Future<File> fetch(UpdateInfo info, String dir, {void Function(double? fraction)? onProgress}) async {
+    await Directory(dir).create(recursive: true);
+    final part = File('${_apkPath(info, dir)}.part');
+    final res = await _client.send(http.Request('GET', Uri.parse(info.apkUrl))).timeout(_timeout);
+    if (res.statusCode != 200) throw http.ClientException('HTTP ${res.statusCode}');
+    final total = res.contentLength ?? info.sizeBytes;
+    final digest = _DigestSink();
+    final hasher = sha256.startChunkedConversion(digest);
+    final out = part.openWrite();
+    var received = 0;
     try {
-      final events = OtaUpdate().execute(
-        info.apkUrl,
-        destinationFilename: 'exam-tracker-${info.versionName}.apk',
-        sha256checksum: info.sha256,
-      );
-      await for (final event in events) {
-        yield _mapEvent(event);
+      await for (final chunk in res.stream.timeout(const Duration(seconds: 30))) {
+        out.add(chunk);
+        hasher.add(chunk);
+        received += chunk.length;
+        onProgress?.call(total == null || total == 0 ? null : (received / total).clamp(0.0, 1.0));
       }
-    } catch (_) {
-      yield const UpdateFailed('Download failed. Check your connection and try again.');
+    } finally {
+      await out.close();
+    }
+    hasher.close();
+    if (digest.value.toString() != info.sha256) {
+      await part.delete();
+      throw const UpdateDamaged();
+    }
+    return part.rename(_apkPath(info, dir));
+  }
+
+  /// Removes downloads other than [keep] (installed or outdated versions).
+  Future<void> clearDownloads(String dir, {UpdateInfo? keep}) async {
+    final folder = Directory(dir);
+    if (!await folder.exists()) return;
+    final keepName = keep == null ? null : _apkName(keep);
+    await for (final f in folder.list()) {
+      if (f is File && f.uri.pathSegments.last != keepName) await f.delete();
     }
   }
 
-  UpdateProgress _mapEvent(OtaEvent event) {
-    switch (event.status) {
-      case OtaStatus.DOWNLOADING:
-        final pct = double.tryParse(event.value ?? '');
-        return UpdateDownloading(pct == null ? null : (pct / 100).clamp(0.0, 1.0));
-      case OtaStatus.INSTALLING:
-        return const UpdateInstalling();
-      case OtaStatus.CHECKSUM_ERROR:
-        return const UpdateFailed('The download was damaged, so it was not installed. Please try again.');
-      case OtaStatus.PERMISSION_NOT_GRANTED_ERROR:
-        return const UpdateFailed(
-          'Android needs permission to install updates from this app.',
-          suggestSettings: true,
-        );
-      case OtaStatus.ALREADY_RUNNING_ERROR:
-        return const UpdateDownloading(null);
-      default:
-        return const UpdateFailed('The update could not be installed.', suggestSettings: true);
-    }
+  /// "Update now": download (unless already done), verify, install. Android
+  /// restarts the app on the new version; if it wants a tap, its prompt opens.
+  Stream<UpdateProgress> download(UpdateInfo info) {
+    final events = StreamController<UpdateProgress>();
+    () async {
+      try {
+        final status = await _installer.status();
+        final apk = await downloaded(info, status.updatesDir) ??
+            await fetch(info, status.updatesDir, onProgress: (f) => events.add(UpdateDownloading(f)));
+        events.add(const UpdateInstalling());
+        await _installer.install(apk.path, interactive: true);
+      } on UpdateDamaged {
+        events.add(const UpdateFailed('The download was damaged, so it was not installed. Please try again.'));
+      } on PlatformException {
+        events.add(const UpdateFailed('The update could not be installed.', suggestSettings: true));
+      } catch (_) {
+        events.add(const UpdateFailed('Download failed. Check your connection and try again.'));
+      }
+      await events.close();
+    }();
+    return events.stream;
   }
 
   Future<UpdateInfo?> _fromManifest(String? abi) async {

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:permission_handler/permission_handler.dart';
+import 'package:self_update/self_update.dart';
 
 import '../config/env.dart';
 import '../models/job_preferences.dart';
@@ -12,6 +13,7 @@ import '../providers/jobs_providers.dart';
 import '../providers/providers.dart';
 import '../providers/ui_providers.dart';
 import '../services/auth_service.dart';
+import '../services/auto_update.dart';
 import '../services/calendar_sync_service.dart';
 import '../services/deadline_reminders.dart';
 import '../services/update_service.dart';
@@ -572,6 +574,10 @@ class _AboutTab extends ConsumerWidget {
                 },
                 child: const Text('Check for updates'),
               ),
+            if (Env.updatesEnabled) ...[
+              const SizedBox(height: 8),
+              const _AutoUpdateSwitch(),
+            ],
             const SizedBox(height: 8),
             const ShareAppButton(),
           ],
@@ -641,4 +647,65 @@ class _LastDaySwitchState extends ConsumerState<_LastDaySwitch> {
         onChanged: _on == null ? null : _set,
         title: const Text('Remind me before jobs close'),
       );
+}
+
+/// "Update automatically": on by default. The line under it says what will
+/// actually happen on this phone.
+class _AutoUpdateSwitch extends ConsumerStatefulWidget {
+  const _AutoUpdateSwitch();
+
+  @override
+  ConsumerState<_AutoUpdateSwitch> createState() => _AutoUpdateSwitchState();
+}
+
+class _AutoUpdateSwitchState extends ConsumerState<_AutoUpdateSwitch> {
+  bool? _on;
+  SelfUpdateStatus? _status;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    final on = await AutoUpdater.isEnabled();
+    SelfUpdateStatus? status;
+    try {
+      status = await AutoUpdater(ref.read(updateServiceProvider)).status();
+    } catch (_) {}
+    if (!mounted) return;
+    setState(() {
+      _on = on;
+      _status = status;
+    });
+  }
+
+  String _explain(SelfUpdateStatus? s) {
+    if (s == null) return 'New versions download on Wi-Fi.';
+    if (!s.canInstall) return 'First allow it: Settings → Apps → JobSummit → Install unknown apps → Allow.';
+    if (s.sdk < 31) return 'New versions download on Wi-Fi, then you tap “Update” once.';
+    if (!s.selfInstalled) {
+      return 'New versions download on Wi-Fi. The next one asks you once; after that they install by '
+          'themselves while you’re not using the app.';
+    }
+    return 'New versions download on Wi-Fi and install by themselves while you’re not using the app.';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final on = _on;
+    return SwitchListTile(
+      contentPadding: EdgeInsets.zero,
+      title: const Text('Update automatically'),
+      subtitle: Text(on == false ? 'You’ll be asked when a new version is out.' : _explain(_status)),
+      value: on ?? true,
+      onChanged: on == null
+          ? null
+          : (value) async {
+              await AutoUpdater.setEnabled(value);
+              if (mounted) setState(() => _on = value);
+            },
+    );
+  }
 }

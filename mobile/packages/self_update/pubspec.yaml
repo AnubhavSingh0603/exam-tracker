@@ -1,0 +1,19 @@
+name: self_update
+description: JobSummit's own Android updater (PackageInstaller sessions, silent on Android 12+).
+publish_to: none
+version: 1.0.0
+
+environment:
+  sdk: ">=3.6.0 <4.0.0"
+  flutter: ">=3.27.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+flutter:
+  plugin:
+    platforms:
+      android:
+        package: com.jobsummit.self_update
+        pluginClass: SelfUpdatePlugin

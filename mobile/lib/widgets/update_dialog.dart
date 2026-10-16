@@ -150,7 +150,8 @@ class _UpdateDialogState extends State<_UpdateDialog> {
         ];
       case UpdateInstalling():
         return [
-          Text('Opening the Android installer. Tap “Update” there to finish.', style: text.bodyMedium),
+          Text('Installing… JobSummit reopens on the new version. If Android asks, tap “Update”.',
+              style: text.bodyMedium),
           const SizedBox(height: 8),
           Align(
             alignment: Alignment.centerRight,

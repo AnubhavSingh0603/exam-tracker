@@ -1,0 +1,13 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Install the downloaded update. The store flavour removes both (the store updates it). -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+    <!-- Android 12+: lets JobSummit update itself without the "Update this app?" prompt,
+         once it was the app that installed the current version. A normal permission. -->
+    <uses-permission android:name="android.permission.UPDATE_PACKAGES_WITHOUT_USER_ACTION" />
+
+    <application>
+        <receiver
+            android:name="com.jobsummit.self_update.InstallResultReceiver"
+            android:exported="false" />
+    </application>
+</manifest>

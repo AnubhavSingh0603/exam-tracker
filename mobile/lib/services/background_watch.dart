@@ -3,12 +3,14 @@ import 'package:timezone/data/latest.dart' as tzdata;
 import 'package:workmanager/workmanager.dart';
 
 import '../domain/exam_watcher.dart';
+import 'auto_update.dart';
 import 'backup_service.dart';
 import 'calendar_sync_service.dart';
 import 'database_service.dart';
 import 'deadline_reminders.dart';
 import 'exam_watch_service.dart';
 import 'notification_service.dart';
+import 'update_service.dart';
 
 const _taskName = 'exam-watch';
 const _uniqueName = 'exam-watch-periodic';
@@ -69,6 +71,15 @@ void watchCallbackDispatcher() {
       final now = DateTime.now();
       await DeadlineReminders(db).sync(await loadOpenJobs(db, now: now), now: now);
     } catch (_) {}
+    // A new version: download it on Wi-Fi and, where Android allows, install it
+    // without asking while the app isn't on screen.
+    final updates = UpdateService();
+    try {
+      await AutoUpdater(updates).run();
+    } catch (_) {
+    } finally {
+      updates.close();
+    }
     return true;
   });
 }

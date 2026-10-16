@@ -12,13 +12,8 @@
     <!-- One-time "Allow background checks" (exam watcher every ~4 h). -->
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
 
-    <!-- In-app updater (direct flavour). Removed again in src/store/AndroidManifest.xml. -->
-    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
-    <!-- Listed in ota_update's setup docs; only meaningful on Android 9 and older, where
-         the plugin's legacy download path may touch shared storage. -->
-    <uses-permission
-        android:name="android.permission.WRITE_EXTERNAL_STORAGE"
-        android:maxSdkVersion="28" />
+    <!-- In-app updater (direct flavour): packages/self_update declares its install
+         permissions; src/store/AndroidManifest.xml removes them again. -->
 
     <!--
       Deliberately NOT declared: SCHEDULE_EXACT_ALARM / USE_EXACT_ALARM.
@@ -60,19 +55,6 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
-
-        <!-- ota_update hands the downloaded APK to the package installer through this
-             provider. Without it the install step fails (FileUriExposedException /
-             "no provider for authority"). Authority and class follow ota_update's docs. -->
-        <provider
-            android:name="sk.fourq.otaupdate.OtaUpdateFileProvider"
-            android:authorities="${applicationId}.ota_update_provider"
-            android:exported="false"
-            android:grantUriPermissions="true">
-            <meta-data
-                android:name="android.support.FILE_PROVIDER_PATHS"
-                android:resource="@xml/file_paths" />
-        </provider>
 
         <meta-data android:name="flutterEmbedding" android:value="2" />
         <!-- Channel FCM uses when a message names none; matches FCM_ANDROID_CHANNEL_ID on the server. -->
