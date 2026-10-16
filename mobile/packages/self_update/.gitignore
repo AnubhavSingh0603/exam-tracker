@@ -1,0 +1,3 @@
+# A path dependency of the app: the app's pubspec.lock is the one that counts.
+pubspec.lock
+build/
