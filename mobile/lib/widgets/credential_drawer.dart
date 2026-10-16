@@ -2,11 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models/tracked_application.dart';
+import '../providers/pin_providers.dart';
 import '../providers/providers.dart';
 import '../theme/app_theme.dart';
 import '../utils/system_actions.dart';
 import 'app_icons.dart';
 import 'application_tracker_sheet.dart';
+import 'pin_dialog.dart';
 
 /// Expanded content of a tracked card: tap-to-copy chips + portal deep link.
 /// Everything is read from local storage, so it works offline.
@@ -16,6 +18,7 @@ class CredentialDrawer extends ConsumerWidget {
   final TrackedApplication app;
 
   Future<void> _copyPassword(BuildContext context, WidgetRef ref) async {
+    if (!await ensureUnlocked(context, ref) || !context.mounted) return;
     final password = await ref.read(secretStoreProvider).readPassword(app.id);
     if (!context.mounted) return;
     if (password == null || password.isEmpty) {
@@ -25,7 +28,14 @@ class CredentialDrawer extends ConsumerWidget {
     await copyToClipboard(context, 'Password', password, sensitive: true);
   }
 
+  /// With the PIN lock on, IDs are shown and copied only after the PIN.
+  Future<void> _copyId(BuildContext context, WidgetRef ref, String label, String value) async {
+    if (!await ensureUnlocked(context, ref) || !context.mounted) return;
+    await copyToClipboard(context, label, value);
+  }
+
   Future<void> _edit(BuildContext context, WidgetRef ref) async {
+    if (!await ensureUnlocked(context, ref) || !context.mounted) return;
     final input = await showApplicationTrackerSheet(
       context,
       title: 'Credentials · ${app.postName}',
@@ -43,6 +53,8 @@ class CredentialDrawer extends ConsumerWidget {
     final hasPassword = ref.watch(hasPasswordProvider(app.id)).dataOrNull ?? false;
     final reg = vault?.registrationId;
     final roll = vault?.rollNumber;
+    final locked = !(ref.watch(pinLockProvider).dataOrNull?.unlocked(DateTime.now()) ?? true);
+    String? shown(String? v) => v == null ? null : (locked ? '•••• (PIN)' : v);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -53,13 +65,13 @@ class CredentialDrawer extends ConsumerWidget {
           children: [
             _CopyChip(
               label: 'Reg No.',
-              value: reg,
-              onTap: reg == null ? null : () => copyToClipboard(context, 'Registration ID', reg),
+              value: shown(reg),
+              onTap: reg == null ? null : () => _copyId(context, ref, 'Registration ID', reg),
             ),
             _CopyChip(
               label: 'Roll No.',
-              value: roll,
-              onTap: roll == null ? null : () => copyToClipboard(context, 'Roll number', roll),
+              value: shown(roll),
+              onTap: roll == null ? null : () => _copyId(context, ref, 'Roll number', roll),
             ),
             _CopyChip(
               label: 'Password',

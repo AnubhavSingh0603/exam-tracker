@@ -350,6 +350,9 @@ class DatabaseService {
   }
 
   /// The vault row has no dependants, so REPLACE is safe here.
+  /// Every saved Reg/Roll number ("Forgot PIN").
+  Future<void> deleteAllVault() => _db.delete('credentials_vault');
+
   Future<void> upsertVault(VaultEntry entry) => _db.insert(
         'credentials_vault',
         entry.toRow(DateTime.now()),

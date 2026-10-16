@@ -10,6 +10,7 @@ import '../models/user_profile.dart';
 import '../providers/account_providers.dart';
 import '../providers/backup_providers.dart';
 import '../providers/jobs_providers.dart';
+import '../providers/pin_providers.dart';
 import '../providers/providers.dart';
 import '../providers/ui_providers.dart';
 import '../services/auth_service.dart';
@@ -21,6 +22,7 @@ import '../theme/app_theme.dart';
 import '../utils/system_actions.dart';
 import '../widgets/app_icons.dart';
 import '../widgets/common.dart';
+import '../widgets/pin_dialog.dart';
 import '../widgets/samsung_sleep_tip.dart';
 import '../widgets/share_app.dart';
 import '../widgets/update_dialog.dart';
@@ -201,6 +203,7 @@ class _AccountTab extends ConsumerWidget {
             ],
           ],
         ),
+        const _PinLockSection(),
       ],
     );
   }
@@ -706,6 +709,100 @@ class _AutoUpdateSwitchState extends ConsumerState<_AutoUpdateSwitch> {
               await AutoUpdater.setEnabled(value);
               if (mounted) setState(() => _on = value);
             },
+    );
+  }
+}
+
+/// Optional 4-digit PIN in front of saved Reg/Roll numbers and passwords.
+class _PinLockSection extends ConsumerWidget {
+  const _PinLockSection();
+
+  /// The same four digits twice; null if cancelled or they differ.
+  static Future<String?> _newPin(BuildContext context) async {
+    final first = await askForPin(context, title: 'Choose a 4-digit PIN', offerForgot: false);
+    if (first is! PinTyped || !context.mounted) return null;
+    final again = await askForPin(context, title: 'Enter it again', offerForgot: false);
+    if (again is! PinTyped || !context.mounted) return null;
+    if (again.pin != first.pin) {
+      showCalmSnack(context, 'The PINs didn’t match. Try again.');
+      return null;
+    }
+    return first.pin;
+  }
+
+  /// Asks for the current PIN; true when it was right.
+  static Future<bool> _current(BuildContext context, WidgetRef ref, String why) async {
+    final entry = await askForPin(context, title: 'Enter your PIN', message: why);
+    if (entry == null || !context.mounted) return false;
+    if (entry is PinForgot) {
+      await confirmForgotPin(context, ref);
+      return false;
+    }
+    final result = await ref.read(pinLockProvider.notifier).unlock((entry as PinTyped).pin);
+    if (!context.mounted) return false;
+    switch (result) {
+      case PinOk():
+        return true;
+      case PinWrong(:final triesLeft):
+        showCalmSnack(context, 'Wrong PIN. $triesLeft ${triesLeft == 1 ? 'try' : 'tries'} left.');
+      case PinWait():
+        showCalmSnack(context, 'Too many tries. Wait 30 seconds.');
+    }
+    return false;
+  }
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final pin = ref.watch(pinLockProvider).dataOrNull;
+    final lock = ref.read(pinLockProvider.notifier);
+    return _Section(
+      title: 'PIN lock',
+      note: 'Hides your saved Reg/Roll numbers and passwords until you enter a 4-digit PIN, then '
+          'shows them for 5 minutes. The PIN stays on this phone; it isn’t part of the Google backup.',
+      children: [
+        SwitchListTile(
+          contentPadding: EdgeInsets.zero,
+          title: const Text('Lock saved IDs with a PIN'),
+          value: pin?.enabled ?? false,
+          onChanged: pin == null
+              ? null
+              : (on) async {
+                  if (on) {
+                    final newPin = await _newPin(context);
+                    if (newPin == null) return;
+                    await lock.enable(newPin);
+                    if (context.mounted) showCalmSnack(context, 'PIN set. Your IDs are locked.');
+                  } else if (await _current(context, ref, 'To turn the lock off.')) {
+                    await ref.read(secretStoreProvider).clearPin();
+                    ref.invalidate(pinLockProvider);
+                    if (context.mounted) showCalmSnack(context, 'PIN lock is off.');
+                  }
+                },
+        ),
+        if (pin?.enabled ?? false)
+          Wrap(
+            spacing: 8,
+            children: [
+              OutlinedButton(
+                onPressed: () async {
+                  if (!await _current(context, ref, 'Your current PIN first.') || !context.mounted) return;
+                  final newPin = await _newPin(context);
+                  if (newPin == null) return;
+                  await lock.enable(newPin);
+                  if (context.mounted) showCalmSnack(context, 'PIN changed.');
+                },
+                child: const Text('Change PIN'),
+              ),
+              TextButton(
+                onPressed: () {
+                  lock.lock();
+                  showCalmSnack(context, 'Locked.');
+                },
+                child: const Text('Lock now'),
+              ),
+            ],
+          ),
+      ],
     );
   }
 }

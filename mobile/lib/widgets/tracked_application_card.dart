@@ -7,6 +7,7 @@ import '../domain/lifecycle.dart';
 import '../domain/urgency.dart';
 import '../models/tracked_application.dart';
 import '../models/vault_entry.dart';
+import '../providers/pin_providers.dart';
 import '../providers/providers.dart';
 import '../services/calendar_sync_service.dart';
 import '../theme/app_theme.dart';
@@ -15,8 +16,10 @@ import 'app_card.dart';
 import 'app_icons.dart';
 import 'common.dart';
 import 'credential_drawer.dart';
+import 'dashboard_check_sheet.dart';
 import 'exam_delivery_tracker.dart';
 import 'pills.dart';
+import 'pin_dialog.dart';
 
 enum _SyncState { idle, syncing, done }
 
@@ -200,6 +203,11 @@ class _TrackedApplicationCardState extends ConsumerState<TrackedApplicationCard>
     final colors = context.urgencyColors;
     final focus = app.focusDateAt(widget.now);
     final track = buildDeliveryTrack(app, widget.now);
+    final vault = ref.watch(vaultEntryProvider(app.id)).dataOrNull;
+    final hasPassword = ref.watch(hasPasswordProvider(app.id)).dataOrNull ?? false;
+    final idsLocked = !(ref.watch(pinLockProvider).dataOrNull?.unlocked(DateTime.now()) ?? true);
+    // With IDs saved, the login button becomes the quick "Check dashboard".
+    final hasIds = hasPassword || !(vault?.isEmpty ?? true);
 
     return AppCard(
       // Tapping the card opens (or closes) its progress track.
@@ -270,7 +278,8 @@ class _TrackedApplicationCardState extends ConsumerState<TrackedApplicationCard>
                         quota: app.quotaSeats ?? 0,
                         category: app.category,
                       ),
-                    ..._quickCopyChips(context, ref.watch(vaultEntryProvider(app.id)).dataOrNull),
+                    ..._quickCopyChips(context, vault,
+                        locked: idsLocked, onUnlock: () => ensureUnlocked(context, ref)),
                   ],
                 ),
                 // The one next step, without opening the track.
@@ -288,7 +297,21 @@ class _TrackedApplicationCardState extends ConsumerState<TrackedApplicationCard>
                     // With the track open, its card has the login (or a better step).
                     if (_panel != _Panel.progress) ...[
                       Expanded(
-                          child: _LinkButton(icon: AppIcon.login, label: 'Candidate login', url: app.loginUrl)),
+                        child: _LinkButton(
+                          icon: AppIcon.login,
+                          label: hasIds ? 'Check dashboard' : 'Candidate login',
+                          url: app.loginUrl,
+                          onPressed: hasIds
+                              ? () => showDashboardCheck(
+                                    context,
+                                    ref,
+                                    app,
+                                    onAdmitCardOut: () => _onMenu(_MenuAction.admitCardLive),
+                                    onExamDone: () => _onMenu(_MenuAction.examDone),
+                                  )
+                              : null,
+                        ),
+                      ),
                       const SizedBox(width: 8),
                     ],
                     Expanded(
@@ -450,11 +473,14 @@ class _NowLine extends StatelessWidget {
 
 /// Candidate login / Official site. Greyed out without a link (⋮ → Edit links).
 class _LinkButton extends StatelessWidget {
-  const _LinkButton({required this.icon, required this.label, required this.url});
+  const _LinkButton({required this.icon, required this.label, required this.url, this.onPressed});
 
   final AppIcon icon;
   final String label;
   final String? url;
+
+  /// Instead of just opening [url] (the "Check dashboard" sheet).
+  final VoidCallback? onPressed;
 
   @override
   Widget build(BuildContext context) {
@@ -462,7 +488,7 @@ class _LinkButton extends StatelessWidget {
     return Tooltip(
       message: link ?? 'No link saved. Add one from ⋮ → Edit links.',
       child: OutlinedButton.icon(
-        onPressed: link == null ? null : () => openExternal(context, link),
+        onPressed: link == null ? null : (onPressed ?? () => openExternal(context, link)),
         style: OutlinedButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 10)),
         icon: DuoIcon(icon, size: 18),
         label: Text(label, maxLines: 1, overflow: TextOverflow.ellipsis),
@@ -471,10 +497,22 @@ class _LinkButton extends StatelessWidget {
   }
 }
 
-/// One tap copies the Registration / Roll number, right on the card.
-List<Widget> _quickCopyChips(BuildContext context, VaultEntry? vault) {
+/// One tap copies the Registration / Roll number, right on the card. With the PIN
+/// lock on, one "Show IDs" chip until the PIN is entered.
+List<Widget> _quickCopyChips(BuildContext context, VaultEntry? vault,
+    {required bool locked, required VoidCallback onUnlock}) {
   final reg = vault?.registrationId;
   final roll = vault?.rollNumber;
+  if (locked && ((reg ?? '').isNotEmpty || (roll ?? '').isNotEmpty)) {
+    return [
+      ActionChip(
+        avatar: const Icon(Icons.lock_outline_rounded, size: 16),
+        label: const Text('Show IDs'),
+        tooltip: 'Enter your PIN to show Reg and Roll numbers',
+        onPressed: onUnlock,
+      ),
+    ];
+  }
   return [
     if (reg != null && reg.isNotEmpty)
       ActionChip(
