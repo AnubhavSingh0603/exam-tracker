@@ -26,7 +26,7 @@ class DatabaseService {
   final Database _db;
 
   static const _fileName = 'exam_tracker.db';
-  static const _version = 5;
+  static const _version = 6;
 
   /// [factory]/[path] are injectable so tests can use sqflite_common_ffi in memory.
   static Future<DatabaseService> open({DatabaseFactory? factory, String? path}) async {
@@ -70,7 +70,9 @@ class DatabaseService {
           timeline_json      TEXT,
           server_id          TEXT,
           server_status      TEXT,
-          updates_json       TEXT
+          updates_json       TEXT,
+          tiers_json         TEXT,
+          tier               INTEGER NOT NULL DEFAULT 0
         )''')
       ..execute(
           'CREATE INDEX ix_apps_active ON tracked_applications (archived, exam_timestamp, deadline_timestamp)')
@@ -129,6 +131,7 @@ class DatabaseService {
 
   /// v2: notification id, cached 5-stage timeline and exam-watcher state.
   /// v3: the application page ("Apply online" link).
+  /// v6: the exam's stages (Tier-1, Tier-2…) and which one this entry tracks.
   static Future<void> _onUpgrade(Database db, int from, int to) async {
     if (from < 2) {
       for (final column in ['job_post_id', 'timeline_json', 'server_id', 'server_status', 'updates_json']) {
@@ -147,6 +150,10 @@ class DatabaseService {
       final batch = db.batch();
       _createJobReminders(batch);
       await batch.commit(noResult: true);
+    }
+    if (from < 6) {
+      await db.execute('ALTER TABLE tracked_applications ADD COLUMN tiers_json TEXT');
+      await db.execute('ALTER TABLE tracked_applications ADD COLUMN tier INTEGER NOT NULL DEFAULT 0');
     }
   }
 
@@ -179,6 +186,8 @@ class DatabaseService {
     'server_id',
     'server_status',
     'updates_json',
+    'tiers_json',
+    'tier',
   ];
   static const _vaultColumns = ['app_id', 'registration_id', 'roll_number', 'notes', 'updated_at'];
 
@@ -307,6 +316,19 @@ class DatabaseService {
   Future<void> setArchived(String id, {required bool archived}) => _db.update(
         'tracked_applications',
         {'archived': archived ? 1 : 0, 'updated_at': DateTime.now().toUtc().millisecondsSinceEpoch},
+        where: 'id = ?',
+        whereArgs: [id],
+      );
+
+  /// The two links on the card: candidate login ([applyUrl]) and the board's
+  /// website ([portalUrl], which the exam watcher reads). Empty clears one.
+  Future<void> updateLinks(String id, {required String? applyUrl, required String? portalUrl}) => _db.update(
+        'tracked_applications',
+        {
+          'apply_url': applyUrl,
+          'portal_url': portalUrl,
+          'updated_at': DateTime.now().toUtc().millisecondsSinceEpoch,
+        },
         where: 'id = ?',
         whereArgs: [id],
       );

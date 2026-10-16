@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
 
+import '../domain/exam_catalog.dart';
 import 'exam_timeline.dart';
 import 'links.dart';
 
@@ -115,6 +116,8 @@ class TrackedApplication {
     this.timelineRaw,
     this.watcherStatus,
     this.updates = const [],
+    this.tiers = const [],
+    this.tier = 0,
   });
 
   /// Backend `post_detail_id` when tracked from the feed, so the feed can hide it.
@@ -157,6 +160,28 @@ class TrackedApplication {
 
   /// Watcher notices, newest first.
   final List<ExamUpdate> updates;
+
+  /// The exam's stages when it has several (Tier-1, Tier-2…), from the exam
+  /// list when it was added; [tier] is the one this entry tracks. Each tier is
+  /// tracked as its own entry, so the watcher and backup rules stay per round.
+  final List<String> tiers;
+  final int tier;
+
+  /// The built-in exam this one is (stages, board website), when it is clear.
+  CatalogExam? get catalogExam => matchCatalogExam('$examName $postName ${organization ?? ''}');
+
+  /// Stages saved with the exam, else the ones the exam list knows.
+  List<String> get effectiveTiers => tiers.isNotEmpty ? tiers : (catalogExam?.stages ?? const []);
+
+  String? get tierName => tier < effectiveTiers.length && effectiveTiers.length > 1 ? effectiveTiers[tier] : null;
+
+  String? get nextTierName => tier + 1 < effectiveTiers.length ? effectiveTiers[tier + 1] : null;
+
+  /// The board's website and notice board.
+  String? get officialUrl => preferredUrl(portalUrl, catalogExam?.officialUrl);
+
+  /// Candidate login: the application page, else the board's login, else its website.
+  String? get loginUrl => preferredUrl(applyUrl, catalogExam?.loginUrl) ?? officialUrl;
 
   /// The further of what the user set and what the watcher found.
   TrackerStatus get displayStatus {
@@ -215,6 +240,15 @@ class TrackedApplication {
     }
   }
 
+  static List<String> _tiers(Object? raw) {
+    if (raw is! String || raw.isEmpty) return const [];
+    try {
+      return [for (final t in jsonDecode(raw) as List<dynamic>) '$t'];
+    } catch (_) {
+      return const [];
+    }
+  }
+
   static ExamTimeline? _timeline(Map<String, dynamic>? raw) {
     if (raw == null || raw['job_post_id'] is! String) return null;
     try {
@@ -243,6 +277,8 @@ class TrackedApplication {
         'created_at': _ms(createdAt),
         'updated_at': _ms(updatedAt),
         'job_post_id': jobPostId,
+        'tiers_json': tiers.isEmpty ? null : jsonEncode(tiers),
+        'tier': tier,
         // timeline/server state is written separately (DatabaseService.saveTimeline,
         // saveWatcherState) so a local edit never overwrites it with a stale copy.
       };
@@ -272,6 +308,8 @@ class TrackedApplication {
         // Column name kept from the server era; it now holds the phone watcher's status.
         watcherStatus: TrackerStatus.fromWire(r['server_status'] as String?),
         updates: _updates(r['updates_json']),
+        tiers: _tiers(r['tiers_json']),
+        tier: r['tier'] as int? ?? 0,
       );
 
   TrackedApplication copyWith({
@@ -305,5 +343,7 @@ class TrackedApplication {
         timelineRaw: timelineRaw,
         watcherStatus: watcherStatus,
         updates: updates,
+        tiers: tiers,
+        tier: tier,
       );
 }

@@ -42,6 +42,28 @@ void main() {
     expect(loaded.calendarSynced, isFalse);
   });
 
+  test('stages, the stage tracked and both links are stored', () async {
+    await db.upsertApplication(TrackedApplication(
+      id: 's',
+      examName: 'IBPS PO XV',
+      postName: 'IBPS PO XV',
+      status: ApplicationStatus.applied,
+      tiers: const ['Prelims', 'Mains', 'Interview'],
+      tier: 1,
+      createdAt: now,
+      updatedAt: now,
+    ));
+    var loaded = (await db.getApplication('s'))!;
+    expect(loaded.tiers, ['Prelims', 'Mains', 'Interview']);
+    expect(loaded.tierName, 'Mains');
+    expect(loaded.nextTierName, 'Interview');
+
+    await db.updateLinks('s', applyUrl: 'https://ibpsreg.ibps.in/x', portalUrl: 'https://www.ibps.in');
+    loaded = (await db.getApplication('s'))!;
+    expect(loaded.loginUrl, 'https://ibpsreg.ibps.in/x');
+    expect(loaded.officialUrl, 'https://www.ibps.in');
+  });
+
   test('upsert updates in place and keeps the vault (no REPLACE cascade)', () async {
     await db.upsertApplication(app('a'));
     await db.upsertVault(const VaultEntry(appId: 'a', registrationId: 'REG123'));

@@ -104,15 +104,27 @@ class TrackedAppsNotifier extends AsyncNotifier<List<TrackedApplication>> {
   }
 
   /// Track an exam applied to outside the feed. The phone's exam watcher follows
-  /// [portalUrl] (if given) and the job-site notices that name the exam.
-  Future<TrackedApplication> addManual({required String examName, String? portalUrl}) async {
+  /// [portalUrl] (the board's website, if given) and the job-site notices that
+  /// name the exam. [applyUrl] is the candidate login; [tiers] its stages.
+  Future<TrackedApplication> addManual({
+    required String examName,
+    String? portalUrl,
+    String? applyUrl,
+    String? organization,
+    List<String> tiers = const [],
+    int tier = 0,
+  }) async {
     final now = DateTime.now();
     final app = TrackedApplication(
       id: 'local-${now.microsecondsSinceEpoch}',
       examName: examName,
       postName: examName,
+      organization: organization,
       status: ApplicationStatus.applied,
       portalUrl: portalUrl,
+      applyUrl: applyUrl,
+      tiers: tiers,
+      tier: tier,
       createdAt: now,
       updatedAt: now,
     );
@@ -121,6 +133,42 @@ class TrackedAppsNotifier extends AsyncNotifier<List<TrackedApplication>> {
     _changed();
     unawaited(checkForUpdates(force: true)); // its admit card may already be out
     return app;
+  }
+
+  /// The card's two links. Empty strings clear a link.
+  Future<void> setLinks(String id, {required String loginUrl, required String officialUrl}) async {
+    String? orNull(String s) => s.trim().isEmpty ? null : s.trim();
+    await _db.updateLinks(id, applyUrl: orNull(loginUrl), portalUrl: orNull(officialUrl));
+    await reload();
+    _changed();
+  }
+
+  /// "Track Tier-2": the next tier becomes its own entry with the same links,
+  /// registration number and password (the same login carries over), and the
+  /// finished tier moves to the archive.
+  Future<TrackedApplication?> trackNextTier(TrackedApplication app) async {
+    final next = app.nextTierName;
+    if (next == null) return null;
+    final current = app.tierName;
+    final base = current != null && app.examName.endsWith(' · $current')
+        ? app.examName.substring(0, app.examName.length - ' · $current'.length)
+        : app.examName;
+    final added = await addManual(
+      examName: '$base · $next',
+      portalUrl: app.officialUrl,
+      applyUrl: app.loginUrl,
+      organization: app.organization,
+      tiers: app.effectiveTiers,
+      tier: app.tier + 1,
+    );
+    final vault = await _db.getVault(app.id);
+    final password = await _secrets.readPassword(app.id);
+    if (vault?.registrationId != null || password != null) {
+      await saveCredentials(
+          added.id, CredentialsInput(registrationId: vault?.registrationId ?? '', password: password ?? ''));
+    }
+    await setArchived(app.id, archived: true);
+    return added;
   }
 
   /// Runs the exam watcher now (pull-to-refresh, app start). Throttled to once per

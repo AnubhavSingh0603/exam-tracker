@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../domain/delivery_track.dart';
 import '../domain/lifecycle.dart';
 import '../domain/urgency.dart';
 import '../models/tracked_application.dart';
@@ -14,15 +15,18 @@ import 'app_card.dart';
 import 'app_icons.dart';
 import 'common.dart';
 import 'credential_drawer.dart';
-import 'exam_lifecycle_stepper.dart';
+import 'exam_delivery_tracker.dart';
 import 'pills.dart';
 
 enum _SyncState { idle, syncing, done }
 
-enum _Panel { none, timeline, credentials }
+enum _Panel { none, progress, credentials }
 
-enum _MenuAction { admitCardLive, examScheduled, backToApplied, delete }
+enum _MenuAction { admitCardLive, examScheduled, backToApplied, editLinks, delete }
 
+/// A tracked exam: name, where it is now and the one next step, copyable
+/// Reg/Roll numbers, Candidate login + Official site, and (tap the card) its
+/// delivery-style progress track.
 class TrackedApplicationCard extends ConsumerStatefulWidget {
   const TrackedApplicationCard({super.key, required this.app, required this.now});
 
@@ -89,11 +93,36 @@ class _TrackedApplicationCardState extends ConsumerState<TrackedApplicationCard>
         if (app.calendarSynced && mounted) await _syncAfterReload();
       case _MenuAction.backToApplied:
         await notifier.setStatus(app.id, ApplicationStatus.applied);
+      case _MenuAction.editLinks:
+        final links = await showDialog<(String, String)>(
+          context: context,
+          builder: (_) => _LinksDialog(login: app.applyUrl, official: app.portalUrl),
+        );
+        if (links == null) return;
+        await notifier.setLinks(app.id, loginUrl: links.$1, officialUrl: links.$2);
       case _MenuAction.delete:
         if (!await _confirmDelete()) return;
         final name = app.postName;
         await notifier.untrack(app.id);
         if (mounted) showCalmSnack(context, 'Deleted $name');
+    }
+  }
+
+  /// "Track Mains" / "Track Tier-2": the next stage becomes its own card.
+  Future<void> _trackNextTier() async {
+    final next = app.nextTierName;
+    final current = app.tierName;
+    await ref.read(trackedAppsProvider.notifier).trackNextTier(app);
+    if (mounted) {
+      showCalmSnack(context, 'Now tracking $next.${current == null ? '' : ' $current moved to the archive.'}');
+    }
+  }
+
+  void _onTrackAction(StageAction action, {required bool nextTier}) {
+    if (nextTier) {
+      _trackNextTier();
+    } else {
+      openExternal(context, action.url);
     }
   }
 
@@ -158,8 +187,11 @@ class _TrackedApplicationCardState extends ConsumerState<TrackedApplicationCard>
     final text = Theme.of(context).textTheme;
     final colors = context.urgencyColors;
     final focus = app.focusDate;
+    final track = buildDeliveryTrack(app, widget.now);
 
     return AppCard(
+      // Tapping the card opens (or closes) its progress track.
+      onTap: () => _toggle(_Panel.progress),
       accent: colors.of(urgencyFor(focus, widget.now)),
       padding: const EdgeInsets.fromLTRB(16, 12, 8, 12),
       child: Column(
@@ -180,7 +212,7 @@ class _TrackedApplicationCardState extends ConsumerState<TrackedApplicationCard>
                 child: CountdownPill(due: focus, now: widget.now),
               ),
               PopupMenuButton<_MenuAction>(
-                tooltip: 'Update status or delete',
+                tooltip: 'Update status, links or delete',
                 onSelected: _onMenu,
                 itemBuilder: (_) => [
                   if (app.status != ApplicationStatus.admitCardLive)
@@ -188,13 +220,13 @@ class _TrackedApplicationCardState extends ConsumerState<TrackedApplicationCard>
                   const PopupMenuItem(value: _MenuAction.examScheduled, child: Text('Set exam date')),
                   if (app.status != ApplicationStatus.applied)
                     const PopupMenuItem(value: _MenuAction.backToApplied, child: Text('Back to “Applied”')),
+                  const PopupMenuItem(value: _MenuAction.editLinks, child: Text('Edit links')),
                   const PopupMenuDivider(),
                   PopupMenuItem(
                     value: _MenuAction.delete,
                     child: Row(
                       children: [
-                        DuoIcon(AppIcon.delete,
-                            size: 20, color: Theme.of(context).colorScheme.error),
+                        DuoIcon(AppIcon.delete, size: 20, color: Theme.of(context).colorScheme.error),
                         const SizedBox(width: 8),
                         Text('Delete', style: TextStyle(color: Theme.of(context).colorScheme.error)),
                       ],
@@ -211,12 +243,12 @@ class _TrackedApplicationCardState extends ConsumerState<TrackedApplicationCard>
               children: [
                 if (app.examName != app.postName) Text(app.examName, style: text.bodySmall),
                 const SizedBox(height: 10),
-                _MilestoneBadge(app: app, now: widget.now),
-                const SizedBox(height: 10),
                 Wrap(
                   spacing: 8,
                   runSpacing: 8,
+                  crossAxisAlignment: WrapCrossAlignment.center,
                   children: [
+                    _StatusBadge(app: app),
                     if (app.totalSeats != null)
                       SeatPill(
                         total: app.totalSeats!,
@@ -227,6 +259,11 @@ class _TrackedApplicationCardState extends ConsumerState<TrackedApplicationCard>
                     ..._quickCopyChips(context, ref.watch(vaultEntryProvider(app.id)).dataOrNull),
                   ],
                 ),
+                // The one next step, without opening the track.
+                if (_panel != _Panel.progress) ...[
+                  const SizedBox(height: 10),
+                  _NowLine(track: track, onAction: _onTrackAction),
+                ],
                 if (app.updates.isNotEmpty) ...[
                   const SizedBox(height: 8),
                   _LatestNotice(update: app.updates.first),
@@ -234,13 +271,22 @@ class _TrackedApplicationCardState extends ConsumerState<TrackedApplicationCard>
                 const SizedBox(height: 12),
                 Row(
                   children: [
+                    Expanded(child: _LinkButton(icon: AppIcon.login, label: 'Candidate login', url: app.loginUrl)),
+                    const SizedBox(width: 8),
+                    Expanded(
+                        child: _LinkButton(icon: AppIcon.applyOnline, label: 'Official site', url: app.officialUrl)),
+                  ],
+                ),
+                const SizedBox(height: 4),
+                Row(
+                  children: [
                     Expanded(child: _SyncButton(state: _sync, onPressed: _syncToCalendar)),
                     const SizedBox(width: 4),
                     _PanelToggle(
                       icon: AppIcon.timeline,
-                      label: 'Timeline',
-                      open: _panel == _Panel.timeline,
-                      onPressed: () => _toggle(_Panel.timeline),
+                      label: 'Progress',
+                      open: _panel == _Panel.progress,
+                      onPressed: () => _toggle(_Panel.progress),
                     ),
                     _PanelToggle(
                       icon: AppIcon.idVault,
@@ -252,9 +298,9 @@ class _TrackedApplicationCardState extends ConsumerState<TrackedApplicationCard>
                 ),
                 Fold(
                   child: switch (_panel) {
-                    _Panel.timeline => Padding(
+                    _Panel.progress => Padding(
                         padding: const EdgeInsets.only(top: 14),
-                        child: ExamLifecycleStepper(app: app, now: widget.now),
+                        child: ExamDeliveryTracker(app: app, now: widget.now, onTrackNextTier: _trackNextTier),
                       ),
                     _Panel.credentials => Padding(
                         padding: const EdgeInsets.only(top: 12),
@@ -272,18 +318,15 @@ class _TrackedApplicationCardState extends ConsumerState<TrackedApplicationCard>
   }
 }
 
-/// Live status from the exam watcher (or the user), with the one action that
-/// matters at that stage. 🟢 admit card · 🟡 exam · 🟣 answer key · 🔵 result.
-class _MilestoneBadge extends StatelessWidget {
-  const _MilestoneBadge({required this.app, required this.now});
+/// Where the exam is now, as a small coloured badge in the header.
+/// 🟢 admit card · 🟡 exam · 🟣 answer key · 🔵 result.
+class _StatusBadge extends StatelessWidget {
+  const _StatusBadge({required this.app});
 
   final TrackedApplication app;
-  final DateTime now;
 
   @override
   Widget build(BuildContext context) {
-    final text = Theme.of(context).textTheme;
-    final t = app.timeline;
     final status = app.displayStatus;
     final (Color color, AppIcon icon) = switch (status) {
       TrackerStatus.applied => (AppPalette.textMuted, AppIcon.applied),
@@ -292,104 +335,87 @@ class _MilestoneBadge extends StatelessWidget {
       TrackerStatus.answerKeyLive => (AppPalette.lavender, AppIcon.answerKey),
       TrackerStatus.resultDeclared => (AppPalette.periwinkle, AppIcon.result),
     };
-    final exam = app.effectiveExamAt;
-    final objection = t?.objectionDeadline;
-    final objectionOpen =
-        status == TrackerStatus.answerKeyLive && objection != null && !objection.isBefore(now);
-
-    final (String? actionLabel, String? actionUrl) = switch (status) {
-      TrackerStatus.admitCardLive => (
-          'Download admit card',
-          app.latestUpdate('admit_card')?.url ?? t?.admitCardUrl ?? app.admitCardUrl ?? app.applicationUrl,
+    final stage = app.tierName;
+    return Semantics(
+      liveRegion: true,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.12),
+          borderRadius: BorderRadius.circular(999),
+          border: Border.all(color: color.withValues(alpha: 0.35)),
         ),
-      TrackerStatus.answerKeyLive => (
-          'View answer key',
-          app.latestUpdate('answer_key')?.url ?? t?.answerKeyUrl
-        ),
-      TrackerStatus.resultDeclared => (
-          'Merit list',
-          app.latestUpdate('result')?.url ?? t?.meritListUrl ?? t?.scorecardUrl,
-        ),
-      _ => (null, null),
-    };
-
-    final subtitle = switch (status) {
-      TrackerStatus.applied => (app.portalUrl ?? '').isNotEmpty
-          ? 'Watching its portal and job sites for admit card, dates and results'
-          : 'Watching job sites for admit card, dates and results',
-      TrackerStatus.examScheduled when exam != null => stageDateLabel(exam, t?.examEnd),
-      _ => null,
-    };
-
-    return Container(
-      padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.10),
-        borderRadius: BorderRadius.circular(AppRadii.control),
-        border: Border.all(color: color.withValues(alpha: 0.35)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              glyph(icon, size: 18, color: color),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Semantics(
-                  liveRegion: true,
-                  child: Text(status.label, style: text.titleSmall?.copyWith(color: color)),
-                ),
-              ),
-              if (status == TrackerStatus.examScheduled && app.calendarSynced)
-                const _MiniChip(label: 'Calendar Synced', icon: AppIcon.calendarDone),
-              if (objectionOpen)
-                CountdownPill(
-                    due: DateTime(objection.year, objection.month, objection.day, 23, 59), now: now),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            glyph(icon, size: 16, color: color),
+            const SizedBox(width: 6),
+            Text(stage == null ? status.label : '$stage · ${status.label}',
+                style: Theme.of(context).textTheme.labelMedium?.copyWith(color: color)),
+            if (status == TrackerStatus.examScheduled && app.calendarSynced) ...[
+              const SizedBox(width: 6),
+              glyph(AppIcon.calendarDone, size: 14, color: AppPalette.sage),
             ],
-          ),
-          if (subtitle != null) ...[
-            const SizedBox(height: 4),
-            Text(subtitle, style: text.bodySmall),
           ],
-          if (objectionOpen) ...[
-            const SizedBox(height: 4),
-            Text('Objection window closes ${stageDateLabel(objection)}', style: text.bodySmall),
-          ],
-          if (actionLabel != null && actionUrl != null) ...[
-            const SizedBox(height: 8),
-            FilledButton.tonalIcon(
-              onPressed: () => openExternal(context, actionUrl),
-              icon: const DuoIcon(AppIcon.download, size: 18),
-              label: Text(actionLabel),
-            ),
-          ],
-        ],
+        ),
       ),
     );
   }
 }
 
-class _MiniChip extends StatelessWidget {
-  const _MiniChip({required this.label, required this.icon});
+/// The track's one sentence, and its action when it is a real next step
+/// (download, raise an objection, check the result, track the next stage).
+class _NowLine extends StatelessWidget {
+  const _NowLine({required this.track, required this.onAction});
 
-  final String label;
-  final Object icon;
+  final DeliveryTrack track;
+  final void Function(StageAction action, {required bool nextTier}) onAction;
 
   @override
   Widget build(BuildContext context) {
-    final sage = context.urgencyColors.safe;
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-      decoration:
-          BoxDecoration(color: sage.withValues(alpha: 0.14), borderRadius: BorderRadius.circular(999)),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          glyph(icon, size: 14, color: sage),
-          const SizedBox(width: 4),
-          Text(label, style: Theme.of(context).textTheme.labelSmall?.copyWith(color: sage)),
+    final text = Theme.of(context).textTheme;
+    final action = track.action;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(track.headline, style: text.bodyMedium),
+        if (action != null && action.primary) ...[
+          const SizedBox(height: 8),
+          FilledButton.tonalIcon(
+            onPressed: () => onAction(action, nextTier: track.offersNextTier),
+            icon: DuoIcon(
+                track.offersNextTier
+                    ? AppIcon.addExam
+                    : action.label.startsWith('Download')
+                        ? AppIcon.download
+                        : AppIcon.applyOnline,
+                size: 18),
+            label: Text(action.label),
+          ),
         ],
+      ],
+    );
+  }
+}
+
+/// Candidate login / Official site. Greyed out without a link (⋮ → Edit links).
+class _LinkButton extends StatelessWidget {
+  const _LinkButton({required this.icon, required this.label, required this.url});
+
+  final AppIcon icon;
+  final String label;
+  final String? url;
+
+  @override
+  Widget build(BuildContext context) {
+    final link = url;
+    return Tooltip(
+      message: link ?? 'No link saved. Add one from ⋮ → Edit links.',
+      child: OutlinedButton.icon(
+        onPressed: link == null ? null : () => openExternal(context, link),
+        style: OutlinedButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 10)),
+        icon: DuoIcon(icon, size: 18),
+        label: Text(label, maxLines: 1, overflow: TextOverflow.ellipsis),
       ),
     );
   }
@@ -483,8 +509,7 @@ class _SyncButton extends StatelessWidget {
       _SyncState.done => OutlinedButton.icon(
           // Tapping again re-syncs (e.g. after editing dates) — it updates, never duplicates.
           onPressed: onPressed,
-          style: OutlinedButton.styleFrom(
-              foregroundColor: sage, side: BorderSide(color: sage.withValues(alpha: 0.5))),
+          style: OutlinedButton.styleFrom(foregroundColor: sage, side: BorderSide(color: sage.withValues(alpha: 0.5))),
           icon: const DuoIcon(AppIcon.calendarDone, size: 18),
           label: const Text('In calendar'),
         ),
@@ -530,6 +555,65 @@ class _AdmitCardDialogState extends State<_AdmitCardDialog> {
           TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
           FilledButton(
             onPressed: () => Navigator.pop(context, _controller.text.trim()),
+            child: const Text('Save'),
+          ),
+        ],
+      );
+}
+
+/// ⋮ → Edit links: candidate login and official website. Returns (login, official).
+class _LinksDialog extends StatefulWidget {
+  const _LinksDialog({this.login, this.official});
+
+  final String? login;
+  final String? official;
+
+  @override
+  State<_LinksDialog> createState() => _LinksDialogState();
+}
+
+class _LinksDialogState extends State<_LinksDialog> {
+  late final _login = TextEditingController(text: widget.login);
+  late final _official = TextEditingController(text: widget.official);
+
+  @override
+  void dispose() {
+    _login.dispose();
+    _official.dispose();
+    super.dispose();
+  }
+
+  static String _url(TextEditingController c) {
+    final raw = c.text.trim();
+    return raw.isEmpty || raw.startsWith(RegExp('https?://', caseSensitive: false)) ? raw : 'https://$raw';
+  }
+
+  @override
+  Widget build(BuildContext context) => AlertDialog(
+        backgroundColor: AppPalette.surface,
+        title: const Text('Links'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: _login,
+              keyboardType: TextInputType.url,
+              autocorrect: false,
+              decoration: const InputDecoration(labelText: 'Candidate login'),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _official,
+              keyboardType: TextInputType.url,
+              autocorrect: false,
+              decoration: const InputDecoration(labelText: 'Official website'),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, (_url(_login), _url(_official))),
             child: const Text('Save'),
           ),
         ],
