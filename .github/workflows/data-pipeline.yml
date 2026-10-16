@@ -123,7 +123,7 @@ jobs:
           cp -r ../site/. . # home page + privacy policy for Google sign-in (GitHub Pages)
           touch .nojekyll # GitHub Pages serves the files as they are, without a Jekyll build
           git init -q -b data
-          git config user.name "ApplyTrack pipeline"
+          git config user.name "JobSummit pipeline"
           git config user.email "actions@users.noreply.github.com"
           git add -A
           git commit -qm "Data $(date -u +%Y-%m-%dT%H:%MZ)"

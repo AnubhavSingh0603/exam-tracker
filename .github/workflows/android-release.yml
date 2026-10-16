@@ -111,15 +111,15 @@ jobs:
           mkdir -p dist
           flutter build apk --release --flavor direct --split-per-abi --dart-define-from-file=env.json
           for abi in armeabi-v7a arm64-v8a x86_64; do
-            cp "$(ls $out/*"$abi"*direct*release.apk | head -n1)" "dist/applytrack-$VERSION_NAME-$abi.apk"
+            cp "$(ls $out/*"$abi"*direct*release.apk | head -n1)" "dist/jobsummit-$VERSION_NAME-$abi.apk"
           done
           rm -rf "$out"
           flutter build apk --release --flavor direct --dart-define-from-file=env.json
-          cp "$(ls $out/*direct*release.apk | head -n1)" "dist/applytrack-$VERSION_NAME-universal.apk"
+          cp "$(ls $out/*direct*release.apk | head -n1)" "dist/jobsummit-$VERSION_NAME-universal.apk"
           rm -rf "$out"
           flutter build apk --release --flavor store --dart-define-from-file=env.json
           mkdir -p store
-          cp "$(ls $out/*store*release.apk | head -n1)" "store/applytrack-$VERSION_NAME-store.apk"
+          cp "$(ls $out/*store*release.apk | head -n1)" "store/jobsummit-$VERSION_NAME-store.apk"
 
       - name: Create latest.json and checksums
         env:
@@ -133,7 +133,7 @@ jobs:
                                  capture_output=True, text=True).stdout.strip()
           apks, sums = {}, []
           for abi in ["universal", "armeabi-v7a", "arm64-v8a", "x86_64"]:
-              name = f"applytrack-{version}-{abi}.apk"
+              name = f"jobsummit-{version}-{abi}.apk"
               data = open(f"dist/{name}", "rb").read()
               digest = hashlib.sha256(data).hexdigest()
               sums.append(f"{digest}  {name}")
@@ -160,7 +160,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release create "$GITHUB_REF_NAME" dist/*.apk dist/latest.json dist/SHA256SUMS \
-            --title "ApplyTrack v$VERSION_NAME" --notes-file release-notes.md --verify-tag
+            --title "JobSummit v$VERSION_NAME" --notes-file release-notes.md --verify-tag
 
       # The store build is NOT attached to the public release (it has no updater and
       # would confuse people). Download it from the run's artifacts for store uploads.

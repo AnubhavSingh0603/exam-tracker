@@ -137,10 +137,7 @@ class _AccountTab extends ConsumerWidget {
             ] else ...[
               ListTile(
                 contentPadding: EdgeInsets.zero,
-                leading: CircleAvatar(
-                  backgroundColor: AppPalette.surfaceVariant,
-                  child: Text(user.initial, style: text.titleMedium?.copyWith(color: AppPalette.periwinkle)),
-                ),
+                leading: AccountPhoto(user, style: text.titleMedium),
                 title: Text(user.name ?? user.email),
                 subtitle: Text(user.email),
               ),
@@ -542,7 +539,7 @@ class _AboutTab extends ConsumerWidget {
       padding: const EdgeInsets.all(16),
       children: [
         _Section(
-          title: 'ApplyTrack',
+          title: 'JobSummit',
           note: 'One clear next step. Less to keep in mind.',
           children: [
             FutureBuilder<PackageInfo>(

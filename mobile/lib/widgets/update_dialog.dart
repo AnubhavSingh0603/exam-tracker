@@ -163,7 +163,7 @@ class _UpdateDialogState extends State<_UpdateDialog> {
           if (suggestSettings) ...[
             const SizedBox(height: 8),
             Text(
-              'Settings → Apps → ApplyTrack → Install unknown apps → Allow.\n'
+              'Settings → Apps → JobSummit → Install unknown apps → Allow.\n'
               'On Samsung phones also check Settings → Security and privacy → Auto Blocker.',
               style: text.bodySmall,
             ),

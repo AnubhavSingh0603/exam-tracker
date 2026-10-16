@@ -77,7 +77,7 @@ Within 30 minutes the VM's cron (`sync_release_manifest.sh`) serves the new `lat
    Listing was free until 1 Apr 2025, and a "nominal annual fee" was announced after that, so
    check the current terms.
 2. Create the app with package `com.examtracker.exam_tracker`, category Education / Productivity.
-3. Upload `applytrack-<ver>-store.apk` (or build an AAB with `flutter build appbundle --flavor store`
+3. Upload `jobsummit-<ver>-store.apk` (or build an AAB with `flutter build appbundle --flavor store`
    if the console asks for one).
 4. Store listing:
    - Short and long description (Hindi too if you can).

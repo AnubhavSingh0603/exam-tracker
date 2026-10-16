@@ -36,16 +36,16 @@ Future<void> main() async {
       databaseProvider.overrideWithValue(db),
       themeModeProvider.overrideWith(() => ThemeModeNotifier(themeMode)),
     ],
-    child: const ApplyTrackApp(),
+    child: const JobSummitApp(),
   ));
 }
 
-class ApplyTrackApp extends ConsumerWidget {
-  const ApplyTrackApp({super.key});
+class JobSummitApp extends ConsumerWidget {
+  const JobSummitApp({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) => MaterialApp(
-        title: 'ApplyTrack',
+        title: 'JobSummit',
         debugShowCheckedModeBanner: false,
         theme: AppTheme.of(Brightness.light),
         darkTheme: AppTheme.of(Brightness.dark),

@@ -1,4 +1,4 @@
-# ApplyTrack — Android app
+# JobSummit — Android app
 
 Flutter · Riverpod · sqflite · device_calendar · flutter_secure_storage.
 

@@ -3,7 +3,7 @@ import 'package:flutter_svg/flutter_svg.dart';
 
 part 'app_icons.g.dart';
 
-/// ApplyTrack's own icons (duotone: rounded lines plus a soft fill on the main
+/// JobSummit's own icons (duotone: rounded lines plus a soft fill on the main
 /// shape), tinted like an [Icon]: [color], else the surrounding [IconTheme].
 class DuoIcon extends StatelessWidget {
   const DuoIcon(this.icon, {super.key, this.size, this.color, this.semanticLabel});

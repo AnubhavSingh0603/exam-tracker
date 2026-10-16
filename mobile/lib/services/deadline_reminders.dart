@@ -75,7 +75,7 @@ class DeadlineReminders {
             description: [
               '${job.organization} · ${job.examName}',
               if (job.applicationUrl != null) 'Apply online: ${job.applicationUrl}',
-              '\nAdded by ApplyTrack. Swipe the job left in the app to remove this.',
+              '\nAdded by JobSummit. Swipe the job left in the app to remove this.',
             ].join('\n'),
             deadline: job.deadline,
             now: now,

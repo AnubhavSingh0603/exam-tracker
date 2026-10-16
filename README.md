@@ -1,4 +1,4 @@
-# ApplyTrack
+# JobSummit
 
 **One clear next step. Less to keep in mind.** A calm, ADHD-friendly Android app for
 Indian government and PSU jobs and exams.

@@ -5,6 +5,7 @@ import '../providers/account_providers.dart';
 import '../providers/backup_providers.dart';
 import '../providers/providers.dart';
 import '../screens/settings_screen.dart';
+import '../services/auth_service.dart';
 import '../theme/app_theme.dart';
 import 'app_icons.dart';
 
@@ -99,14 +100,40 @@ class AccountAvatarButton extends ConsumerWidget {
         isLabelVisible: attention,
         smallSize: 9,
         backgroundColor: AppPalette.honey,
-        child: CircleAvatar(
-          radius: 18,
-          backgroundColor: AppPalette.surfaceVariant,
-          child: user != null
-              ? Text(user.initial, style: text.labelLarge?.copyWith(color: AppPalette.periwinkle))
-              : DuoIcon(AppIcon.profile, size: 20, color: AppPalette.periwinkle),
-        ),
+        child: user != null
+            ? AccountPhoto(user, radius: 18, style: text.labelLarge)
+            : CircleAvatar(
+                radius: 18,
+                backgroundColor: AppPalette.surfaceVariant,
+                child: DuoIcon(AppIcon.profile, size: 20, color: AppPalette.periwinkle),
+              ),
       ),
+    );
+  }
+}
+
+/// The Google profile picture, with the name's first letter underneath: that
+/// letter shows while the picture loads, offline, or when there is none.
+class AccountPhoto extends StatelessWidget {
+  const AccountPhoto(this.user, {super.key, this.radius = 20, this.style});
+
+  final GoogleUser user;
+  final double radius;
+  final TextStyle? style;
+
+  /// Google serves the picture at any size: ask for one sharp on this screen.
+  static String sized(String url, int px) => url.replaceFirst(RegExp(r'=s\d+(-c)?$'), '=s$px-c');
+
+  @override
+  Widget build(BuildContext context) {
+    final photo = user.photoUrl;
+    final px = (radius * 2 * MediaQuery.devicePixelRatioOf(context)).ceil();
+    return CircleAvatar(
+      radius: radius,
+      backgroundColor: AppPalette.surfaceVariant,
+      foregroundImage: photo == null ? null : NetworkImage(sized(photo, px)),
+      onForegroundImageError: photo == null ? null : (_, __) {},
+      child: Text(user.initial, style: style?.copyWith(color: AppPalette.periwinkle)),
     );
   }
 }

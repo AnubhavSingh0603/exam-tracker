@@ -32,7 +32,7 @@ Future<void> showSamsungSleepTip(BuildContext context) => showDialog<void>(
             SizedBox(height: 12),
             _Step(1, 'App settings → Battery → Unrestricted'),
             SizedBox(height: 8),
-            _Step(2, 'Settings → Battery → Background usage limits → Never sleeping apps → add ApplyTrack'),
+            _Step(2, 'Settings → Battery → Background usage limits → Never sleeping apps → add JobSummit'),
           ],
         ),
         actions: [

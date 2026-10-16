@@ -10,10 +10,13 @@ const kDriveAppDataScope = 'https://www.googleapis.com/auth/drive.appdata';
 
 @immutable
 class GoogleUser {
-  const GoogleUser({required this.email, this.name, this.active = true});
+  const GoogleUser({required this.email, this.name, this.photoUrl, this.active = true});
 
   final String email;
   final String? name;
+
+  /// The Google profile picture (Gmail avatar), when the account has one.
+  final String? photoUrl;
 
   /// false = remembered from an earlier session but not confirmed yet this run
   /// (e.g. started offline). Backups retry the silent sign-in first.
@@ -42,6 +45,7 @@ class GoogleAccountService {
 
   static const _emailKey = 'account.email';
   static const _nameKey = 'account.name';
+  static const _photoKey = 'account.photo';
 
   /// Call once from main(). No-op when this build has no Google client ID.
   static Future<void> initialize() async {
@@ -72,7 +76,8 @@ class GoogleAccountService {
   static Future<GoogleUser?> remembered() async {
     final prefs = await SharedPreferences.getInstance();
     final email = prefs.getString(_emailKey);
-    return email == null ? null : GoogleUser(email: email, name: prefs.getString(_nameKey), active: false);
+    return email == null ? null : GoogleUser(
+            email: email, name: prefs.getString(_nameKey), photoUrl: prefs.getString(_photoKey), active: false);
   }
 
   /// Interactive: account picker, then the Drive-folder permission. Throws
@@ -141,6 +146,7 @@ class GoogleAccountService {
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(_emailKey);
     await prefs.remove(_nameKey);
+    await prefs.remove(_photoKey);
   }
 
   Future<GoogleUser> _remember(GoogleSignInAccount account) async {
@@ -148,7 +154,13 @@ class GoogleAccountService {
     await prefs.setString(_emailKey, account.email);
     final name = account.displayName;
     if (name != null) await prefs.setString(_nameKey, name);
-    return GoogleUser(email: account.email, name: name);
+    final photo = account.photoUrl;
+    if (photo != null) {
+      await prefs.setString(_photoKey, photo);
+    } else {
+      await prefs.remove(_photoKey);
+    }
+    return GoogleUser(email: account.email, name: name, photoUrl: photo);
   }
 
   static String _googleHint(GoogleSignInException e) {

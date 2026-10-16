@@ -24,7 +24,7 @@ abstract final class NotificationService {
   static Future<void> init() async {
     if (_ready) return;
     await _plugin.initialize(
-      const InitializationSettings(android: AndroidInitializationSettings('@mipmap/ic_launcher')),
+      const InitializationSettings(android: AndroidInitializationSettings('@drawable/ic_stat_jobsummit')),
       onDidReceiveNotificationResponse: (r) => _open(r.payload),
     );
     await _plugin
