@@ -20,6 +20,7 @@ import '../utils/system_actions.dart';
 import '../widgets/app_icons.dart';
 import '../widgets/common.dart';
 import '../widgets/samsung_sleep_tip.dart';
+import '../widgets/share_app.dart';
 import '../widgets/update_dialog.dart';
 import 'home_shell.dart';
 
@@ -35,7 +36,7 @@ enum SettingsTab {
   final String label;
 }
 
-const kHomePage = 'https://anubhavsingh0603.github.io/exam-tracker/';
+const kHomePage = kShareLink;
 const kPrivacyPolicy = 'https://anubhavsingh0603.github.io/exam-tracker/privacy.html';
 const kIssues = 'https://github.com/AnubhavSingh0603/exam-tracker/issues';
 
@@ -571,6 +572,8 @@ class _AboutTab extends ConsumerWidget {
                 },
                 child: const Text('Check for updates'),
               ),
+            const SizedBox(height: 8),
+            const ShareAppButton(),
           ],
         ),
         _Section(
