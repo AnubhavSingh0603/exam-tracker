@@ -29,6 +29,7 @@ import '../widgets/app_icons.dart';
 import '../widgets/common.dart';
 import '../widgets/one_line.dart';
 import '../widgets/pin_dialog.dart';
+import '../widgets/review_sheet.dart';
 import '../widgets/samsung_sleep_tip.dart';
 import '../widgets/share_app.dart';
 import '../widgets/update_dialog.dart';
@@ -712,6 +713,13 @@ class _AboutTab extends ConsumerWidget {
                 onTap: () =>
                     Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => const SelfCheckScreen())),
               ),
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: const Icon(Icons.rate_review_outlined),
+              title: const Text('Send a review'),
+              subtitle: const Text('Tell us what to fix or add'),
+              onTap: () => showReviewSheet(context),
+            ),
             ListTile(
               contentPadding: EdgeInsets.zero,
               leading: const Icon(Icons.bug_report_outlined),

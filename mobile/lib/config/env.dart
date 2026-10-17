@@ -51,6 +51,16 @@ abstract final class Env {
   /// Builds can leave out the Private (corporate) jobs workspace entirely with
   /// `--dart-define=ENABLE_PRIVATE_JOBS=false`. On by default; users still switch it
   /// on themselves in Settings › Jobs.
+  /// "Send a review" posts to this Google Form (its responses go to a Google Sheet
+  /// the team reads). The entry numbers are the form's question ids.
+  static const reviewFormId = String.fromEnvironment(
+    'REVIEW_FORM_ID',
+    defaultValue: '1FAIpQLSeK4Z0iN-d5lg-W6DTTVIN1sYegseR2nDDESNG_zHYR3OcKHg',
+  );
+  static const reviewRatingEntry = 'entry.178685883';
+  static const reviewTextEntry = 'entry.907586785';
+  static const reviewEmailEntry = 'entry.2080412853';
+
   static const privateJobsAvailable = bool.fromEnvironment('ENABLE_PRIVATE_JOBS', defaultValue: true);
 
   /// Calendar events are written in this zone. The audience is India-only, so
