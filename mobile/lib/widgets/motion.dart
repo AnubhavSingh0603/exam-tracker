@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
 import '../theme/app_theme.dart';
+import 'celebrate.dart';
 
 /// Small, slow motion that only marks a change. Everything here is skipped when
 /// the phone's "Remove animations" is on.
@@ -77,6 +78,7 @@ void showAppliedCelebration(BuildContext context) {
   late final OverlayEntry entry;
   entry = OverlayEntry(builder: (_) => _AppliedTick(onDone: () => entry.remove()));
   overlay.insert(entry);
+  showConfetti(context);
 }
 
 class _AppliedTick extends StatefulWidget {

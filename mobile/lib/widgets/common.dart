@@ -8,6 +8,7 @@ import '../screens/settings_screen.dart';
 import '../services/auth_service.dart';
 import '../theme/app_theme.dart';
 import 'app_icons.dart';
+import 'celebrate.dart';
 import 'workspace_switch.dart';
 
 /// A sliver with the screen's side gutter.
@@ -52,6 +53,7 @@ class ScreenHeader extends StatelessWidget {
             ],
           ),
         ),
+        const Padding(padding: EdgeInsets.only(top: 6), child: XpBadge()),
         const AccountAvatarButton(),
       ],
     );

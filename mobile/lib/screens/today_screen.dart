@@ -11,6 +11,7 @@ import '../providers/providers.dart';
 import '../theme/app_theme.dart';
 import '../utils/system_actions.dart';
 import '../widgets/app_icons.dart';
+import '../widgets/celebrate.dart';
 import '../widgets/common.dart';
 import '../widgets/hero_card.dart';
 import '../widgets/job_card.dart';
@@ -53,6 +54,7 @@ class TodayScreen extends ConsumerWidget {
         physics: const AlwaysScrollableScrollPhysics(),
         slivers: [
           padSliver(ScreenHeader(title: 'Today', subtitle: subtitle), top: 12),
+          padSliver(const TodayProgress(), top: 12),
           if (account == AccountStatus.needsProfile)
             padSliver(
               PromptCard(

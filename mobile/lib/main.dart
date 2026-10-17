@@ -13,6 +13,7 @@ import 'services/background_watch.dart';
 import 'services/database_service.dart';
 import 'services/notification_service.dart';
 import 'theme/app_theme.dart';
+import 'widgets/celebrate.dart';
 import 'widgets/update_gate.dart';
 
 Future<void> main() async {
@@ -59,8 +60,11 @@ class JobSummitApp extends ConsumerWidget {
         themeMode: ref.watch(themeModeProvider),
         builder: (context, child) => _PaletteScope(brightness: Theme.of(context).brightness, child: child!),
         // The one place the app knows about the optional Private workspace.
-        home: UpdateGate(
-          child: ref.watch(workspaceProvider).shown == Workspace.private ? const PrivateShell() : const HomeShell(),
+        home: XpCelebrations(
+          child: UpdateGate(
+            child:
+                ref.watch(workspaceProvider).shown == Workspace.private ? const PrivateShell() : const HomeShell(),
+          ),
         ),
       );
 }
