@@ -47,6 +47,9 @@ jobs:
       - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2.23.0
         with:
           channel: stable
+          # Pinned to the version the app is tested with: a newer Flutter re-resolves
+          # packages, and v0.13.0 shipped a different shared_preferences that way.
+          flutter-version: 3.47.7
           cache: true
 
       - name: Generate Android scaffolding (if not committed)
@@ -102,7 +105,7 @@ jobs:
           json.dump(config, open("env.json", "w"))
           PY
 
-      - run: flutter pub get
+      - run: flutter pub get --enforce-lockfile # exactly the committed versions, or fail
       - run: flutter test
 
       - name: Build direct APKs (split per ABI + universal) and the store APK

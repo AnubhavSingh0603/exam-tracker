@@ -13,6 +13,15 @@
 -keep class com.builttoroam.devicecalendar.** { *; }
 -keepattributes Signature, *Annotation*, EnclosingMethod, InnerClasses
 
+# Plugins that Dart reaches through JNI (package:jni): Dart looks their classes and
+# methods up by name at run time, so R8 must not rename or drop them. v0.13.0 was
+# built with a shared_preferences_android that works this way, R8 removed its
+# getAll(), and every settings read failed (Google sign-in showed "Couldn't sign in").
+-keep class io.flutter.plugins.sharedpreferences.** { *; }
+-keep class io.flutter.plugins.pathprovider.** { *; }
+-keep class com.github.dart_lang.jni.** { *; }
+-keep class kotlin.coroutines.Continuation { *; }
+
 # sqflite (native side)
 -keep class com.tekartik.sqflite.** { *; }
 
