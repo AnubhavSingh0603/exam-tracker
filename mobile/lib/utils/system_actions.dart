@@ -4,7 +4,15 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../services/fx.dart';
+
 const _sensitiveClearAfter = Duration(seconds: 45);
+
+/// A failure: the gentle error sound, then the same calm message.
+void showErrorSnack(BuildContext context, String message) {
+  Fx.error();
+  showCalmSnack(context, message);
+}
 
 void showCalmSnack(BuildContext context, String message, {SnackBarAction? action}) {
   ScaffoldMessenger.of(context)
@@ -28,7 +36,7 @@ Future<void> copyToClipboard(BuildContext context, String label, String value, {
   } else {
     await Clipboard.setData(ClipboardData(text: value));
   }
-  unawaited(HapticFeedback.lightImpact());
+  Fx.copy();
   if (sensitive) {
     Timer(_sensitiveClearAfter, () async {
       final current = await Clipboard.getData(Clipboard.kTextPlain);
@@ -48,5 +56,5 @@ Future<void> openExternal(BuildContext context, String? url) async {
     return;
   }
   final ok = await launchUrl(uri, mode: LaunchMode.externalApplication);
-  if (!ok && context.mounted) showCalmSnack(context, 'Could not open the link.');
+  if (!ok && context.mounted) showErrorSnack(context, 'Could not open the link.');
 }

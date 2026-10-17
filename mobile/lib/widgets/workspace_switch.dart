@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../config/env.dart';
 import '../providers/workspace_providers.dart';
+import '../services/fx.dart';
 import '../theme/app_theme.dart';
 
 /// [ Govt exams | Private jobs ]: one tap swaps the whole app. Nothing at all while
@@ -27,7 +28,10 @@ class WorkspaceSwitch extends ConsumerWidget {
           ButtonSegment(value: Workspace.private, label: Text('Private jobs')),
         ],
         selected: {ws.shown},
-        onSelectionChanged: (s) => ref.read(workspaceProvider.notifier).switchTo(s.first),
+        onSelectionChanged: (s) {
+          Fx.tap();
+          ref.read(workspaceProvider.notifier).switchTo(s.first);
+        },
       ),
     );
   }

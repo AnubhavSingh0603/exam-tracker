@@ -19,6 +19,7 @@ import '../services/auth_service.dart';
 import '../services/auto_update.dart';
 import '../services/calendar_sync_service.dart';
 import '../services/deadline_reminders.dart';
+import '../services/fx.dart';
 import '../services/update_service.dart';
 import '../theme/app_theme.dart';
 import '../utils/system_actions.dart';
@@ -499,9 +500,48 @@ class _LookTab extends ConsumerWidget {
             ),
           ],
         ),
+        const _Section(
+          title: 'Sounds & vibration',
+          note: 'A chime when you apply, a pop for XP, a fanfare when you level up. Sounds play only '
+              'with your phone on ring and never pause your music.',
+          children: [_FxSwitches()],
+        ),
       ],
     );
   }
+}
+
+class _FxSwitches extends StatefulWidget {
+  const _FxSwitches();
+
+  @override
+  State<_FxSwitches> createState() => _FxSwitchesState();
+}
+
+class _FxSwitchesState extends State<_FxSwitches> {
+  @override
+  Widget build(BuildContext context) => Column(
+        children: [
+          SwitchListTile(
+            contentPadding: EdgeInsets.zero,
+            value: Fx.sound,
+            onChanged: (on) async {
+              await Fx.setSound(on);
+              if (mounted) setState(() {});
+            },
+            title: const Text('Sounds'),
+          ),
+          SwitchListTile(
+            contentPadding: EdgeInsets.zero,
+            value: Fx.vibration,
+            onChanged: (on) async {
+              await Fx.setVibration(on);
+              if (mounted) setState(() {});
+            },
+            title: const Text('Vibration'),
+          ),
+        ],
+      );
 }
 
 // -----------------------------------------------------------------------------
@@ -598,7 +638,7 @@ class _AboutTab extends ConsumerWidget {
                     }
                   } on UpdateCheckFailed {
                     if (context.mounted) {
-                      showCalmSnack(context, 'Couldn’t reach GitHub to check. Try again in a minute.');
+                      showErrorSnack(context, 'Couldn’t reach GitHub to check. Try again in a minute.');
                     }
                   }
                 },

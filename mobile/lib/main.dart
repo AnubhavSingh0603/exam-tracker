@@ -11,6 +11,7 @@ import 'screens/home_shell.dart';
 import 'services/auth_service.dart';
 import 'services/background_watch.dart';
 import 'services/database_service.dart';
+import 'services/fx.dart';
 import 'services/notification_service.dart';
 import 'theme/app_theme.dart';
 import 'widgets/celebrate.dart';
@@ -38,6 +39,7 @@ Future<void> main() async {
   }
 
   final themeMode = await ThemeModeNotifier.load();
+  await Fx.load();
 
   runApp(ProviderScope(
     overrides: [

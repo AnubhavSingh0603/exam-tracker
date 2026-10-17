@@ -1,7 +1,6 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../domain/relevance.dart';
@@ -11,6 +10,7 @@ import '../models/job_preferences.dart';
 import '../models/jobs_data.dart';
 import '../providers/jobs_providers.dart';
 import '../providers/providers.dart';
+import '../services/fx.dart';
 import '../theme/app_theme.dart';
 import '../utils/system_actions.dart';
 import 'app_card.dart';
@@ -33,7 +33,7 @@ Future<bool> applyToJob(BuildContext screenContext, WidgetRef ref, FeedItem item
   final category = ref.read(feedProvider).dataOrNull?.category;
   try {
     final app = await notifier.markAppliedFromFeed(item, category: category);
-    unawaited(HapticFeedback.mediumImpact());
+    Fx.applied();
     if (screenContext.mounted) showAppliedCelebration(screenContext);
     if (!screenContext.mounted) return true;
     showCalmSnack(
@@ -60,6 +60,7 @@ Future<bool> applyToJob(BuildContext screenContext, WidgetRef ref, FeedItem item
 
 /// Swipe left / "Not for me": hide it and learn from it, with Undo.
 Future<bool> rejectJobWithUndo(BuildContext screenContext, WidgetRef ref, FeedItem item) async {
+  Fx.dismiss();
   final decisions = ref.read(decisionsProvider.notifier);
   try {
     await decisions.record(item, applied: false);

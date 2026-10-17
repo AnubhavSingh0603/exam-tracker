@@ -7,18 +7,25 @@ abstract final class NotificationService {
   static final _plugin = FlutterLocalNotificationsPlugin();
   static bool _ready = false;
 
+  // A channel's sound is fixed once created, so the JobSummit ping came with new ids
+  // (the old silent-default channels are deleted in init).
+  static const _ping = RawResourceAndroidNotificationSound('fx_ping');
+  static const _oldChannelIds = ['exam_updates', 'deadline_alerts'];
+
   static const _channel = AndroidNotificationChannel(
-    'exam_updates',
+    'exam_updates_v2',
     'Exam updates',
     description: 'Admit cards, exam dates, answer keys and results for exams you track',
     importance: Importance.high,
+    sound: _ping,
   );
 
   static const _deadlineChannel = AndroidNotificationChannel(
-    'deadline_alerts',
+    'deadline_alerts_v2',
     'Last-day reminders',
     description: 'Jobs that fit you and close within a day',
     importance: Importance.high,
+    sound: _ping,
   );
 
   static Future<void> init() async {
@@ -27,12 +34,12 @@ abstract final class NotificationService {
       const InitializationSettings(android: AndroidInitializationSettings('@drawable/ic_stat_jobsummit')),
       onDidReceiveNotificationResponse: (r) => _open(r.payload),
     );
-    await _plugin
-        .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()
-        ?.createNotificationChannel(_channel);
-    await _plugin
-        .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()
-        ?.createNotificationChannel(_deadlineChannel);
+    final android = _plugin.resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>();
+    for (final id in _oldChannelIds) {
+      await android?.deleteNotificationChannel(id);
+    }
+    await android?.createNotificationChannel(_channel);
+    await android?.createNotificationChannel(_deadlineChannel);
     _ready = true;
   }
 
@@ -58,6 +65,7 @@ abstract final class NotificationService {
           channelDescription: channel.description,
           importance: Importance.high,
           priority: Priority.high,
+          sound: channel.sound,
           styleInformation: BigTextStyleInformation(body),
         ),
       ),

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../providers/providers.dart';
+import '../../services/fx.dart';
 import '../../theme/app_theme.dart';
 import '../../utils/system_actions.dart';
 import '../../widgets/app_card.dart';
@@ -124,7 +125,10 @@ class _ApplicationCard extends ConsumerWidget {
                   label: Text(stage.label),
                   selected: i == reached,
                   avatar: i < reached ? Icon(Icons.check_rounded, size: 16, color: AppPalette.sage) : null,
-                  onSelected: (_) => notifier.setStage(app, stage),
+                  onSelected: (_) {
+                    Fx.tap();
+                    notifier.setStage(app, stage);
+                  },
                 ),
             ],
           ),

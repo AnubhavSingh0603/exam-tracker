@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../providers/providers.dart';
+import '../../services/fx.dart';
 import '../../theme/app_theme.dart';
 import '../../utils/system_actions.dart';
 import '../../widgets/app_card.dart';
@@ -130,6 +131,7 @@ class _PrivateJobCard extends ConsumerWidget {
 
   Future<void> _applied(BuildContext context, WidgetRef ref) async {
     final job = match.job;
+    Fx.applied();
     await ref
         .read(privateApplicationsProvider.notifier)
         .add(company: job.company, title: job.title, url: job.applyUrl, jobId: job.id);
@@ -138,6 +140,7 @@ class _PrivateJobCard extends ConsumerWidget {
 
   Future<void> _notForMe(BuildContext context, WidgetRef ref) async {
     final dismissed = ref.read(dismissedPrivateJobsProvider.notifier);
+    Fx.dismiss();
     await dismissed.dismiss(match.job.id);
     if (context.mounted) {
       showCalmSnack(context, 'Hidden',

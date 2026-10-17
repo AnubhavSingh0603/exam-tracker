@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../domain/delivery_track.dart';
@@ -10,6 +9,7 @@ import '../models/vault_entry.dart';
 import '../providers/pin_providers.dart';
 import '../providers/providers.dart';
 import '../services/calendar_sync_service.dart';
+import '../services/fx.dart';
 import '../theme/app_theme.dart';
 import '../utils/system_actions.dart';
 import 'app_card.dart';
@@ -70,18 +70,19 @@ class _TrackedApplicationCardState extends ConsumerState<TrackedApplicationCard>
     switch (result) {
       case CalendarSyncSuccess(:final eventsWritten):
         setState(() => _sync = _SyncState.done);
-        await HapticFeedback.mediumImpact();
+        Fx.done();
         if (!mounted) return;
         showCalmSnack(context,
             'Added $eventsWritten event${eventsWritten == 1 ? '' : 's'} with reminders at 7 days, 2 days and 3 hrs.');
       case final CalendarSyncFailure failure:
         setState(() => _sync = app.calendarSynced ? _SyncState.done : _SyncState.idle);
-        showCalmSnack(context, failure.userMessage);
+        showErrorSnack(context, failure.userMessage);
     }
   }
 
   Future<void> _onMenu(_MenuAction action) async {
     final notifier = ref.read(trackedAppsProvider.notifier);
+    if (action != _MenuAction.delete) Fx.tap();
     switch (action) {
       case _MenuAction.admitCardLive:
         final url = await _askAdmitCardUrl();

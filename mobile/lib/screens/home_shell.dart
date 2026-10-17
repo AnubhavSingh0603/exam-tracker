@@ -91,7 +91,7 @@ Future<void> signInWithGoogle(BuildContext context, WidgetRef ref) async {
   } on AuthException catch (e) {
     if (!e.cancelled && context.mounted) showCalmSnack(context, e.message);
   } catch (_) {
-    if (context.mounted) showCalmSnack(context, 'Couldn’t sign in right now. Try again in a moment.');
+    if (context.mounted) showErrorSnack(context, 'Couldn’t sign in right now. Try again in a moment.');
   }
 }
 

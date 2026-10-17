@@ -1,11 +1,11 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../domain/xp.dart';
 import '../providers/xp_providers.dart';
+import '../services/fx.dart';
 import '../theme/app_theme.dart';
 import 'app_card.dart';
 import 'motion.dart';
@@ -139,10 +139,13 @@ class XpCelebrations extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     ref.listen<XpAward?>(lastXpAwardProvider, (_, award) {
       if (award == null) return;
-      HapticFeedback.selectionClick();
+      // Applying already rang its chime: the pop only ticks then.
+      if (!award.levelUp) {
+        Fx.xp(quiet: award.action == XpAction.appliedToJob || award.action == XpAction.privateApplied);
+      }
       _showPop(context, award);
       if (award.levelUp) {
-        HapticFeedback.mediumImpact();
+        Fx.levelUp();
         showConfetti(context, pieces: 110);
         showDialog<void>(context: context, builder: (_) => _LevelUpDialog(level: award.level));
       }

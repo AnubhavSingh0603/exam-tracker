@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../domain/qualification_taxonomy.dart';
 import '../domain/urgency.dart';
 import '../models/user_profile.dart';
 import '../providers/account_providers.dart';
+import '../services/fx.dart';
 import '../theme/app_theme.dart';
 import '../widgets/app_icons.dart';
 import '../widgets/common.dart';
@@ -119,7 +119,7 @@ class _ProfileSetupScreenState extends ConsumerState<ProfileSetupScreen> {
             isExServiceman: _exsm,
             exServicemanServiceYears: _exsm ? _exsmYears : 0,
           ));
-      await HapticFeedback.mediumImpact();
+      Fx.done();
       if (!mounted) return;
       // Capture before popping: this sheet's context is gone once it closes.
       final messenger = ScaffoldMessenger.of(context);

@@ -5,6 +5,7 @@ import '../domain/delivery_track.dart';
 import '../domain/lifecycle.dart';
 import '../models/tracked_application.dart';
 import '../providers/providers.dart';
+import '../services/fx.dart';
 import '../theme/app_theme.dart';
 import '../utils/system_actions.dart';
 import '../widgets/add_exam_sheet.dart';
@@ -116,6 +117,7 @@ class _StageList extends ConsumerWidget {
 
   void _setArchived(BuildContext context, WidgetRef ref, TrackedApplication app, {required bool archived}) {
     final notifier = ref.read(trackedAppsProvider.notifier);
+    Fx.dismiss();
     notifier.setArchived(app.id, archived: archived);
     showCalmSnack(
       context,
