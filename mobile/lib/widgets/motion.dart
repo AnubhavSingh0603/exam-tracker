@@ -293,6 +293,8 @@ class TabSwitcher extends StatefulWidget {
 class _TabSwitcherState extends State<TabSwitcher> with SingleTickerProviderStateMixin {
   late final AnimationController _c = AnimationController(vsync: this, duration: const Duration(milliseconds: 240))
     ..value = 1;
+  late final _eased = CurvedAnimation(parent: _c, curve: Curves.easeOutCubic);
+  late final _fade = Tween<double>(begin: 0.3, end: 1).animate(_eased);
   int _from = 0;
 
   @override
@@ -306,6 +308,7 @@ class _TabSwitcherState extends State<TabSwitcher> with SingleTickerProviderStat
 
   @override
   void dispose() {
+    _eased.dispose();
     _c.dispose();
     super.dispose();
   }
@@ -315,16 +318,15 @@ class _TabSwitcherState extends State<TabSwitcher> with SingleTickerProviderStat
     final stack = IndexedStack(index: widget.index, children: widget.children);
     if (motionOff(context)) return stack;
     final direction = widget.index >= _from ? 1.0 : -1.0;
-    return AnimatedBuilder(
-      animation: _c,
-      builder: (_, child) {
-        final t = Curves.easeOutCubic.transform(_c.value);
-        return Opacity(
-          opacity: 0.3 + 0.7 * t,
-          child: Transform.translate(offset: Offset(16 * direction * (1 - t), 0), child: child),
-        );
-      },
-      child: stack,
+    // The page is painted once and only faded and nudged as a layer: smooth even
+    // on long lists.
+    return FadeTransition(
+      opacity: _fade,
+      child: AnimatedBuilder(
+        animation: _eased,
+        builder: (_, child) => Transform.translate(offset: Offset(16 * direction * (1 - _eased.value), 0), child: child),
+        child: RepaintBoundary(child: stack),
+      ),
     );
   }
 }

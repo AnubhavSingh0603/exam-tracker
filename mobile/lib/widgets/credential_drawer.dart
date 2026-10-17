@@ -54,7 +54,7 @@ class CredentialDrawer extends ConsumerWidget {
     final reg = vault?.registrationId;
     final roll = vault?.rollNumber;
     final locked = !(ref.watch(pinLockProvider).dataOrNull?.unlocked(DateTime.now()) ?? true);
-    String? shown(String? v) => v == null ? null : (locked ? '•••• (PIN)' : v);
+    String? shown(String? v) => v == null ? null : (locked ? '••••••' : v);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -66,16 +66,19 @@ class CredentialDrawer extends ConsumerWidget {
             _CopyChip(
               label: 'Reg No.',
               value: shown(reg),
+              locked: locked,
               onTap: reg == null ? null : () => _copyId(context, ref, 'Registration ID', reg),
             ),
             _CopyChip(
               label: 'Roll No.',
               value: shown(roll),
+              locked: locked,
               onTap: roll == null ? null : () => _copyId(context, ref, 'Roll number', roll),
             ),
             _CopyChip(
               label: 'Password',
               value: hasPassword ? '••••••' : null,
+              locked: locked,
               onTap: hasPassword ? () => _copyPassword(context, ref) : null,
             ),
           ],
@@ -105,9 +108,12 @@ class CredentialDrawer extends ConsumerWidget {
 }
 
 class _CopyChip extends StatelessWidget {
-  const _CopyChip({required this.label, required this.value, required this.onTap});
+  const _CopyChip({required this.label, required this.value, required this.onTap, this.locked = false});
 
   final String label;
+
+  /// Behind the PIN lock: tapping asks for the PIN first.
+  final bool locked;
   final String? value;
   final VoidCallback? onTap;
 
@@ -143,7 +149,10 @@ class _CopyChip extends StatelessWidget {
                   ),
                   if (!empty) ...[
                     const SizedBox(width: 10),
-                    DuoIcon(AppIcon.copy, size: 16, color: AppPalette.textMuted),
+                    // Locked behind the PIN: tapping asks for it first.
+                    locked
+                        ? Icon(Icons.lock_rounded, size: 16, color: AppPalette.textMuted)
+                        : DuoIcon(AppIcon.copy, size: 16, color: AppPalette.textMuted),
                   ],
                 ],
               ),

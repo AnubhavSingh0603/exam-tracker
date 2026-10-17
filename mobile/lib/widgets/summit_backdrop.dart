@@ -80,26 +80,40 @@ class SummitBackdrop extends StatelessWidget {
     final top = MediaQuery.paddingOf(context).top;
     final colors = SummitColors.of(AppPalette.current);
     final still = motionOff(context);
+    final sceneHeight = top + SummitHeights.full;
+    SummitPainter part({bool sky = false, double orb = 0, bool ridges = false}) =>
+        SummitPainter(colors, sceneHeight: sceneHeight, sky: sky, orb: orb, ridges: ridges);
+    // Painted once, in layers of their own; switching tabs only slides them (and
+    // fades the moon), so no frame has to repaint the mountains.
+    final scene = SizedBox(
+      height: sceneHeight,
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          RepaintBoundary(child: CustomPaint(painter: part(sky: true))),
+          AnimatedOpacity(
+            opacity: orb ? 1 : 0,
+            duration: still ? Duration.zero : duration,
+            curve: Curves.easeInOutCubic,
+            child: RepaintBoundary(child: CustomPaint(painter: part(orb: 1))),
+          ),
+          RepaintBoundary(child: CustomPaint(painter: part(ridges: true))),
+        ],
+      ),
+    );
     return Stack(
       children: [
-        TweenAnimationBuilder<double>(
-          tween: Tween(end: orb ? 1 : 0),
-          duration: still ? Duration.zero : duration,
-          builder: (context, orbShown, _) => TweenAnimationBuilder<double>(
+        Positioned(
+          top: 0,
+          left: 0,
+          right: 0,
+          child: TweenAnimationBuilder<double>(
             tween: Tween(end: height),
             duration: still ? Duration.zero : duration,
             curve: Curves.easeInOutCubic,
-            builder: (context, h, _) => Positioned(
-              top: 0,
-              left: 0,
-              right: 0,
-              height: h <= 0.5 ? 0 : top + h,
-              child: ClipRect(
-                child: CustomPaint(
-                  painter: SummitPainter(colors, sceneHeight: top + SummitHeights.full, orb: orbShown),
-                ),
-              ),
-            ),
+            child: scene,
+            // Bottom of the scene at [top] + h: everything above slides out of sight.
+            builder: (context, h, child) => Transform.translate(offset: Offset(0, h - SummitHeights.full), child: child),
           ),
         ),
         if (waves)
@@ -108,7 +122,7 @@ class SummitBackdrop extends StatelessWidget {
             right: 0,
             bottom: 0,
             height: 72,
-            child: IgnorePointer(child: CustomPaint(painter: _WavesPainter(colors))),
+            child: IgnorePointer(child: RepaintBoundary(child: CustomPaint(painter: _WavesPainter(colors)))),
           ),
       ],
     );
@@ -141,6 +155,24 @@ class SummitColors {
   final Color? stars; // night only
   final Color wave1;
   final Color wave2;
+
+  // Equal colours: no repaint when the screen around the scene rebuilds.
+  @override
+  bool operator ==(Object other) =>
+      other is SummitColors &&
+      other.sky == sky &&
+      other.far == far &&
+      other.mid == mid &&
+      other.front == front &&
+      other.shadow == shadow &&
+      other.snow == snow &&
+      other.orb == orb &&
+      other.stars == stars &&
+      other.wave1 == wave1 &&
+      other.wave2 == wave2;
+
+  @override
+  int get hashCode => Object.hash(sky, far, mid, front, shadow, snow, orb, stars, wave1, wave2);
 
   factory SummitColors.of(Palette p) {
     Color mix(Color a, Color b, double t) => Color.lerp(a, b, t)!;
@@ -176,13 +208,21 @@ class SummitColors {
 /// Drawn in a 348 × 300 design space stretched to the scene, bottom-aligned in the
 /// visible box: a shorter box shows only the lower part (the sky leaves first).
 class SummitPainter extends CustomPainter {
-  SummitPainter(this.c, {required this.sceneHeight, this.orb = 1});
+  SummitPainter(this.c, {required this.sceneHeight, this.orb = 1, this.sky = true, this.ridges = true});
 
   final SummitColors c;
   final double sceneHeight;
 
   /// 0..1: how much the moon or sun shows.
   final double orb;
+
+  /// Which parts to paint: the backdrop puts each in a layer of its own.
+  final bool sky;
+  final bool ridges;
+
+  /// Where the moon or sun sits: low on the right, rising from behind the far
+  /// ridge, below the title row's chips and avatar.
+  static const orbCentre = Offset(240, 128);
 
   static Path farPath() => Path()
     ..moveTo(0, 190)
@@ -226,41 +266,48 @@ class SummitPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     if (size.height <= 0) return;
+    final sx = size.width / 348, sy = sceneHeight / 300, dy = size.height - sceneHeight;
+    final night = c.stars != null;
+    // A round moon on any screen: placed in the scene, sized in screen pixels.
+    if (orb > 0) {
+      final centre = Offset(orbCentre.dx * sx, dy + orbCentre.dy * sy);
+      canvas.drawCircle(centre, 44 * sx, Paint()..color = c.orb.withValues(alpha: (night ? 0.10 : 0.18) * orb));
+      canvas.drawCircle(centre, 30 * sx, Paint()..color = c.orb.withValues(alpha: orb));
+    }
+    if (!sky && !ridges) return;
     canvas.save();
     // Bottom-align the full scene in the visible box.
-    canvas.translate(0, size.height - sceneHeight);
-    canvas.scale(size.width / 348, sceneHeight / 300);
+    canvas.translate(0, dy);
+    canvas.scale(sx, sy);
 
-    canvas.drawRect(const Rect.fromLTWH(0, 0, 348, 300), Paint()..color = c.sky);
-    final night = c.stars != null;
-    // Low on the right, rising from behind the far ridge: clear of the title and avatar.
-    if (orb > 0) {
-      canvas.drawCircle(
-          const Offset(236, 112), 46, Paint()..color = c.orb.withValues(alpha: (night ? 0.10 : 0.18) * orb));
-      canvas.drawCircle(const Offset(236, 112), 32, Paint()..color = c.orb.withValues(alpha: orb));
-    }
-    if (night) {
-      final star = Paint()..color = c.stars!.withValues(alpha: 0.8);
-      for (final s in _stars) {
-        canvas.drawCircle(s, 1.4, star);
+    if (sky) {
+      canvas.drawRect(const Rect.fromLTWH(0, 0, 348, 300), Paint()..color = c.sky);
+      if (night) {
+        final star = Paint()..color = c.stars!.withValues(alpha: 0.8);
+        for (final s in _stars) {
+          canvas.drawCircle(s, 1.4, star);
+        }
       }
     }
 
-    final shadow = Paint()..color = c.shadow;
-    void layer(Path p, Color color, double drop) {
-      canvas.drawPath(p.shift(Offset(0, drop)), shadow);
-      canvas.drawPath(p, Paint()..color = color);
-    }
+    if (ridges) {
+      final shadow = Paint()..color = c.shadow;
+      void layer(Path p, Color color, double drop) {
+        canvas.drawPath(p.shift(Offset(0, drop)), shadow);
+        canvas.drawPath(p, Paint()..color = color);
+      }
 
-    layer(farPath(), c.far, 7);
-    canvas.drawPath(snowPath(), Paint()..color = c.snow);
-    layer(midPath(), c.mid, 7);
-    layer(frontPath(), c.front, 6);
+      layer(farPath(), c.far, 7);
+      canvas.drawPath(snowPath(), Paint()..color = c.snow);
+      layer(midPath(), c.mid, 7);
+      layer(frontPath(), c.front, 6);
+    }
     canvas.restore();
   }
 
   @override
-  bool shouldRepaint(SummitPainter old) => old.c != c || old.sceneHeight != sceneHeight || old.orb != orb;
+  bool shouldRepaint(SummitPainter old) =>
+      old.c != c || old.sceneHeight != sceneHeight || old.orb != orb || old.sky != sky || old.ridges != ridges;
 }
 
 class _WavesPainter extends CustomPainter {

@@ -123,14 +123,6 @@ class _ExamJourneyViewState extends ConsumerState<ExamJourneyView> {
     }
   }
 
-  void _onTrackAction(StageAction action, {required bool nextTier}) {
-    if (nextTier) {
-      _trackNextTier();
-    } else {
-      openExternal(context, action.url);
-    }
-  }
-
   Future<bool> _confirmDelete() async =>
       await showDialog<bool>(
         context: context,
@@ -248,11 +240,7 @@ class _ExamJourneyViewState extends ConsumerState<ExamJourneyView> {
                   _menu(context),
                 ],
               ),
-              const SizedBox(height: 10),
-              Padding(
-                padding: const EdgeInsets.only(right: 12),
-                child: _NowLine(track: track, onAction: _onTrackAction),
-              ),
+              // What's happening now, and its button, sit under the tracker below.
               if ((app.totalSeats ?? 0) > 0) ...[
                 // 0 = the notice didn't say
                 const SizedBox(height: 10),
@@ -382,42 +370,6 @@ class _DatePill extends StatelessWidget {
   }
 }
 
-/// The track's one sentence, and its action when it is a real next step
-/// (download, raise an objection, check the result, track the next stage).
-class _NowLine extends StatelessWidget {
-  const _NowLine({required this.track, required this.onAction});
-
-  final DeliveryTrack track;
-  final void Function(StageAction action, {required bool nextTier}) onAction;
-
-  @override
-  Widget build(BuildContext context) {
-    final text = Theme.of(context).textTheme;
-    final action = track.action;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(track.headline, style: text.bodyMedium),
-        if (action != null && action.primary) ...[
-          const SizedBox(height: 8),
-          FilledButton.tonalIcon(
-            onPressed: () => onAction(action, nextTier: track.offersNextTier),
-            icon: DuoIcon(
-                track.offersNextTier
-                    ? AppIcon.addExam
-                    : action.label.startsWith('Download')
-                        ? AppIcon.download
-                        : AppIcon.applyOnline,
-                size: 18),
-            label: Text(action.label),
-          ),
-        ],
-      ],
-    );
-  }
-}
-
-/// Candidate login / Official site. Greyed out without a link (⋮ → Edit links).
 class _LinkButton extends StatelessWidget {
   const _LinkButton({required this.icon, required this.label, required this.url, this.onPressed});
 

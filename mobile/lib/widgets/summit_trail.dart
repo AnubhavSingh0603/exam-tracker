@@ -77,11 +77,14 @@ class _SummitTrailState extends State<SummitTrail> {
         opacity: widget.show ? 1 : 0,
         duration: still ? Duration.zero : const Duration(milliseconds: 320),
         child: LayoutBuilder(
+          // Laid out once for where the mountain is going; the slide only moves it,
+          // in step with the backdrop.
           builder: (context, box) => TweenAnimationBuilder<double>(
             tween: Tween(end: widget.height),
             duration: still ? Duration.zero : SummitBackdrop.duration,
             curve: Curves.easeInOutCubic,
-            builder: (context, h, _) => _scene(context, box.maxWidth, top, h, still),
+            child: RepaintBoundary(child: _scene(context, box.maxWidth, top, widget.height, still)),
+            builder: (context, h, child) => Transform.translate(offset: Offset(0, h - widget.height), child: child),
           ),
         ),
       ),

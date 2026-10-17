@@ -273,8 +273,31 @@ RankedJob rankJob(FeedItem item, JobPreferences prefs, Affinity affinity) {
     score += affinity.score(features);
     if (affinity.strongestLike(features) != null) reasons.add('Like jobs you applied to');
   }
-  if (subjectUnclear(item, prefs) case final noun?) reasons.add('Check $noun');
+  if (eligibilityUnknown(item)) {
+    // Shown (you may well qualify), but below jobs that say who can apply.
+    score -= 2;
+    reasons.add('Check eligibility');
+  } else if (subjectUnclear(item, prefs) case final noun?) {
+    reasons.add('Check $noun');
+  }
   return RankedJob(item, score, reasons);
+}
+
+/// Whether the notice couldn't be read for who may apply: no qualification, no
+/// degrees, no level, for any of the job's posts you'd see.
+bool eligibilityUnknown(FeedItem item) {
+  final published = {for (final p in item.job?.posts ?? const <PublishedPost>[]) p.id: p};
+  return (item.posts.isEmpty ? [item.bestPost] : item.posts).every((post) {
+    final p = published[post.postDetailId];
+    return p != null &&
+        (p.qualificationText ?? '').trim().isEmpty &&
+        (p.rawEligibilityText ?? '').trim().isEmpty &&
+        p.allowedDegrees.isEmpty &&
+        p.eligibleStreams.isEmpty &&
+        p.minQualificationLevel == null &&
+        !p.openToAnyGraduate &&
+        !p.openToAnyPostGraduate;
+  });
 }
 
 enum JobSort {

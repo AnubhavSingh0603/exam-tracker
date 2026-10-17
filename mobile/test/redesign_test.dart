@@ -155,7 +155,10 @@ void main() {
     Future<void> show(double h) => tester.pumpWidget(MaterialApp(
           home: Scaffold(body: SizedBox(width: 360, height: 700, child: SummitBackdrop(height: h))),
         ));
-    double shown() => tester.getSize(find.byType(ClipRect).first).height;
+    // How far down the screen the (sliding) scene reaches.
+    double shown() => tester
+        .getBottomLeft(find.descendant(of: find.byType(SummitBackdrop), matching: find.byType(CustomPaint)).first)
+        .dy;
 
     await show(SummitHeights.today);
     expect(shown(), SummitHeights.full);

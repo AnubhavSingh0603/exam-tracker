@@ -45,6 +45,46 @@ FeedItem _feedItem(PublishedJob job, List<FeedPost> posts, MatchKind kind) {
   );
 }
 
+final _nonWord = RegExp('[^a-z0-9]+');
+const _orgFiller = {'of', 'the', 'and', 'for', 'office', 'department', 'govt', 'government'};
+
+/// The same notice published twice (the job sites name the board differently:
+/// "Haryana Public Service Commission" and "… (HPSC)"): one advertisement number,
+/// one closing day in India, overlapping names. One copy is kept: the one you
+/// applied through, else the one with the most posts.
+List<PublishedJob> withoutDuplicates(List<PublishedJob> jobs, Set<String> appliedPostIds) {
+  String? key(PublishedJob j) {
+    final adv = (j.advertisementNo ?? '').toLowerCase().replaceAll(_nonWord, '');
+    final due = j.applicationDeadline;
+    if (adv.length < 3 || due == null) return null;
+    final ist = due.toUtc().add(const Duration(hours: 5, minutes: 30));
+    return '$adv|${ist.year}-${ist.month}-${ist.day}';
+  }
+
+  Set<String> words(String org) =>
+      {for (final w in org.toLowerCase().split(_nonWord)) if (w.length > 1 && !_orgFiller.contains(w)) w};
+  bool sameBoard(PublishedJob a, PublishedJob b) {
+    final wa = words(a.organization), wb = words(b.organization);
+    if (wa.isEmpty || wb.isEmpty) return false;
+    return wa.intersection(wb).length * 2 >= (wa.length < wb.length ? wa.length : wb.length);
+  }
+
+  int rank(PublishedJob j) =>
+      (j.posts.any((p) => appliedPostIds.contains(p.id)) ? 1000 : 0) + j.posts.length;
+
+  final kept = <PublishedJob>[];
+  for (final job in jobs) {
+    final k = key(job);
+    final twin = k == null ? -1 : kept.indexWhere((o) => key(o) == k && sameBoard(o, job));
+    if (twin < 0) {
+      kept.add(job);
+    } else if (rank(job) > rank(kept[twin])) {
+      kept[twin] = job;
+    }
+  }
+  return kept;
+}
+
 /// [appliedPostIds]: posts already tracked on this phone (never shown again).
 FeedSnapshot buildFeed({
   required JobsFile jobs,
@@ -56,7 +96,7 @@ FeedSnapshot buildFeed({
   bool strictUrMigration = true,
 }) {
   final open = [
-    for (final j in jobs.jobs)
+    for (final j in withoutDuplicates(jobs.jobs, appliedPostIds))
       if (j.applicationDeadline != null && j.applicationDeadline!.isAfter(now)) j,
   ]..sort((a, b) {
       final byDeadline = a.applicationDeadline!.compareTo(b.applicationDeadline!);

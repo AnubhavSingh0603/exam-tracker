@@ -135,7 +135,7 @@ class _AccountTab extends ConsumerWidget {
       children: [
         _Section(
           title: 'Google account',
-          note: 'Used only to back up your data to your own Google Drive, so a new phone gets it all back.',
+          note: 'Backs up to your own Google Drive.',
           children: [
             if (!Env.canSignIn)
               const MutedNote('Backup isn’t set up in this build.')
@@ -256,7 +256,6 @@ class _ProfileTab extends ConsumerWidget {
       children: [
         _Section(
           title: 'Your profile',
-          note: 'Used on this phone to decide which jobs you qualify for and how many seats you can compete for.',
           children: [
             if (profile == null)
               const MutedNote('No profile yet.')
@@ -349,7 +348,6 @@ class _JobsTab extends ConsumerWidget {
         if (Env.privateJobsAvailable) const _PrivateJobsSwitch(),
         _Section(
           title: 'Show these first',
-          note: 'Picked groups rank above the rest. None picked: railways, banks, SSC, UPSC and PSUs lead.',
           children: [
             Wrap(
               spacing: 8,
@@ -370,7 +368,6 @@ class _JobsTab extends ConsumerWidget {
         ),
         _Section(
           title: 'Never show',
-          note: 'Hidden groups disappear from Jobs and Today.',
           children: [
             Wrap(
               spacing: 8,
@@ -432,8 +429,7 @@ class _JobsTab extends ConsumerWidget {
         ),
         _Section(
           title: 'Professional qualifications',
-          note: 'Posts that need one you don’t have (a teacher’s B.Ed, a nurse’s GNM, a pharmacist’s '
-              'D.Pharm…) are hidden. Ones your degree already shows are on by themselves.',
+          note: 'Jobs needing one you don’t have are hidden.',
           children: [
             Wrap(
               spacing: 8,
@@ -454,8 +450,7 @@ class _JobsTab extends ConsumerWidget {
         ),
         _Section(
           title: 'Languages you can work in',
-          note: 'Posts that need another language are hidden: a Marathi teacher, “knowledge of Konkani”, '
-              '“passed with Marathi subject”, “Marathi medium”.',
+          note: 'Jobs needing another language are hidden.',
           children: [
             Wrap(
               spacing: 8,
@@ -473,8 +468,6 @@ class _JobsTab extends ConsumerWidget {
         ),
         _Section(
           title: 'Learning from your choices',
-          note: 'Jobs like the ones you apply to move up; jobs like the ones you swipe away move down. '
-              'This stays on your phone and in your backup.',
           children: [
             Text('Learned from $applied applied and ${decisions.length - applied} not-for-me.',
                 style: Theme.of(context).textTheme.bodyMedium),
@@ -525,7 +518,6 @@ class _SettingsTab extends ConsumerWidget {
       children: [
         _Section(
           title: 'Appearance',
-          note: 'Light, dark, or follow your phone’s setting.',
           children: [
             SegmentedButton<ThemeMode>(
               showSelectedIcon: false,
@@ -542,8 +534,7 @@ class _SettingsTab extends ConsumerWidget {
         ),
         const _Section(
           title: 'Sounds & vibration',
-          note: 'A chime when you apply, a pop for XP, a fanfare when you level up. Sounds play only '
-              'with your phone on ring and never pause your music.',
+          note: 'Sounds play only when your phone is on ring.',
           children: [_FxSwitches()],
         ),
         ..._alertSections(context),
@@ -589,20 +580,15 @@ class _FxSwitchesState extends State<_FxSwitches> {
 List<Widget> _alertSections(BuildContext context) => [
       const _Section(
         title: 'Last-day reminders',
-        note: 'When a job that fits you closes within 24 hours: a notification every few hours and '
-            'a calendar event with a reminder every 4 hours. Applying, or swiping it left, removes them.',
         children: [_LastDaySwitch()],
       ),
       const _Section(
         title: 'Calendar',
-        note: 'Your tracked exams’ last dates and exam days go into your phone’s calendar, with reminders 7 days, '
-            '2 days and 3 hours before. New exams are added as you track them, and dates update when they change.',
         children: [_CalendarAutoSwitch()],
       ),
       _Section(
         title: 'Exam updates',
-        note: 'Every few hours the app checks job sites and exam websites for admit cards, exam dates, '
-            'answer keys and results for the exams you applied to.',
+        note: 'Checks for admit cards, dates and results.',
         children: [
           FilledButton.tonal(
             onPressed: () => allowBackgroundChecks(context),
@@ -626,12 +612,6 @@ List<Widget> _alertSections(BuildContext context) => [
         children: [
           OutlinedButton(onPressed: openAppSettings, child: Text('Open app settings')),
         ],
-      ),
-      const _Section(
-        title: 'Calendar reminders',
-        note: 'Use “Calendar” on an exam in My exams. Reminders come 7 days, 2 days and '
-            '3 hours before, from your phone’s Calendar app, so they arrive even if this app is asleep.',
-        children: [],
       ),
     ];
 
@@ -930,8 +910,7 @@ class _PinLockSection extends ConsumerWidget {
     final lock = ref.read(pinLockProvider.notifier);
     return _Section(
       title: 'PIN lock',
-      note: 'Hides your saved Reg/Roll numbers and passwords until you enter a 4-digit PIN, then '
-          'shows them for 5 minutes. The PIN stays on this phone; it isn’t part of the Google backup.',
+      note: 'Hides your IDs and passwords behind a PIN.',
       children: [
         SwitchListTile(
           contentPadding: EdgeInsets.zero,
@@ -990,9 +969,7 @@ class _PrivateJobsSwitch extends ConsumerWidget {
     final ws = ref.watch(workspaceProvider);
     return _Section(
       title: 'Private jobs (beta)',
-      note: 'Adds a second workspace for company jobs: your skills and experience, roles from '
-          'employers’ own job boards, and a tracker for private applications. Your Govt profile '
-          'and exams are not touched.',
+      note: 'A second workspace for company jobs.',
       children: [
         SwitchListTile(
           contentPadding: EdgeInsets.zero,

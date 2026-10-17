@@ -178,8 +178,7 @@ class _ProfileSetupScreenState extends ConsumerState<ProfileSetupScreen> {
               Text('About you', style: text.headlineSmall),
               const SizedBox(height: 4),
               Text(
-                'Used only to work out which jobs you can apply for and how many seats you can reach. '
-                'You can change it any time.',
+                'Used only to find jobs you can apply for.',
                 style: text.bodySmall,
               ),
             ],
@@ -230,8 +229,7 @@ class _ProfileSetupScreenState extends ConsumerState<ProfileSetupScreen> {
               ),
               _Section(
                 title: 'Highest qualification',
-                subtitle: 'The highest one you hold, or will hold by the cut-off date. '
-                    '“Any graduate” jobs match every degree.',
+                subtitle: 'Include one you’ll finish by the cut-off date.',
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
@@ -250,8 +248,7 @@ class _ProfileSetupScreenState extends ConsumerState<ProfileSetupScreen> {
               ),
               _Section(
                 title: 'Other degrees you hold',
-                subtitle: 'Optional. A B.Ed with your B.Sc, an LL.B after a B.A.: jobs that ask for any of '
-                    'them will show up too.',
+                subtitle: 'Optional.',
                 child: Wrap(
                   spacing: 8,
                   runSpacing: 8,
@@ -271,10 +268,7 @@ class _ProfileSetupScreenState extends ConsumerState<ProfileSetupScreen> {
                     ? null
                     : _Section(
                         title: 'Branches & subjects',
-                        subtitle: 'Optional. Pick what you studied: jobs that ask only for other branches or '
-                            'subjects are hidden (you can still see them under Hidden jobs). Jobs open to any '
-                            'subject stay, and ones that don’t say get a “Check” tag. Leave a list empty to '
-                            'skip it.',
+                        subtitle: 'Optional. Hides jobs that clearly need a different subject.',
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
@@ -291,7 +285,7 @@ class _ProfileSetupScreenState extends ConsumerState<ProfileSetupScreen> {
               ),
               _Section(
                 title: 'Work experience',
-                subtitle: 'Full-time work after your qualification. Leave at Fresher if none.',
+                subtitle: 'Full-time work after your qualification.',
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
