@@ -177,6 +177,20 @@ List<Set<String>> _requiredLanguages(String text) {
   return groups;
 }
 
+// Posts whose title names the language of the work: "Telugu Reporter", "Hindi
+// Translator", "TGT (Sanskrit)", "Lecturer in Urdu".
+final _languageWork = r'reporter|translator|interpreter|typist|steno\w*|teacher|tgt|pgt|lecturer|professor|editor'
+    r'|sub-?editor|anchor|announcer|news ?reader|proof ?-?reader|officer \(official language\)';
+final _languageTitles = [
+  _re('\\b($_lang)\\s+(?:language\\s+)?(?:$_languageWork)\\b'),
+  _re('\\b(?:$_languageWork)\\s*(?:\\(|-|–|in|of|for)\\s*($_lang)\\b'),
+];
+
+List<Set<String>> _titleLanguages(String postName) => [
+      for (final re in _languageTitles)
+        for (final m in re.allMatches(postName)) {_canonical(m.group(1)!)},
+    ];
+
 /// What one post asks for beyond the degree.
 ExtraRequirements requirementsOf(PublishedPost post) {
   final text = [post.qualificationText, post.rawEligibilityText].whereType<String>().join(' ');
@@ -187,7 +201,7 @@ ExtraRequirements requirementsOf(PublishedPost post) {
       for (final rule in _rules)
         if (rule.applies(post.postName, text)) rule.profession,
     },
-    languages: text.isEmpty ? const [] : _requiredLanguages(text),
+    languages: [if (text.isNotEmpty) ..._requiredLanguages(text), ..._titleLanguages(post.postName)],
     subjects: subjectsOf(post),
   );
 }

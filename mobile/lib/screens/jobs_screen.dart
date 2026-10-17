@@ -50,7 +50,8 @@ class _JobsScreenState extends ConsumerState<JobsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final prefs = ref.watch(jobPreferencesProvider).dataOrNull ?? JobPreferences.defaults;
+    // With what the profile adds (degrees, subjects), like the "fit you" count.
+    final prefs = ref.watch(effectiveJobPreferencesProvider);
     final affinity = ref.watch(affinityProvider);
     final level = ref.watch(profileProvider).dataOrNull?.qualificationTier;
     final category = ref.watch(jobsCategoryFilterProvider);

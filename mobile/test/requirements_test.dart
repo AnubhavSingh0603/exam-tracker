@@ -106,6 +106,16 @@ void main() {
           JobPreferences.defaults.copyWith(qualifications: {'teaching'})), isNull);
     });
 
+    test('a title naming the language of the work', () {
+      String? byTitle(String name) => unmetRequirement(req('Graduate with 2 years experience.', name), JobPreferences.defaults);
+      expect(byTitle('Telugu Reporter'), 'Needs Telugu');
+      expect(byTitle('TGT (Sanskrit)'), 'Needs Sanskrit');
+      expect(byTitle('Lecturer in Urdu'), 'Needs Urdu');
+      expect(byTitle('Hindi Translator'), isNull, reason: 'Hindi is yours by default');
+      expect(byTitle('Tamil Nadu Forest Guard'), isNull);
+      expect(byTitle('Assistant Engineer (Electrical)'), isNull);
+    });
+
     test('a desirable language is not a requirement', () {
       expect(unmet('Knowledge of Konkani is essential. Knowledge of Marathi is desirable.'), 'Needs Konkani');
       expect(unmet('Knowledge of Marathi is desirable.'), isNull);
