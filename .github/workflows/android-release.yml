@@ -57,6 +57,11 @@ jobs:
           if [ ! -f android/gradlew ]; then
             flutter create --platforms=android --org com.examtracker --project-name exam_tracker .
           fi
+          # `flutter create` also runs a pub get that UPGRADES pubspec.lock (v0.13.0-0.13.3
+          # shipped untested package versions that way, e.g. a JNI-based shared_preferences
+          # that broke settings and sign-in). Put the committed lock back.
+          git checkout -- pubspec.lock
+          git diff --exit-code -- pubspec.lock pubspec.yaml
 
       - name: Check tag matches pubspec version
         run: |
