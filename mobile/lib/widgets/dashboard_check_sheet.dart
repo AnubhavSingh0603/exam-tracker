@@ -1,10 +1,14 @@
-import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'dart:async';
 
+
+import '../domain/xp.dart';
 import '../models/tracked_application.dart';
 import '../providers/providers.dart';
+import '../providers/xp_providers.dart';
 import '../utils/system_actions.dart';
 import 'app_icons.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'pin_dialog.dart';
 
 /// "Check dashboard": a quick manual look at the candidate portal. Step 1 copies
@@ -48,6 +52,7 @@ class _DashboardCheckState extends ConsumerState<_DashboardCheck> {
     if (reg != null) await copyToClipboard(context, 'Reg No', reg);
     if (!mounted) return;
     await openExternal(context, url);
+    if (!_opened) unawaited(ref.read(xpProvider.notifier).award(XpAction.checkedDashboard));
     if (mounted) setState(() => _opened = true);
   }
 

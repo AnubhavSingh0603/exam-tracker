@@ -60,3 +60,16 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+
+  # Nunito (SIL Open Font License, assets/fonts/Nunito-OFL.txt): rounded and friendly.
+  # Static weights cut from the variable font, so bold text is really bold on Android.
+  fonts:
+    - family: Nunito
+      fonts:
+        - asset: assets/fonts/Nunito-Regular.ttf
+        - asset: assets/fonts/Nunito-SemiBold.ttf
+          weight: 600
+        - asset: assets/fonts/Nunito-Bold.ttf
+          weight: 700
+        - asset: assets/fonts/Nunito-ExtraBold.ttf
+          weight: 800

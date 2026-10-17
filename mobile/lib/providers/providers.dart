@@ -1,10 +1,8 @@
-import 'dart:async';
-import 'dart:convert';
 
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../domain/feed_builder.dart';
 import '../domain/next_step.dart';
+import '../domain/xp.dart';
 import '../models/feed.dart';
 import '../models/tracked_application.dart';
 import '../models/vault_entry.dart';
@@ -17,7 +15,11 @@ import '../services/secret_store.dart';
 import '../services/update_service.dart';
 import 'account_providers.dart';
 import 'backup_providers.dart';
+import 'dart:async';
+import 'dart:convert';
 import 'jobs_providers.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'xp_providers.dart';
 
 // -----------------------------------------------------------------------------
 // Infrastructure
@@ -96,6 +98,7 @@ class TrackedAppsNotifier extends AsyncNotifier<List<TrackedApplication>> {
     );
     await _db.upsertApplication(app);
     await ref.read(decisionsProvider.notifier).record(item, applied: true); // learns what you like
+    unawaited(ref.read(xpProvider.notifier).award(XpAction.appliedToJob));
     final timeline = item.timelineJson;
     if (timeline != null) await _db.saveTimeline(item.jobPostId, jsonEncode(timeline));
     await reload();
@@ -131,6 +134,7 @@ class TrackedAppsNotifier extends AsyncNotifier<List<TrackedApplication>> {
     await _db.upsertApplication(app);
     await reload();
     _changed();
+    unawaited(ref.read(xpProvider.notifier).award(XpAction.addedExam));
     unawaited(checkForUpdates(force: true)); // its admit card may already be out
     return app;
   }
@@ -209,6 +213,10 @@ class TrackedAppsNotifier extends AsyncNotifier<List<TrackedApplication>> {
       ..invalidate(vaultEntryProvider(appId))
       ..invalidate(hasPasswordProvider(appId));
     _changed();
+    final entry = input.toEntry(appId);
+    if (!entry.isEmpty || input.password.isNotEmpty) {
+      unawaited(ref.read(xpProvider.notifier).award(XpAction.savedIds));
+    }
   }
 
   Future<void> setStatus(String id, ApplicationStatus status,
@@ -216,6 +224,7 @@ class TrackedAppsNotifier extends AsyncNotifier<List<TrackedApplication>> {
     await _db.updateStatus(id, status, examAt: examAt, admitCardUrl: admitCardUrl);
     await reload();
     _changed();
+    if (examAt != null) unawaited(ref.read(xpProvider.notifier).award(XpAction.setExamDate));
   }
 
   /// Optimistic so the Dismissible leaves the tree in the same frame.

@@ -1,13 +1,15 @@
-import 'dart:async';
 
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../config/env.dart';
+import '../domain/xp.dart';
 import '../models/user_profile.dart';
 import '../services/auth_service.dart';
 import '../services/profile_store.dart';
 import 'backup_providers.dart';
+import 'dart:async';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'providers.dart';
+import 'xp_providers.dart';
 
 // -----------------------------------------------------------------------------
 // Google account (only used for the Drive backup)
@@ -56,7 +58,9 @@ class ProfileNotifier extends AsyncNotifier<UserProfileData?> {
 
   /// Saves on the phone; the feed recomputes from it and a backup follows.
   Future<bool> save(UserProfileData data) async {
+    final firstTime = state.valueOrNull?.isComplete != true && data.isComplete;
     await ProfileStore.write(data);
+    if (firstTime) unawaited(ref.read(xpProvider.notifier).award(XpAction.completedProfile));
     state = AsyncData(data);
     ref.invalidate(feedProvider);
     ref.read(backupControllerProvider.notifier).markDirty();

@@ -4,7 +4,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../domain/xp.dart';
 import '../../providers/providers.dart';
+import '../../providers/xp_providers.dart';
 import 'data.dart';
 import 'matching.dart';
 import 'models.dart';
@@ -69,12 +71,19 @@ class PrivateApplicationsNotifier extends AsyncNotifier<List<PrivateApplication>
     );
     await (await _store).save(app);
     await _reload();
+    unawaited(ref.read(xpProvider.notifier).award(XpAction.privateApplied));
     return app;
   }
 
   Future<void> setStage(PrivateApplication app, PrivateStage stage) async {
     await (await _store).save(app.copyWith(stage: stage, updatedAt: DateTime.now()));
     await _reload();
+    final track = PrivateStage.track;
+    if (stage == PrivateStage.offer) {
+      unawaited(ref.read(xpProvider.notifier).award(XpAction.privateOffer));
+    } else if (track.contains(stage) && track.indexOf(stage) > track.indexOf(app.stage)) {
+      unawaited(ref.read(xpProvider.notifier).award(XpAction.privateProgress));
+    }
   }
 
   Future<void> delete(String id) async {
