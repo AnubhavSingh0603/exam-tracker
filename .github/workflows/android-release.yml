@@ -125,6 +125,14 @@ jobs:
           mkdir -p store
           cp "$(ls $out/*store*release.apk | head -n1)" "store/jobsummit-$VERSION_NAME-store.apk"
 
+      - name: Check the classes the app finds by name survived shrinking
+        run: |
+          set -euo pipefail
+          for apk in dist/*.apk store/*.apk; do
+            echo "== $apk"
+            python3 -I tool/check_jni_classes.py "$apk"
+          done
+
       - name: Create latest.json and checksums
         env:
           MIN_SUPPORTED: ${{ vars.MIN_SUPPORTED_VERSION_CODE }}

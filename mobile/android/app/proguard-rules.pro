@@ -20,7 +20,14 @@
 -keep class io.flutter.plugins.sharedpreferences.** { *; }
 -keep class io.flutter.plugins.pathprovider.** { *; }
 -keep class com.github.dart_lang.jni.** { *; }
--keep class kotlin.coroutines.Continuation { *; }
+
+# package:jni runs Kotlin suspend functions from Dart and finds Kotlin's coroutine
+# classes by name (Continuation, intrinsics.IntrinsicsKt, intrinsics.CoroutineSingletons;
+# see jni's lib/src/kotlin.dart). Its consumer rules don't keep them, so v0.13.2
+# still failed: ClassNotFoundException "kotlin/coroutines/intrinsics/...".
+-keep class kotlin.coroutines.** { *; }
+-keep class kotlin.Result { *; }
+-keep class kotlin.Result$Failure { *; }
 
 # sqflite (native side)
 -keep class com.tekartik.sqflite.** { *; }
