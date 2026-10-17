@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:http/http.dart' as http;
@@ -38,6 +39,40 @@ class PrivateProfileNotifier extends AsyncNotifier<PrivateProfile> {
     await ref.read(privateProfileStoreProvider).write(profile);
     state = AsyncData(profile);
   }
+
+  /// "Reset private profile": blank again, and the saved résumé copy deleted.
+  Future<void> reset() async {
+    final resume = state.valueOrNull?.resumePath;
+    await save(const PrivateProfile());
+    if (resume != null) {
+      try {
+        await File(resume).delete();
+      } catch (_) {
+        // Already gone.
+      }
+    }
+  }
+}
+
+/// The XP key for one private application: the posting it came from, else its
+/// company and title, so deleting and adding it again can't earn twice.
+String privateXpKey(PrivateApplication app) =>
+    'papp:${(app.jobId ?? '${app.company}|${app.title}').trim().toLowerCase()}';
+
+/// For an XP recount: each private application, the stage it has reached, offers.
+Future<Map<String, XpEarned>> privateXpForRecount(Ref ref) async {
+  final things = <String, XpEarned>{};
+  for (final app in await (await ref.read(privateApplicationsStoreProvider.future)).list()) {
+    final key = privateXpKey(app);
+    things[key] = XpEarned(XpAction.privateApplied, XpAction.privateApplied.points, app.createdAt);
+    if (app.stage == PrivateStage.offer) {
+      things['offer:$key'] = XpEarned(XpAction.privateOffer, XpAction.privateOffer.points, app.updatedAt);
+    } else if (app.stage == PrivateStage.screening || app.stage == PrivateStage.interview) {
+      things['stage:$key:${app.stage.wire}'] =
+          XpEarned(XpAction.privateProgress, XpAction.privateProgress.points, app.updatedAt);
+    }
+  }
+  return things;
 }
 
 final privateProfileProvider =
@@ -71,7 +106,7 @@ class PrivateApplicationsNotifier extends AsyncNotifier<List<PrivateApplication>
     );
     await (await _store).save(app);
     await _reload();
-    unawaited(ref.read(xpProvider.notifier).award(XpAction.privateApplied));
+    unawaited(ref.read(xpProvider.notifier).award(XpAction.privateApplied, key: privateXpKey(app)));
     return app;
   }
 
@@ -79,10 +114,12 @@ class PrivateApplicationsNotifier extends AsyncNotifier<List<PrivateApplication>
     await (await _store).save(app.copyWith(stage: stage, updatedAt: DateTime.now()));
     await _reload();
     final track = PrivateStage.track;
+    final key = privateXpKey(app);
     if (stage == PrivateStage.offer) {
-      unawaited(ref.read(xpProvider.notifier).award(XpAction.privateOffer));
+      unawaited(ref.read(xpProvider.notifier).award(XpAction.privateOffer, key: 'offer:$key'));
     } else if (track.contains(stage) && track.indexOf(stage) > track.indexOf(app.stage)) {
-      unawaited(ref.read(xpProvider.notifier).award(XpAction.privateProgress));
+      // Once per stage: moving back and forward again earns nothing more.
+      unawaited(ref.read(xpProvider.notifier).award(XpAction.privateProgress, key: 'stage:$key:${stage.wire}'));
     }
   }
 

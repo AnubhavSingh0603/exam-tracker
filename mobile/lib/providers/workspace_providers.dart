@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import 'package:flutter/widgets.dart' show WidgetBuilder;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -51,3 +52,8 @@ class WorkspaceNotifier extends Notifier<WorkspaceState> {
 }
 
 final workspaceProvider = NotifierProvider<WorkspaceNotifier, WorkspaceState>(WorkspaceNotifier.new);
+
+/// Settings › Profile while in the Private workspace: the Private module's own
+/// page, handed over by main.dart (the one place that knows the module). Null when
+/// this build has no Private module.
+final privateProfilePageProvider = Provider<WidgetBuilder?>((ref) => null);

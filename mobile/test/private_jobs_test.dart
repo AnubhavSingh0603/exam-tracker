@@ -201,11 +201,11 @@ void main() {
         child: const MaterialApp(home: Scaffold(body: WorkspaceSwitch())),
       ));
       await tester.pumpAndSettle();
-      expect(find.text('Private jobs'), findsNothing);
+      expect(find.text('Private'), findsNothing);
       await c.read(workspaceProvider.notifier).setPrivateEnabled(true);
       await tester.pumpAndSettle();
-      expect(find.text('Private jobs'), findsOneWidget);
-      expect(find.text('Govt exams'), findsOneWidget);
+      expect(find.text('Private'), findsOneWidget);
+      expect(find.text('Govt'), findsOneWidget);
     });
   });
 }

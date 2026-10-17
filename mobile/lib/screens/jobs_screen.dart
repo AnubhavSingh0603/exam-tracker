@@ -11,6 +11,7 @@ import '../theme/app_theme.dart';
 import '../widgets/common.dart';
 import '../widgets/job_card.dart';
 import '../widgets/motion.dart';
+import '../widgets/one_line.dart';
 import 'hidden_jobs_screen.dart';
 
 enum _View { forYou, nearMiss, notForMe }
@@ -116,9 +117,9 @@ class _JobsScreenState extends ConsumerState<JobsScreen> {
                 visualDensity: VisualDensity.compact,
               ),
               segments: [
-                ButtonSegment(value: _View.forYou, label: Text('For you ($forYouCount)')),
-                ButtonSegment(value: _View.nearMiss, label: Text('💡 Near ($nearMissCount)')),
-                ButtonSegment(value: _View.notForMe, label: Text('Hidden (${rejected.length})')),
+                ButtonSegment(value: _View.forYou, label: CountLabel('For you', forYouCount)),
+                ButtonSegment(value: _View.nearMiss, label: CountLabel('Near', nearMissCount)),
+                ButtonSegment(value: _View.notForMe, label: CountLabel('Hidden', rejected.length)),
               ],
               selected: {_view},
               onSelectionChanged: (s) => setState(() => _view = s.first),

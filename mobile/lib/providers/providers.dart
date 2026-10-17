@@ -98,7 +98,9 @@ class TrackedAppsNotifier extends AsyncNotifier<List<TrackedApplication>> {
     );
     await _db.upsertApplication(app);
     await ref.read(decisionsProvider.notifier).record(item, applied: true); // learns what you like
-    unawaited(ref.read(xpProvider.notifier).award(XpAction.appliedToJob));
+    unawaited(ref
+        .read(xpProvider.notifier)
+        .award(XpAction.appliedToJob, key: xpExamKey(jobPostId: item.jobPostId, examName: item.examName)));
     final timeline = item.timelineJson;
     if (timeline != null) await _db.saveTimeline(item.jobPostId, jsonEncode(timeline));
     await reload();
@@ -134,7 +136,7 @@ class TrackedAppsNotifier extends AsyncNotifier<List<TrackedApplication>> {
     await _db.upsertApplication(app);
     await reload();
     _changed();
-    unawaited(ref.read(xpProvider.notifier).award(XpAction.addedExam));
+    unawaited(ref.read(xpProvider.notifier).award(XpAction.addedExam, key: xpExamKey(examName: examName)));
     unawaited(checkForUpdates(force: true)); // its admit card may already be out
     return app;
   }
@@ -169,7 +171,8 @@ class TrackedAppsNotifier extends AsyncNotifier<List<TrackedApplication>> {
     final password = await _secrets.readPassword(app.id);
     if (vault?.registrationId != null || password != null) {
       await saveCredentials(
-          added.id, CredentialsInput(registrationId: vault?.registrationId ?? '', password: password ?? ''));
+          added.id, CredentialsInput(registrationId: vault?.registrationId ?? '', password: password ?? ''),
+          earnXp: false); // copied over, not typed in
     }
     await setArchived(app.id, archived: true);
     return added;
@@ -206,7 +209,13 @@ class TrackedAppsNotifier extends AsyncNotifier<List<TrackedApplication>> {
     _changed();
   }
 
-  Future<void> saveCredentials(String appId, CredentialsInput input) async {
+  /// The XP key for one of your tracked exams (by its id).
+  String _xpKey(String appId) {
+    final app = state.dataOrNull?.where((a) => a.id == appId).firstOrNull;
+    return app == null ? 'app:$appId' : xpExamKey(jobPostId: app.jobPostId, examName: app.examName);
+  }
+
+  Future<void> saveCredentials(String appId, CredentialsInput input, {bool earnXp = true}) async {
     await _db.upsertVault(input.toEntry(appId));
     if (input.password.isNotEmpty) await _secrets.writePassword(appId, input.password);
     ref
@@ -214,8 +223,8 @@ class TrackedAppsNotifier extends AsyncNotifier<List<TrackedApplication>> {
       ..invalidate(hasPasswordProvider(appId));
     _changed();
     final entry = input.toEntry(appId);
-    if (!entry.isEmpty || input.password.isNotEmpty) {
-      unawaited(ref.read(xpProvider.notifier).award(XpAction.savedIds));
+    if (earnXp && (!entry.isEmpty || input.password.isNotEmpty)) {
+      unawaited(ref.read(xpProvider.notifier).award(XpAction.savedIds, key: 'ids:${_xpKey(appId)}'));
     }
   }
 
@@ -224,7 +233,9 @@ class TrackedAppsNotifier extends AsyncNotifier<List<TrackedApplication>> {
     await _db.updateStatus(id, status, examAt: examAt, admitCardUrl: admitCardUrl);
     await reload();
     _changed();
-    if (examAt != null) unawaited(ref.read(xpProvider.notifier).award(XpAction.setExamDate));
+    if (examAt != null) {
+      unawaited(ref.read(xpProvider.notifier).award(XpAction.setExamDate, key: 'date:${_xpKey(id)}'));
+    }
   }
 
   /// Optimistic so the Dismissible leaves the tree in the same frame.

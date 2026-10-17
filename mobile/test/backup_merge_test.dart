@@ -73,6 +73,19 @@ void main() {
     expect(mergeSnapshots(remote, local, now: now).profile, {'v': 'new'});
   });
 
+  test('a profile reset wins over an older profile, and loses to a newer one', () {
+    final reset = snap(profileAt: t2); // no profile, but dated: reset on purpose
+    final older = snap(profile: {'v': 'old'}, profileAt: t1);
+    final newer = snap(profile: {'v': 'new'}, profileAt: t3);
+    expect(mergeSnapshots(reset, older, now: now).profile, isNull);
+    expect(mergeSnapshots(older, reset, now: now).profile, isNull);
+    expect(mergeSnapshots(older, reset, now: now).profileSavedAt, t2);
+    expect(mergeSnapshots(reset, newer, now: now).profile, {'v': 'new'});
+    // A profile from before backups existed (undated) only fills a gap.
+    expect(mergeSnapshots(reset, snap(profile: {'v': 'legacy'}), now: now).profile, isNull);
+    expect(mergeSnapshots(snap(), snap(profile: {'v': 'legacy'}), now: now).profile, {'v': 'legacy'});
+  });
+
   test('two phones: newest edit wins, watcher findings from both are kept', () {
     final local = snap(apps: [
       app('a', t3,

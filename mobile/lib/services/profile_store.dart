@@ -31,6 +31,9 @@ abstract final class ProfileStore {
       final raw = await _raw();
       if (raw == null) return (null, null);
       final json = jsonDecode(raw) as Map<String, dynamic>;
+      if (json.containsKey('profile') && json['profile'] == null) {
+        return (null, DateTime.tryParse(json['saved_at'] as String? ?? '')); // reset: cleared on purpose
+      }
       if (json['profile'] is Map<String, dynamic>) {
         return (
           UserProfileData.fromJson(json['profile'] as Map<String, dynamic>),
@@ -52,6 +55,16 @@ abstract final class ProfileStore {
           {'profile': data.toJson(), 'saved_at': (savedAt ?? DateTime.now()).toUtc().toIso8601String()}),
     );
     await (await SharedPreferences.getInstance()).remove(_key); // no plain copy left behind
+  }
+
+  /// "Reset profile": no profile, but stamped like a save, so the backup merge spreads
+  /// the reset to other phones instead of restoring the old profile.
+  static Future<void> reset({DateTime? at}) async {
+    await _secure.write(
+      key: _key,
+      value: jsonEncode({'profile': null, 'saved_at': (at ?? DateTime.now()).toUtc().toIso8601String()}),
+    );
+    await (await SharedPreferences.getInstance()).remove(_key);
   }
 
   static Future<void> clear() async {

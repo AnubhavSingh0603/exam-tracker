@@ -60,11 +60,20 @@ class ProfileNotifier extends AsyncNotifier<UserProfileData?> {
   Future<bool> save(UserProfileData data) async {
     final firstTime = state.valueOrNull?.isComplete != true && data.isComplete;
     await ProfileStore.write(data);
-    if (firstTime) unawaited(ref.read(xpProvider.notifier).award(XpAction.completedProfile));
+    if (firstTime) unawaited(ref.read(xpProvider.notifier).award(XpAction.completedProfile, key: 'profile'));
     state = AsyncData(data);
     ref.invalidate(feedProvider);
     ref.read(backupControllerProvider.notifier).markDirty();
     return true;
+  }
+
+  /// "Reset profile": back to a blank profile (the setup sheet asks again). Tracked
+  /// exams, IDs and settings stay. The backup carries the reset to other phones.
+  Future<void> reset() async {
+    await ProfileStore.reset();
+    state = const AsyncData(null);
+    ref.invalidate(feedProvider);
+    ref.read(backupControllerProvider.notifier).markDirty();
   }
 }
 

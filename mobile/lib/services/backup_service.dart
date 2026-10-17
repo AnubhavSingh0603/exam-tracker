@@ -203,7 +203,14 @@ class BackupService {
 
     var profileRestored = false;
     final profile = merged.profile;
-    if (replaceLocal && profile == null) await ProfileStore.clear();
+    if (profile == null && merged.profileSavedAt != null) {
+      // Reset on another phone (or here): keep it reset, with its date.
+      if (local.profile != null || merged.profileSavedAt != local.profileSavedAt) {
+        await ProfileStore.reset(at: merged.profileSavedAt);
+      }
+    } else if (replaceLocal && profile == null) {
+      await ProfileStore.clear();
+    }
     if (profile != null &&
         (replaceLocal || merged.profileSavedAt != local.profileSavedAt || local.profile == null)) {
       final restoredProfile = UserProfileData.fromJson(profile);

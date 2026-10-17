@@ -15,11 +15,17 @@ const kTombstoneTtl = Duration(days: 180);
 int _ms(Object? v) => v is int ? v : (v is num ? v.toInt() : 0);
 
 BackupSnapshot mergeSnapshots(BackupSnapshot local, BackupSnapshot remote, {required DateTime now}) {
-  // Profile: the most recently saved one.
+  // Profile: the most recently saved one. A reset is a save too (no profile, but a
+  // date), so it wins over an older profile; an undated one (saved before backups
+  // existed) only fills a gap.
   final localAt = local.profileSavedAt;
   final remoteAt = remote.profileSavedAt;
-  final useRemoteProfile = local.profile == null ||
-      (remote.profile != null && remoteAt != null && (localAt == null || remoteAt.isAfter(localAt)));
+  final useRemoteProfile = switch ((localAt, remoteAt)) {
+    (final l?, final r?) => r.isAfter(l),
+    (null, _?) => true,
+    (_?, null) => false,
+    (null, null) => local.profile == null,
+  };
   final profile = useRemoteProfile ? remote.profile : local.profile;
   final profileAt = useRemoteProfile ? remoteAt : localAt;
 

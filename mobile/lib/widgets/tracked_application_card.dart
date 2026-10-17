@@ -272,7 +272,7 @@ class _TrackedApplicationCardState extends ConsumerState<TrackedApplicationCard>
                   crossAxisAlignment: WrapCrossAlignment.center,
                   children: [
                     _StatusBadge(app: app, track: track),
-                    if (app.totalSeats != null)
+                    if ((app.totalSeats ?? 0) > 0) // 0 = the notice didn't say
                       SeatPill(
                         total: app.totalSeats!,
                         ur: app.urSeats ?? 0,
@@ -293,37 +293,37 @@ class _TrackedApplicationCardState extends ConsumerState<TrackedApplicationCard>
                   _LatestNotice(update: app.updates.first),
                 ],
                 const SizedBox(height: 12),
-                Row(
+                // Side by side when they fit, else one under the other: labels never break.
+                OverflowBar(
+                  spacing: 8,
+                  overflowSpacing: 6,
                   children: [
                     // With the track open, its card has the login (or a better step).
-                    if (_panel != _Panel.progress) ...[
-                      Expanded(
-                        child: _LinkButton(
-                          icon: AppIcon.login,
-                          label: hasIds ? 'Check dashboard' : 'Candidate login',
-                          url: app.loginUrl,
-                          onPressed: hasIds
-                              ? () => showDashboardCheck(
-                                    context,
-                                    ref,
-                                    app,
-                                    onAdmitCardOut: () => _onMenu(_MenuAction.admitCardLive),
-                                    onExamDone: () => _onMenu(_MenuAction.examDone),
-                                  )
-                              : null,
-                        ),
+                    if (_panel != _Panel.progress)
+                      _LinkButton(
+                        icon: AppIcon.login,
+                        label: hasIds ? 'Dashboard' : 'Login',
+                        url: app.loginUrl,
+                        onPressed: hasIds
+                            ? () => showDashboardCheck(
+                                  context,
+                                  ref,
+                                  app,
+                                  onAdmitCardOut: () => _onMenu(_MenuAction.admitCardLive),
+                                  onExamDone: () => _onMenu(_MenuAction.examDone),
+                                )
+                            : null,
                       ),
-                      const SizedBox(width: 8),
-                    ],
-                    Expanded(
-                        child: _LinkButton(icon: AppIcon.applyOnline, label: 'Official site', url: app.officialUrl)),
+                    _LinkButton(icon: AppIcon.applyOnline, label: 'Official site', url: app.officialUrl),
                   ],
                 ),
-                const SizedBox(height: 4),
-                Row(
+                const SizedBox(height: 6),
+                Wrap(
+                  spacing: 4,
+                  runSpacing: 4,
+                  crossAxisAlignment: WrapCrossAlignment.center,
                   children: [
-                    Expanded(child: _SyncButton(state: _sync, onPressed: _syncToCalendar)),
-                    const SizedBox(width: 4),
+                    _SyncButton(state: _sync, onPressed: _syncToCalendar),
                     _PanelToggle(
                       icon: AppIcon.timeline,
                       label: 'Progress',
@@ -492,7 +492,7 @@ class _LinkButton extends StatelessWidget {
         onPressed: link == null ? null : (onPressed ?? () => openExternal(context, link)),
         style: OutlinedButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 10)),
         icon: DuoIcon(icon, size: 18),
-        label: Text(label, maxLines: 1, overflow: TextOverflow.ellipsis),
+        label: Text(label, maxLines: 1, softWrap: false, overflow: TextOverflow.ellipsis),
       ),
     );
   }
@@ -577,7 +577,7 @@ class _PanelToggle extends StatelessWidget {
   Widget build(BuildContext context) => TextButton.icon(
         onPressed: onPressed,
         icon: glyph(open ? Icons.expand_less_rounded : icon, size: 18),
-        label: Text(open ? 'Hide' : label),
+        label: Text(open ? 'Hide' : label, maxLines: 1, softWrap: false),
       );
 }
 
@@ -600,12 +600,12 @@ class _SyncButton extends StatelessWidget {
           onPressed: onPressed,
           style: OutlinedButton.styleFrom(foregroundColor: sage, side: BorderSide(color: sage.withValues(alpha: 0.5))),
           icon: const DuoIcon(AppIcon.calendarDone, size: 18),
-          label: const Text('In calendar'),
+          label: const Text('In calendar', maxLines: 1, softWrap: false),
         ),
       _SyncState.idle => FilledButton.tonalIcon(
           onPressed: onPressed,
           icon: const DuoIcon(AppIcon.calendarAdd, size: 18),
-          label: const Text('Sync to Calendar'),
+          label: const Text('Calendar', maxLines: 1, softWrap: false),
         ),
     };
   }

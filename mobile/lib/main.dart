@@ -7,6 +7,7 @@ import 'features/private_jobs/private_jobs.dart';
 import 'providers/providers.dart';
 import 'providers/ui_providers.dart';
 import 'providers/workspace_providers.dart';
+import 'providers/xp_providers.dart';
 import 'screens/home_shell.dart';
 import 'services/auth_service.dart';
 import 'services/background_watch.dart';
@@ -45,6 +46,8 @@ Future<void> main() async {
     overrides: [
       databaseProvider.overrideWithValue(db),
       themeModeProvider.overrideWith(() => ThemeModeNotifier(themeMode)),
+      privateProfilePageProvider.overrideWithValue((_) => const PrivateProfilePage()),
+      xpRecountExtrasProvider.overrideWith((ref) => () => privateXpForRecount(ref)),
     ],
     child: const JobSummitApp(),
   ));

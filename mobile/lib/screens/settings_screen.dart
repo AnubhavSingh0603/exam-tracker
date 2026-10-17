@@ -25,6 +25,7 @@ import '../theme/app_theme.dart';
 import '../utils/system_actions.dart';
 import '../widgets/app_icons.dart';
 import '../widgets/common.dart';
+import '../widgets/one_line.dart';
 import '../widgets/pin_dialog.dart';
 import '../widgets/samsung_sleep_tip.dart';
 import '../widgets/share_app.dart';
@@ -35,8 +36,7 @@ enum SettingsTab {
   account('Account'),
   profile('Profile'),
   jobs('Jobs'),
-  look('Look'),
-  alerts('Alerts'),
+  settings('Settings'),
   about('About');
 
   const SettingsTab(this.label);
@@ -71,7 +71,7 @@ class SettingsScreen extends StatelessWidget {
             ),
           ),
           body: const TabBarView(
-            children: [_AccountTab(), _ProfileTab(), _JobsTab(), _LookTab(), _AlertsTab(), _AboutTab()],
+            children: [_AccountTab(), _ProfileTab(), _JobsTab(), _SettingsTab(), _AboutTab()],
           ),
         ),
       );
@@ -206,7 +206,6 @@ class _AccountTab extends ConsumerWidget {
             ],
           ],
         ),
-        const _PinLockSection(),
       ],
     );
   }
@@ -219,8 +218,32 @@ class _AccountTab extends ConsumerWidget {
 class _ProfileTab extends ConsumerWidget {
   const _ProfileTab();
 
+  Future<void> _reset(BuildContext context, WidgetRef ref) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (c) => AlertDialog(
+        backgroundColor: AppPalette.surface,
+        title: const Text('Reset your profile?'),
+        content: const Text('Your name, date of birth, category, qualifications and experience are cleared, '
+            'and the app asks for them again. Tracked exams, saved IDs and settings stay.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('Cancel')),
+          FilledButton(onPressed: () => Navigator.pop(c, true), child: const Text('Reset')),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    await ref.read(profileProvider.notifier).reset();
+    if (context.mounted) showCalmSnack(context, 'Profile reset.');
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    // The Private workspace has its own profile, apart from this one.
+    final privatePage = ref.watch(privateProfilePageProvider);
+    if (privatePage != null && ref.watch(workspaceProvider).shown == Workspace.private) {
+      return privatePage(context);
+    }
     final profile = ref.watch(profileProvider).dataOrNull;
     final now = ref.watch(nowProvider);
     return ListView(
@@ -244,10 +267,22 @@ class _ProfileTab extends ConsumerWidget {
                 _Fact('Ex-serviceman', '${profile.exServicemanServiceYears} years of service'),
             ],
             const SizedBox(height: 12),
-            FilledButton.tonalIcon(
-              onPressed: () => openProfileSheet(context, ref),
-              icon: const Icon(Icons.edit_rounded, size: 18),
-              label: Text(profile == null ? 'Set up profile' : 'Edit profile'),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                FilledButton.tonalIcon(
+                  onPressed: () => openProfileSheet(context, ref),
+                  icon: const Icon(Icons.edit_rounded, size: 18),
+                  label: Text(profile == null ? 'Set up profile' : 'Edit profile'),
+                ),
+                if (profile != null)
+                  TextButton.icon(
+                    onPressed: () => _reset(context, ref),
+                    icon: const Icon(Icons.restart_alt_rounded, size: 18),
+                    label: const Text('Reset profile'),
+                  ),
+              ],
             ),
           ],
         ),
@@ -472,11 +507,11 @@ class _JobsTab extends ConsumerWidget {
 }
 
 // -----------------------------------------------------------------------------
-// Look
+// Settings: look, sounds, alerts and the PIN lock on one page
 // -----------------------------------------------------------------------------
 
-class _LookTab extends ConsumerWidget {
-  const _LookTab();
+class _SettingsTab extends ConsumerWidget {
+  const _SettingsTab();
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -491,9 +526,9 @@ class _LookTab extends ConsumerWidget {
             SegmentedButton<ThemeMode>(
               showSelectedIcon: false,
               segments: const [
-                ButtonSegment(value: ThemeMode.system, icon: Icon(Icons.brightness_auto_rounded), label: Text('Phone')),
-                ButtonSegment(value: ThemeMode.light, icon: Icon(Icons.light_mode_rounded), label: Text('Light')),
-                ButtonSegment(value: ThemeMode.dark, icon: Icon(Icons.dark_mode_rounded), label: Text('Dark')),
+                ButtonSegment(value: ThemeMode.system, icon: Icon(Icons.brightness_auto_rounded), label: OneLine('Phone')),
+                ButtonSegment(value: ThemeMode.light, icon: Icon(Icons.light_mode_rounded), label: OneLine('Light')),
+                ButtonSegment(value: ThemeMode.dark, icon: Icon(Icons.dark_mode_rounded), label: OneLine('Dark')),
               ],
               selected: {mode},
               onSelectionChanged: (s) => ref.read(themeModeProvider.notifier).set(s.first),
@@ -506,6 +541,8 @@ class _LookTab extends ConsumerWidget {
               'with your phone on ring and never pause your music.',
           children: [_FxSwitches()],
         ),
+        ..._alertSections(context),
+        const _PinLockSection(),
       ],
     );
   }
@@ -544,17 +581,7 @@ class _FxSwitchesState extends State<_FxSwitches> {
       );
 }
 
-// -----------------------------------------------------------------------------
-// Alerts
-// -----------------------------------------------------------------------------
-
-class _AlertsTab extends ConsumerWidget {
-  const _AlertsTab();
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) => ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
+List<Widget> _alertSections(BuildContext context) => [
           const _Section(
             title: 'Last-day reminders',
             note: 'When a job that fits you closes within 24 hours: a notification every few hours and '
@@ -591,13 +618,11 @@ class _AlertsTab extends ConsumerWidget {
           ),
           const _Section(
             title: 'Calendar reminders',
-            note: 'Use “Sync to Calendar” on an exam in My exams. Reminders come 7 days, 2 days and '
+            note: 'Use “Calendar” on an exam in My exams. Reminders come 7 days, 2 days and '
                 '3 hours before, from your phone’s Calendar app, so they arrive even if this app is asleep.',
             children: [],
           ),
-        ],
-      );
-}
+        ];
 
 // -----------------------------------------------------------------------------
 // About

@@ -15,15 +15,41 @@ class ProgressMap extends StatelessWidget {
   final List<TrackedApplication> apps;
   final DateTime now;
 
-  /// Where the stops sit, as fractions of the map (foot of the trail to summit).
+  /// Where the stops sit, as fractions of the map (foot of the trail to summit): a
+  /// switchback inside the mountain's slopes, so the trail (which bends only towards
+  /// the next stop) stays on the mountain too.
   static const stops = [
-    Offset(0.10, 0.86), // Applied
-    Offset(0.36, 0.70), // Admit card
-    Offset(0.20, 0.50), // Exam
-    Offset(0.46, 0.32), // Answer key
+    Offset(0.22, 0.86), // Applied
+    Offset(0.62, 0.70), // Admit card
+    Offset(0.40, 0.52), // Exam
+    Offset(0.60, 0.34), // Answer key
     Offset(0.62, 0.13), // Result (summit)
   ];
   static const stopNames = ['Applied', 'Admit card', 'Exam', 'Answer key', 'Result'];
+
+  /// The mountain's outline on a map of [s] (its peak just under the summit stop).
+  @visibleForTesting
+  static Path mountainPath(Size s) {
+    final peak = Offset(stops[4].dx * s.width, stops[4].dy * s.height) + const Offset(0, 6);
+    return Path()
+      ..moveTo(-s.width * 0.05, s.height)
+      ..lineTo(peak.dx, peak.dy)
+      ..lineTo(s.width * 1.05, s.height)
+      ..close();
+  }
+
+  /// The trail: a smooth line through the stops.
+  @visibleForTesting
+  static Path trailPath(Size s) {
+    final points = [for (final f in stops) Offset(f.dx * s.width, f.dy * s.height)];
+    final trail = Path()..moveTo(points.first.dx, points.first.dy);
+    for (var i = 1; i < points.length; i++) {
+      final a = points[i - 1], b = points[i];
+      final mid = Offset((a.dx + b.dx) / 2, (a.dy + b.dy) / 2);
+      trail.quadraticBezierTo(a.dx + (mid.dx - a.dx) * 1.4, a.dy, b.dx, b.dy);
+    }
+    return trail;
+  }
 
   /// The stop an exam stands at: its track's current stop, the summit once done.
   static int stopOf(TrackedApplication app, DateTime now) {
@@ -66,16 +92,24 @@ class ProgressMap extends StatelessWidget {
         child: LayoutBuilder(builder: (context, box) {
           final size = Size(box.maxWidth, 210);
           Offset at(int stop) => Offset(stops[stop].dx * size.width, stops[stop].dy * size.height);
+          // Badges stay inside the map (several at one stop fan out sideways).
+          Offset inside(Offset p) => Offset(p.dx.clamp(4, size.width - 64), p.dy.clamp(2, size.height - 24));
+          // Each label clear of the trail: Exam's on its left (the trail comes in
+          // under it), Result's beside the flag (not on the white snow).
+          Widget label(int i) {
+            final p = at(i);
+            final t = Text(stopNames[i], style: text.labelSmall?.copyWith(color: Colors.white.withValues(alpha: 0.85)));
+            return switch (i) {
+              2 => Positioned(right: size.width - p.dx + 9, top: p.dy - 8, child: t),
+              4 => Positioned(left: p.dx + 24, top: p.dy - 24, child: t),
+              _ => Positioned(left: p.dx - 6, top: p.dy + 7, child: t),
+            };
+          }
+
           return Stack(
             children: [
               Positioned.fill(child: CustomPaint(painter: _MountainPainter(Theme.of(context).brightness))),
-              for (var i = 0; i < stops.length; i++)
-                Positioned(
-                  left: at(i).dx - 6,
-                  top: at(i).dy + 7,
-                  child: Text(stopNames[i],
-                      style: text.labelSmall?.copyWith(color: Colors.white.withValues(alpha: 0.85))),
-                ),
+              for (var i = 0; i < stops.length; i++) label(i),
               for (final MapEntry(key: stop, value: group) in byStop.entries)
                 for (final (i, app) in group.indexed)
                   _Climber(
@@ -84,7 +118,8 @@ class ProgressMap extends StatelessWidget {
                     tooltip: '${app.postName}: ${buildDeliveryTrack(app, now).statusLabel}',
                     from: at(0),
                     // Several at one stop fan out left and right.
-                    to: at(stop) + Offset((i.isEven ? 1 : -1) * ((i + 1) ~/ 2) * 100.0 - 10, -30 - (i.isOdd ? 6 : 0)),
+                    to: inside(
+                        at(stop) + Offset((i.isEven ? 1 : -1) * ((i + 1) ~/ 2) * 100.0 - 10, -30 - (i.isOdd ? 6 : 0))),
                     color: _climberColors[app.id.hashCode.abs() % _climberColors.length],
                   ),
             ],
@@ -162,7 +197,7 @@ class _MountainPainter extends CustomPainter {
     canvas.drawRect(Offset.zero & s, sky);
     canvas.drawCircle(Offset(w * 0.86, h * 0.30), h * 0.12, Paint()..color = const Color(0xFFFFE08A).withValues(alpha: 0.9));
     final stars = Paint()..color = Colors.white.withValues(alpha: 0.7);
-    for (final f in const [Offset(0.08, 0.12), Offset(0.27, 0.06), Offset(0.78, 0.08), Offset(0.93, 0.14), Offset(0.4, 0.1)]) {
+    for (final f in const [Offset(0.08, 0.12), Offset(0.27, 0.06), Offset(0.74, 0.20), Offset(0.93, 0.14), Offset(0.4, 0.1)]) {
       canvas.drawCircle(pt(f), 1.4, stars);
     }
 
@@ -178,11 +213,7 @@ class _MountainPainter extends CustomPainter {
     canvas.drawPath(back, Paint()..color = const Color(0xFF3A3370).withValues(alpha: 0.85));
 
     final peak = pt(ProgressMap.stops[4]) + const Offset(0, 6);
-    final mountain = Path()
-      ..moveTo(-w * 0.05, h)
-      ..lineTo(peak.dx, peak.dy)
-      ..lineTo(w * 1.05, h)
-      ..close();
+    final mountain = ProgressMap.mountainPath(s);
     canvas.drawPath(
       mountain,
       Paint()..shader = ui.Gradient.linear(peak, Offset(w * 0.5, h), const [Color(0xFF2E2766), Color(0xFF1A1540)]),
@@ -202,14 +233,9 @@ class _MountainPainter extends CustomPainter {
       ..close();
     canvas.drawPath(snow, Paint()..color = const Color(0xFFF4F2FF));
 
-    // The trail: a smooth line through the stops, drawn as dots.
+    // The trail, drawn as dots.
     final points = [for (final f in ProgressMap.stops) pt(f)];
-    final trail = Path()..moveTo(points.first.dx, points.first.dy);
-    for (var i = 1; i < points.length; i++) {
-      final a = points[i - 1], b = points[i];
-      final mid = Offset((a.dx + b.dx) / 2, (a.dy + b.dy) / 2);
-      trail.quadraticBezierTo(a.dx + (mid.dx - a.dx) * 1.4, a.dy, b.dx, b.dy);
-    }
+    final trail = ProgressMap.trailPath(s);
     final dot = Paint()..color = const Color(0xFFFFC93C);
     for (final metric in trail.computeMetrics()) {
       for (var d = 0.0; d < metric.length; d += 9) {

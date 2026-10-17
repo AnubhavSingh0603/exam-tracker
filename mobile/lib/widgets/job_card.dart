@@ -4,12 +4,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../domain/relevance.dart';
+import '../domain/xp.dart';
 import '../domain/urgency.dart';
 import '../models/feed.dart';
 import '../models/job_preferences.dart';
 import '../models/jobs_data.dart';
 import '../providers/jobs_providers.dart';
 import '../providers/providers.dart';
+import '../providers/xp_providers.dart';
 import '../services/fx.dart';
 import '../theme/app_theme.dart';
 import '../utils/system_actions.dart';
@@ -30,6 +32,7 @@ Future<bool> applyToJob(BuildContext screenContext, WidgetRef ref, FeedItem item
   // Read up front: the card (and its ref) is gone by the time Undo is tapped.
   final notifier = ref.read(trackedAppsProvider.notifier);
   final decisions = ref.read(decisionsProvider.notifier);
+  final xp = ref.read(xpProvider.notifier);
   final category = ref.read(feedProvider).dataOrNull?.category;
   try {
     final app = await notifier.markAppliedFromFeed(item, category: category);
@@ -44,6 +47,10 @@ Future<bool> applyToJob(BuildContext screenContext, WidgetRef ref, FeedItem item
         onPressed: () async {
           await notifier.untrack(app.id);
           await decisions.undo(item.jobPostId);
+          // Not applied after all: its XP comes off (applying again earns it again).
+          final key = xpExamKey(jobPostId: item.jobPostId, examName: item.examName);
+          await xp.revoke(key);
+          await xp.revoke('ids:$key');
         },
       ),
     );
@@ -166,12 +173,13 @@ class _JobCardState extends ConsumerState<JobCard> {
             children: [
               TonePill(label: jobCategory.label, color: categoryColor(jobCategory)),
               if (pay != null) TonePill(label: formatPay(pay), color: context.urgencyColors.safe),
-              SeatPill(
-                total: post.totalReachableSeats,
-                ur: post.urOpenSeats,
-                quota: post.categoryQuotaSeats,
-                category: category,
-              ),
+              if (post.totalReachableSeats > 0) // 0 = the notice didn't say
+                SeatPill(
+                  total: post.totalReachableSeats,
+                  ur: post.urOpenSeats,
+                  quota: post.categoryQuotaSeats,
+                  category: category,
+                ),
               if (post.matchKind == MatchKind.suggested)
                 TonePill(
                     label: suggestionBadge(post.suggestionReasons), color: context.urgencyColors.warning),
@@ -325,9 +333,11 @@ class _PostDetailsState extends State<_PostDetails> {
             const SizedBox(height: 6),
           ],
           _Row('Pay', p.payScale ?? (p.monthlyPayMin != null ? formatPay(p.monthlyPayMin!) : 'Not stated')),
-          if (v != null)
-            _Row('Seats',
-                'Total ${v.total} · UR ${v.ur} · SC ${v.sc} · ST ${v.st} · OBC ${v.obc} · EWS ${v.ews}'),
+          _Row(
+              'Seats',
+              v != null && v.total > 0
+                  ? 'Total ${v.total} · UR ${v.ur} · SC ${v.sc} · ST ${v.st} · OBC ${v.obc} · EWS ${v.ews}'
+                  : 'Not stated'),
           if (p.minAge != null || p.baseMaxAge != null)
             _Row(
               'Age',

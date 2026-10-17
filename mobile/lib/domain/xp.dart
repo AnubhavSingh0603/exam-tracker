@@ -43,10 +43,50 @@ String levelName(int level) =>
 
 DateTime _day(DateTime t) => DateTime(t.year, t.month, t.day);
 
+/// What one specific thing earned: [XpState.earned] keeps these by key so the same
+/// job, exam or stage never pays twice, and an Undo can hand the points back.
+@immutable
+class XpEarned {
+  const XpEarned(this.action, this.points, this.day);
+
+  final XpAction action;
+  final int points;
+  final DateTime day;
+
+  Map<String, Object?> toJson() => {'a': action.name, 'p': points, 'd': day.toIso8601String()};
+
+  static XpEarned? fromJson(Object? j) {
+    if (j is! Map<String, dynamic>) return null;
+    final action = XpAction.values.where((a) => a.name == j['a']).firstOrNull;
+    final day = DateTime.tryParse(j['d'] as String? ?? '');
+    if (action == null || day == null) return null;
+    return XpEarned(action, (j['p'] as num?)?.toInt() ?? action.points, day);
+  }
+}
+
+/// The key for one tracked exam: the feed job it came from, else its name (which
+/// carries the stage, "SSC CGL 2026 · Tier-2"). Deleting and re-adding it gives the
+/// same key, so it can't earn again.
+String xpExamKey({String? jobPostId, required String examName}) =>
+    jobPostId != null && jobPostId.isNotEmpty ? 'job:$jobPostId' : 'exam:${examName.trim().toLowerCase()}';
+
+/// Daily keys ("checked this dashboard today").
+String xpDayStamp(DateTime t) =>
+    '${t.year}-${t.month.toString().padLeft(2, '0')}-${t.day.toString().padLeft(2, '0')}';
+
 /// Your XP, level and streak. Pure: [award] returns the new state and what happened.
 @immutable
 class XpState {
-  const XpState({this.xp = 0, this.streak = 0, this.lastActiveDay, this.today = const {}, this.todayDay});
+  const XpState({
+    this.xp = 0,
+    this.streak = 0,
+    this.lastActiveDay,
+    this.today = const {},
+    this.todayDay,
+    this.earned = const {},
+    this.streakBefore,
+    this.activeBefore,
+  });
 
   final int xp;
 
@@ -57,6 +97,14 @@ class XpState {
   /// Times each action earned XP on [todayDay] (for the daily caps).
   final Map<String, int> today;
   final DateTime? todayDay;
+
+  /// Each specific thing that earned XP ("job:123", "ids:exam:ssc cgl 2026"…).
+  final Map<String, XpEarned> earned;
+
+  /// The streak before today's first award, so undoing today's only action
+  /// also takes back today's streak day.
+  final int? streakBefore;
+  final DateTime? activeBefore;
 
   int get level => levelFor(xp);
   String get levelTitle => levelName(level);
@@ -76,8 +124,11 @@ class XpState {
     return _day(now).difference(_day(last)).inDays <= 2 ? streak : 0;
   }
 
-  ({XpState state, int gained, bool levelUp, bool streakUp}) award(XpAction action, DateTime now) {
+  /// [key] names the specific thing (see [xpExamKey]): a key that already earned
+  /// gets nothing, however often it is repeated.
+  ({XpState state, int gained, bool levelUp, bool streakUp}) award(XpAction action, DateTime now, {String? key}) {
     final day = _day(now);
+    if (key != null && earned.containsKey(key)) return (state: this, gained: 0, levelUp: false, streakUp: false);
     final counts = todayDay == day ? today : const <String, int>{};
     final used = counts[action.name] ?? 0;
     if (used >= action.perDay) return (state: this, gained: 0, levelUp: false, streakUp: false);
@@ -90,15 +141,68 @@ class XpState {
       1 || 2 => streak + 1, // next day, or one day missed (forgiven)
       _ => 1, // two or more missed days: start again
     };
+    final firstToday = last != day;
     final next = XpState(
       xp: xp + action.points,
       streak: newStreak,
       lastActiveDay: day,
       today: {...counts, action.name: used + 1},
       todayDay: day,
+      earned: key == null
+          ? earned
+          : {
+              // Yesterday's daily keys can go: they can't repeat anyway.
+              for (final e in earned.entries)
+                if (e.value.action != XpAction.checkedDashboard || !_day(e.value.day).isBefore(day)) e.key: e.value,
+              key: XpEarned(action, action.points, day),
+            },
+      streakBefore: firstToday ? streak : streakBefore,
+      activeBefore: firstToday ? lastActiveDay : activeBefore,
     );
     return (state: next, gained: action.points, levelUp: next.level > level, streakUp: newStreak > streak);
   }
+
+  /// Undo: what [key] earned comes off again (and today's streak day, if that was
+  /// the only thing done today). A key that never earned changes nothing.
+  ({XpState state, int lost}) revoke(String key, DateTime now) {
+    final e = earned[key];
+    if (e == null) return (state: this, lost: 0);
+    final day = _day(now);
+    final counts = todayDay == day ? {...today} : <String, int>{};
+    final n = counts[e.action.name] ?? 0;
+    if (_day(e.day) == day && n > 0) {
+      if (n == 1) {
+        counts.remove(e.action.name);
+      } else {
+        counts[e.action.name] = n - 1;
+      }
+    }
+    final undoDay = counts.isEmpty && lastActiveDay != null && _day(lastActiveDay!) == day;
+    final next = XpState(
+      xp: xp - e.points < 0 ? 0 : xp - e.points,
+      streak: undoDay ? (streakBefore ?? 0) : streak,
+      lastActiveDay: undoDay ? activeBefore : lastActiveDay,
+      today: counts,
+      todayDay: todayDay,
+      earned: {...earned}..remove(key),
+      streakBefore: streakBefore,
+      activeBefore: activeBefore,
+    );
+    return (state: next, lost: e.points);
+  }
+
+  /// XP counted afresh from what is actually there (tracked exams, saved IDs,
+  /// applications…). The streak stays as it is.
+  XpState recount(Map<String, XpEarned> things) => XpState(
+        xp: things.values.fold(0, (sum, e) => sum + e.points),
+        streak: streak,
+        lastActiveDay: lastActiveDay,
+        today: today,
+        todayDay: todayDay,
+        earned: things,
+        streakBefore: streakBefore,
+        activeBefore: activeBefore,
+      );
 
   Map<String, Object?> toJson() => {
         'xp': xp,
@@ -106,6 +210,9 @@ class XpState {
         'last_active_day': lastActiveDay?.toIso8601String(),
         'today': today,
         'today_day': todayDay?.toIso8601String(),
+        'earned': {for (final e in earned.entries) e.key: e.value.toJson()},
+        'streak_before': streakBefore,
+        'active_before': activeBefore?.toIso8601String(),
       };
 
   factory XpState.fromJson(Map<String, dynamic> j) => XpState(
@@ -114,5 +221,11 @@ class XpState {
         lastActiveDay: DateTime.tryParse(j['last_active_day'] as String? ?? ''),
         today: {for (final e in (j['today'] as Map<String, dynamic>? ?? const {}).entries) e.key: (e.value as num).toInt()},
         todayDay: DateTime.tryParse(j['today_day'] as String? ?? ''),
+        earned: {
+          for (final e in (j['earned'] as Map<String, dynamic>? ?? const {}).entries)
+            if (XpEarned.fromJson(e.value) case final v?) e.key: v,
+        },
+        streakBefore: (j['streak_before'] as num?)?.toInt(),
+        activeBefore: DateTime.tryParse(j['active_before'] as String? ?? ''),
       );
 }

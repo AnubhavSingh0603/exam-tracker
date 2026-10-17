@@ -25,6 +25,24 @@ void main() {
     expect(ProgressMap.stopOf(app('SBI Clerk 2026', w: TrackerStatus.resultDeclared), now), 4);
   });
 
+  test('every stop and the whole trail sit on the mountain, at any phone width', () {
+    for (final width in [320.0, 380.0, 600.0]) {
+      final size = Size(width, 210);
+      final mountain = ProgressMap.mountainPath(size);
+      for (final f in ProgressMap.stops.take(4)) {
+        expect(mountain.contains(Offset(f.dx * width, f.dy * 210)), isTrue, reason: 'stop $f at $width');
+      }
+      for (final metric in ProgressMap.trailPath(size).computeMetrics()) {
+        for (var d = 0.0; d < metric.length; d += 2) {
+          final pos = metric.getTangentForOffset(d)!.position;
+          // The last few px meet the summit at the peak itself.
+          if (pos.dy < ProgressMap.stops[4].dy * 210 + 8) continue;
+          expect(mountain.contains(pos), isTrue, reason: 'trail at $pos, width $width');
+        }
+      }
+    }
+  });
+
   test('short badge names keep the board where it fits', () {
     expect(ProgressMap.shortName(app('SSC CGL 2026')), 'SSC CGL');
     expect(ProgressMap.shortName(app('IBPS PO XV')), 'IBPS PO');

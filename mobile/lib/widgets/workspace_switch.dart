@@ -5,6 +5,7 @@ import '../config/env.dart';
 import '../providers/workspace_providers.dart';
 import '../services/fx.dart';
 import '../theme/app_theme.dart';
+import 'one_line.dart';
 
 /// [ Govt exams | Private jobs ]: one tap swaps the whole app. Nothing at all while
 /// the Private workspace is switched off.
@@ -21,11 +22,13 @@ class WorkspaceSwitch extends ConsumerWidget {
         showSelectedIcon: false,
         style: SegmentedButton.styleFrom(
           selectedBackgroundColor: AppPalette.periwinkle.withValues(alpha: 0.18),
+          selectedForegroundColor: AppPalette.textPrimary,
+          foregroundColor: AppPalette.textMuted,
           visualDensity: VisualDensity.compact,
         ),
         segments: const [
-          ButtonSegment(value: Workspace.govt, label: Text('Govt exams')),
-          ButtonSegment(value: Workspace.private, label: Text('Private jobs')),
+          ButtonSegment(value: Workspace.govt, label: OneLine('Govt')),
+          ButtonSegment(value: Workspace.private, label: OneLine('Private')),
         ],
         selected: {ws.shown},
         onSelectionChanged: (s) {

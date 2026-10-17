@@ -262,7 +262,13 @@ abstract final class AppTheme {
         labelTextStyle: WidgetStatePropertyAll(text.labelMedium),
       ),
       segmentedButtonTheme: SegmentedButtonThemeData(
-        style: SegmentedButton.styleFrom(textStyle: text.labelLarge, side: BorderSide(color: p.outline, width: 2)),
+        style: SegmentedButton.styleFrom(
+          textStyle: text.labelLarge,
+          side: BorderSide(color: p.outline, width: 2),
+          // The default picks a dark "on container" colour: unreadable on the dark theme.
+          foregroundColor: p.textMuted,
+          selectedForegroundColor: p.textPrimary,
+        ),
       ),
       switchTheme: SwitchThemeData(
         thumbColor: WidgetStateProperty.resolveWith((s) => s.contains(WidgetState.selected) ? Colors.white : null),

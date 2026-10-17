@@ -52,7 +52,12 @@ class _DashboardCheckState extends ConsumerState<_DashboardCheck> {
     if (reg != null) await copyToClipboard(context, 'Reg No', reg);
     if (!mounted) return;
     await openExternal(context, url);
-    if (!_opened) unawaited(ref.read(xpProvider.notifier).award(XpAction.checkedDashboard));
+    if (!_opened) {
+      final exam = xpExamKey(jobPostId: app.jobPostId, examName: app.examName);
+      unawaited(ref
+          .read(xpProvider.notifier)
+          .award(XpAction.checkedDashboard, key: 'dash:$exam:${xpDayStamp(DateTime.now())}'));
+    }
     if (mounted) setState(() => _opened = true);
   }
 
