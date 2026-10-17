@@ -42,6 +42,7 @@ class _PrivateJobsScreenState extends ConsumerState<PrivateJobsScreen> {
         slivers: [
           padSliver(
             ScreenHeader(
+              workspaceSwitch: true,
               title: 'Private jobs',
               subtitle: feed.isLoading && !feed.hasValue
                   ? 'Loading roles…'
@@ -49,6 +50,7 @@ class _PrivateJobsScreenState extends ConsumerState<PrivateJobsScreen> {
             ),
             top: 12,
           ),
+          padSliver(const SizedBox(height: 44)), // the mountain shows here
           if (me.isEmpty)
             padSliver(
               PromptCard(
@@ -100,7 +102,7 @@ class _PrivateJobsScreenState extends ConsumerState<PrivateJobsScreen> {
               top: 12,
             ),
           SliverPadding(
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 96),
             sliver: SliverList.separated(
               itemCount: ranked.shown.length + (_showHidden ? ranked.hidden.length : 0),
               separatorBuilder: (_, __) => const SizedBox(height: 12),

@@ -25,18 +25,58 @@ class PrivateApplicationsScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final text = Theme.of(context).textTheme;
     final apps = ref.watch(privateApplicationsProvider);
+    final now = ref.watch(nowProvider);
     final list = apps.dataOrNull ?? const <PrivateApplication>[];
-    final open = list.where((a) => a.stage != PrivateStage.closed).length;
+    final byStage = {for (final s in PrivateStage.values) s: <PrivateApplication>[]};
+    for (final a in list) {
+      byStage[a.stage]!.add(a);
+    }
+    final open = list.length - byStage[PrivateStage.closed]!.length;
+    // Applied or in screening with no change for a week: worth a nudge.
+    final quiet = [
+      for (final a in list)
+        if ((a.stage == PrivateStage.applied || a.stage == PrivateStage.screening) &&
+            now.difference(a.updatedAt).inDays >= 7)
+          a,
+    ];
+    const order = [PrivateStage.offer, PrivateStage.interview, PrivateStage.screening, PrivateStage.applied];
+
     return CustomScrollView(
       slivers: [
         padSliver(
-          ScreenHeader(
-            title: 'Applications',
-            subtitle: open == 1 ? '1 in progress' : '$open in progress',
-          ),
+          ScreenHeader(title: 'Applications', subtitle: open == 1 ? '1 in progress' : '$open in progress'),
           top: 12,
         ),
+        padSliver(const SizedBox(height: 26)), // the mountain shows here
+        if (list.isNotEmpty)
+          padSliver(_Funnel(counts: [for (final s in PrivateStage.track) byStage[s]!.length]), top: 4),
+        if (quiet.isNotEmpty)
+          padSliver(
+            Container(
+              padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+              decoration: BoxDecoration(
+                color: AppPalette.honey.withValues(alpha: AppPalette.current.isLight ? 0.13 : 0.18),
+                borderRadius: BorderRadius.circular(AppRadii.control),
+              ),
+              child: Row(
+                children: [
+                  Icon(Icons.schedule_rounded, color: AppPalette.honey),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      quiet.length == 1
+                          ? '${quiet.first.company} hasn’t replied in a week. A short follow-up can help.'
+                          : '${quiet.length} haven’t replied in a week. A short follow-up can help.',
+                      style: text.bodyMedium?.copyWith(fontWeight: FontWeight.w700),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            top: 12,
+          ),
         padSliver(
           Align(
             alignment: Alignment.centerRight,
@@ -46,6 +86,7 @@ class PrivateApplicationsScreen extends ConsumerWidget {
               label: const Text('Add'),
             ),
           ),
+          top: 4,
         ),
         if (list.isEmpty && !apps.isLoading)
           padSliver(
@@ -53,15 +94,89 @@ class PrivateApplicationsScreen extends ConsumerWidget {
                 'Move it along as you hear back.'),
             top: 8,
           ),
-        SliverPadding(
-          padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
-          sliver: SliverList.separated(
-            itemCount: list.length,
-            separatorBuilder: (_, __) => const SizedBox(height: 12),
-            itemBuilder: (context, i) => _ApplicationCard(app: list[i]),
+        for (final stage in order)
+          if (byStage[stage]!.isNotEmpty) ...[
+            padSliver(
+              Text(stage.label.toUpperCase(),
+                  style: text.labelSmall?.copyWith(color: AppPalette.textMuted, fontWeight: FontWeight.w900, letterSpacing: 0.6)),
+              top: 14,
+            ),
+            SliverPadding(
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+              sliver: SliverList.separated(
+                itemCount: byStage[stage]!.length,
+                separatorBuilder: (_, __) => const SizedBox(height: 12),
+                itemBuilder: (context, i) => _ApplicationCard(app: byStage[stage]![i]),
+              ),
+            ),
+          ],
+        if (byStage[PrivateStage.closed]!.isNotEmpty) ...[
+          padSliver(
+            Text('NOT SELECTED',
+                style: text.labelSmall?.copyWith(color: AppPalette.textMuted, fontWeight: FontWeight.w900, letterSpacing: 0.6)),
+            top: 14,
           ),
-        ),
+          SliverPadding(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+            sliver: SliverList.separated(
+              itemCount: byStage[PrivateStage.closed]!.length,
+              separatorBuilder: (_, __) => const SizedBox(height: 12),
+              itemBuilder: (context, i) => _ApplicationCard(app: byStage[PrivateStage.closed]![i]),
+            ),
+          ),
+        ],
+        const SliverToBoxAdapter(child: SizedBox(height: 96)),
       ],
+    );
+  }
+}
+
+/// Applied → Screening → Interview → Offer as one bar, with the counts under it.
+class _Funnel extends StatelessWidget {
+  const _Funnel({required this.counts});
+
+  final List<int> counts; // in PrivateStage.track order
+
+  @override
+  Widget build(BuildContext context) {
+    final text = Theme.of(context).textTheme;
+    final colors = [AppPalette.periwinkle, AppPalette.sage, AppPalette.lavender, AppPalette.honey];
+    final total = counts.fold(0, (a, b) => a + b);
+    return AppCard(
+      padding: const EdgeInsets.fromLTRB(14, 14, 14, 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          ClipRRect(
+            borderRadius: BorderRadius.circular(999),
+            child: SizedBox(
+              height: 16,
+              child: total == 0
+                  ? ColoredBox(color: AppPalette.surfaceVariant)
+                  : Row(
+                      children: [
+                        for (var i = 0; i < counts.length; i++)
+                          if (counts[i] > 0) Expanded(flex: counts[i], child: ColoredBox(color: colors[i])),
+                      ],
+                    ),
+            ),
+          ),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              for (var i = 0; i < counts.length; i++)
+                Expanded(
+                  child: Column(
+                    children: [
+                      Text('${counts[i]}', style: text.titleMedium?.copyWith(color: colors[i], fontWeight: FontWeight.w900)),
+                      Text(PrivateStage.track[i].label, maxLines: 1, softWrap: false, style: text.labelSmall),
+                    ],
+                  ),
+                ),
+            ],
+          ),
+        ],
+      ),
     );
   }
 }

@@ -215,27 +215,28 @@ class _AccountTab extends ConsumerWidget {
 // Profile
 // -----------------------------------------------------------------------------
 
+/// "Reset profile", after a confirmation (Settings › Profile and the profile page).
+Future<void> confirmResetProfile(BuildContext context, WidgetRef ref) async {
+  final ok = await showDialog<bool>(
+    context: context,
+    builder: (c) => AlertDialog(
+      backgroundColor: AppPalette.surface,
+      title: const Text('Reset your profile?'),
+      content: const Text('Your name, date of birth, category, qualifications and experience are cleared, '
+          'and the app asks for them again. Tracked exams, saved IDs and settings stay.'),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('Cancel')),
+        FilledButton(onPressed: () => Navigator.pop(c, true), child: const Text('Reset')),
+      ],
+    ),
+  );
+  if (ok != true) return;
+  await ref.read(profileProvider.notifier).reset();
+  if (context.mounted) showCalmSnack(context, 'Profile reset.');
+}
+
 class _ProfileTab extends ConsumerWidget {
   const _ProfileTab();
-
-  Future<void> _reset(BuildContext context, WidgetRef ref) async {
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (c) => AlertDialog(
-        backgroundColor: AppPalette.surface,
-        title: const Text('Reset your profile?'),
-        content: const Text('Your name, date of birth, category, qualifications and experience are cleared, '
-            'and the app asks for them again. Tracked exams, saved IDs and settings stay.'),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('Cancel')),
-          FilledButton(onPressed: () => Navigator.pop(c, true), child: const Text('Reset')),
-        ],
-      ),
-    );
-    if (ok != true) return;
-    await ref.read(profileProvider.notifier).reset();
-    if (context.mounted) showCalmSnack(context, 'Profile reset.');
-  }
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -278,7 +279,7 @@ class _ProfileTab extends ConsumerWidget {
                 ),
                 if (profile != null)
                   TextButton.icon(
-                    onPressed: () => _reset(context, ref),
+                    onPressed: () => confirmResetProfile(context, ref),
                     icon: const Icon(Icons.restart_alt_rounded, size: 18),
                     label: const Text('Reset profile'),
                   ),

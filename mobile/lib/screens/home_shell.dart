@@ -6,9 +6,11 @@ import 'package:permission_handler/permission_handler.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../config/env.dart';
+import '../domain/agenda.dart';
 import '../domain/relevance.dart';
 import '../models/tracked_application.dart';
 import '../providers/account_providers.dart';
+import '../providers/agenda_providers.dart';
 import '../providers/backup_providers.dart';
 import '../providers/jobs_providers.dart';
 import '../providers/providers.dart';
@@ -20,30 +22,42 @@ import '../utils/system_actions.dart';
 import '../widgets/app_icons.dart';
 import '../widgets/motion.dart';
 import '../widgets/samsung_sleep_tip.dart';
+import '../widgets/summit_backdrop.dart';
 import '../widgets/welcome_sheet.dart';
+import 'agenda_screen.dart';
 import 'jobs_screen.dart';
 import 'my_exams_screen.dart';
 import 'profile_setup_screen.dart';
 import 'today_screen.dart';
 
-/// Three tabs: Today (one next step), Jobs (everything that fits you), My exams.
+/// Four tabs: Today (overview or one next step), Jobs (everything that fits you),
+/// My exams (lanes by stage), Agenda (what's coming, by date). The paper-cut
+/// Summit behind them slides down as you go right: full on Today, gone on Agenda.
 class HomeShell extends ConsumerWidget {
   const HomeShell({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final tab = ref.watch(homeTabProvider);
+    final tab = ref.watch(homeTabProvider).clamp(0, SummitHeights.govtTabs.length - 1);
     final jobs = ref.watch(rankedJobsProvider).length;
     final active = ref.watch(activeAppsProvider);
     final needsAction = active.where((a) => a.displayStatus == TrackerStatus.admitCardLive).length;
+    final now = ref.watch(nowProvider);
+    final today = [for (final i in ref.watch(agendaProvider)) if (i.day == agendaDay(now)) i].length;
     return AccountGate(
       child: Scaffold(
-        body: SafeArea(
-          bottom: false,
-          child: TabSwitcher(
-            index: tab,
-            children: const [TodayScreen(), JobsScreen(), MyExamsScreen()],
-          ),
+        backgroundColor: AppPalette.background,
+        body: Stack(
+          children: [
+            Positioned.fill(child: SummitBackdrop(height: SummitHeights.govtTabs[tab])),
+            SafeArea(
+              bottom: false,
+              child: TabSwitcher(
+                index: tab,
+                children: const [TodayScreen(), JobsScreen(), MyExamsScreen(), AgendaScreen()],
+              ),
+            ),
+          ],
         ),
         bottomNavigationBar: NavigationBar(
           selectedIndex: tab,
@@ -72,6 +86,15 @@ class HomeShell extends ConsumerWidget {
               ),
               selectedIcon: const DuoIcon(AppIcon.answerKey),
               label: 'My exams',
+            ),
+            NavigationDestination(
+              icon: Badge(
+                isLabelVisible: today > 0,
+                label: Text('$today'),
+                child: const DuoIcon(AppIcon.examDay),
+              ),
+              selectedIcon: const DuoIcon(AppIcon.examDay),
+              label: 'Agenda',
             ),
           ],
         ),

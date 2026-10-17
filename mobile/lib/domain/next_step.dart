@@ -26,6 +26,9 @@ class NextStep {
   final TrackedApplication? application; // set for tracked-app steps
   final FeedItem? feedItem; // set for "apply" steps
 
+  /// Stable across rebuilds: what "Not now" remembers.
+  String get id => '${kind.name}:${feedItem?.jobPostId ?? application?.id ?? title}';
+
   /// Not applied yet: the application form. Applied: the same site's login, where
   /// fees, corrections and admit cards live.
   String get actionLabel => switch (kind) {
@@ -38,6 +41,14 @@ class NextStep {
 /// Picks the single most time-critical pending action across tracked
 /// applications and unapplied feed items. Returns null when nothing is pending.
 NextStep? computeNextStep({
+  required Iterable<TrackedApplication> tracked,
+  required Iterable<FeedItem> feed,
+  required DateTime now,
+}) =>
+    computeNextSteps(tracked: tracked, feed: feed, now: now).firstOrNull;
+
+/// Every pending action, most time-critical first (Today's Focus queue).
+List<NextStep> computeNextSteps({
   required Iterable<TrackedApplication> tracked,
   required Iterable<FeedItem> feed,
   required DateTime now,
@@ -79,13 +90,12 @@ NextStep? computeNextStep({
     ));
   }
 
-  if (candidates.isEmpty) return null;
   // Earliest due wins; on a tie, act on what you already applied for first.
   candidates.sort((a, b) {
     final byDue = a.due.compareTo(b.due);
     return byDue != 0 ? byDue : _tiePriority(a.kind).compareTo(_tiePriority(b.kind));
   });
-  return candidates.first;
+  return candidates;
 }
 
 int _tiePriority(NextStepKind k) => switch (k) {

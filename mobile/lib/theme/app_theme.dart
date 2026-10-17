@@ -2,16 +2,21 @@ import 'package:flutter/material.dart';
 
 import '../domain/urgency.dart';
 
-/// One set of colours: bright and playful. Dark is a deep violet-navy with the full
-/// brights; light is a soft lilac white with deeper shades of the same hues, so text
-/// on it stays readable (yellow text on white would vanish, so "soon" turns amber).
+/// The colours. Two moods, each with a Govt and a Private face (switching
+/// workspace swaps the whole palette):
+/// - Dark, "Dusk": plum and lavender for Govt, espresso and saffron for Private.
+/// - Light, "Sea Glass" (A Dictionary of Color Combinations, No. 281 / 151): Nile
+///   blue and Antwarp blue for Govt, pale lemon and Vandar Poel's blue for Private.
+/// Deadlines avoid traffic lights: pink = last days, peach/amber = soon, blue = plenty.
 @immutable
 class Palette {
   const Palette({
+    required this.isLight,
     required this.background,
     required this.surface,
     required this.surfaceVariant,
     required this.outline,
+    required this.cardBase,
     required this.textPrimary,
     required this.textMuted,
     required this.sage,
@@ -19,62 +24,121 @@ class Palette {
     required this.terracotta,
     required this.periwinkle,
     required this.lavender,
+    required this.onAccent,
+    required this.sky,
   });
 
+  final bool isLight;
   final Color background;
-  final Color surface;
-  final Color surfaceVariant;
+  final Color surface; // cards
+  final Color surfaceVariant; // chips, fields, inner panels
   final Color outline;
+  final Color cardBase; // the "3D" edge under a card
   final Color textPrimary;
   final Color textMuted;
-  final Color sage; // mint: done, safe (> 14 days)
-  final Color honey; // sunny: soon (3–14 days)
-  final Color terracotta; // coral: urgent (< 72 hrs)
-  final Color periwinkle; // violet: the app's main colour, information
-  final Color lavender; // pink: the answer-key stage
+  final Color sage; // blue: done, plenty of time (> 14 days)
+  final Color honey; // peach / amber: soon (3–14 days)
+  final Color terracotta; // pink: last days (< 72 hrs)
+  final Color periwinkle; // the workspace's main colour
+  final Color lavender; // rose: the answer-key stage
+  final Color onAccent; // text on the main colour
+  final Color sky; // the moon (dark) or sun (light) over the mountains
 
-  static const dark = Palette(
-    background: Color(0xFF110E24), // deep violet-navy
-    surface: Color(0xFF1C1838),
-    surfaceVariant: Color(0xFF2A2452),
-    outline: Color(0xFF3A3370),
-    textPrimary: Color(0xFFF4F2FF),
-    textMuted: Color(0xFFA8A3D1),
-    sage: Color(0xFF2BD9A0), // mint
-    honey: Color(0xFFFFC93C), // sunny yellow
-    terracotta: Color(0xFFFF6B6B), // coral
-    periwinkle: Color(0xFFA594FF), // violet, lifted for the dark background
-    lavender: Color(0xFFF472B6), // pink
+  static const duskGovt = Palette(
+    isLight: false,
+    background: Color(0xFF1A1220), // plum
+    surface: Color(0xFF281C30),
+    surfaceVariant: Color(0xFF372742),
+    outline: Color(0xFF4A3857),
+    cardBase: Color(0xFF110A15),
+    textPrimary: Color(0xFFFBF2FF),
+    textMuted: Color(0xFFBFA9CC),
+    sage: Color(0xFF8FB8FF),
+    honey: Color(0xFFFFB570),
+    terracotta: Color(0xFFFF6FA8),
+    periwinkle: Color(0xFFC3A6FF), // lavender
+    lavender: Color(0xFFFF9EC4),
+    onAccent: Color(0xFF1E0F3A),
+    sky: Color(0xFFF3E6D0), // moon
   );
 
-  static const light = Palette(
-    background: Color(0xFFF5F3FF), // soft lilac white
+  static const duskPrivate = Palette(
+    isLight: false,
+    background: Color(0xFF1A150F), // espresso
+    surface: Color(0xFF2A2219),
+    surfaceVariant: Color(0xFF3B3125),
+    outline: Color(0xFF4C4031),
+    cardBase: Color(0xFF100C07),
+    textPrimary: Color(0xFFFFF6EA),
+    textMuted: Color(0xFFCDB89E),
+    sage: Color(0xFF8FB8FF),
+    honey: Color(0xFFFF9A62),
+    terracotta: Color(0xFFFF6FA8),
+    periwinkle: Color(0xFFFFB547), // saffron
+    lavender: Color(0xFFFF9EC4),
+    onAccent: Color(0xFF2E1A00),
+    sky: Color(0xFFF3E6D0),
+  );
+
+  static const seaGovt = Palette(
+    isLight: true,
+    background: Color(0xFFE4F3F2), // Nile blue, light
     surface: Color(0xFFFFFFFF),
-    surfaceVariant: Color(0xFFECE8FF),
-    outline: Color(0xFFDDD6FE),
-    textPrimary: Color(0xFF1F1A3D),
-    textMuted: Color(0xFF635D8A),
-    sage: Color(0xFF0E9F6E), // mint, deepened for text on white
-    honey: Color(0xFFB45309), // amber: yellow can't be read on white
-    terracotta: Color(0xFFE5484D), // coral
-    periwinkle: Color(0xFF6B4EF0), // violet
-    lavender: Color(0xFFDB2777), // pink
+    surfaceVariant: Color(0xFFD3EAE9),
+    outline: Color(0xFFBFDCDB),
+    cardBase: Color(0xFFC3DEDD),
+    textPrimary: Color(0xFF0F2A33),
+    textMuted: Color(0xFF4E6770),
+    sage: Color(0xFF40456A), // violet blue
+    honey: Color(0xFF94570F), // raw sienna, deepened for text
+    terracotta: Color(0xFFB71F57), // pomegranate purple
+    periwinkle: Color(0xFF007190), // Antwarp blue
+    lavender: Color(0xFF8C4C62), // veronia purple
+    onAccent: Color(0xFFFFFFFF),
+    sky: Color(0xFFFDBF68), // sun
   );
+
+  static const seaPrivate = Palette(
+    isLight: true,
+    background: Color(0xFFFFF6D6), // pale lemon
+    surface: Color(0xFFFFFDF4),
+    surfaceVariant: Color(0xFFF3E8BF),
+    outline: Color(0xFFE6D8A6),
+    cardBase: Color(0xFFE9DCA8),
+    textPrimary: Color(0xFF0B2A36),
+    textMuted: Color(0xFF5B6458),
+    sage: Color(0xFF40456A),
+    honey: Color(0xFF94570F),
+    terracotta: Color(0xFFB71F57),
+    periwinkle: Color(0xFF064F6E), // Vandar Poel's blue
+    lavender: Color(0xFF8C4C62),
+    onAccent: Color(0xFFFFFFFF),
+    sky: Color(0xFFF99D1B),
+  );
+
+  /// The Govt palettes, under their old names.
+  static const dark = duskGovt;
+  static const light = seaGovt;
+
+  static Palette of(Brightness brightness, {bool private = false}) => brightness == Brightness.light
+      ? (private ? seaPrivate : seaGovt)
+      : (private ? duskPrivate : duskGovt);
 }
 
 /// The active palette's colours. Switched by the app root before anything below
-/// it builds (the whole screen is rebuilt when light/dark changes).
+/// it builds (the whole screen is rebuilt when light/dark or the workspace changes).
 abstract final class AppPalette {
   static Palette _current = Palette.dark;
 
   static Palette get current => _current;
-  static void use(Brightness brightness) =>
-      _current = brightness == Brightness.light ? Palette.light : Palette.dark;
+  static void use(Brightness brightness, {bool private = false}) =>
+      _current = Palette.of(brightness, private: private);
 
   static Color get background => _current.background;
   static Color get surface => _current.surface;
   static Color get surfaceVariant => _current.surfaceVariant;
   static Color get outline => _current.outline;
+  static Color get cardBase => _current.cardBase;
   static Color get textPrimary => _current.textPrimary;
   static Color get textMuted => _current.textMuted;
   static Color get sage => _current.sage;
@@ -82,6 +146,7 @@ abstract final class AppPalette {
   static Color get terracotta => _current.terracotta;
   static Color get periwinkle => _current.periwinkle;
   static Color get lavender => _current.lavender;
+  static Color get onAccent => _current.onAccent;
 }
 
 abstract final class AppRadii {
@@ -150,12 +215,12 @@ extension UrgencyColorsContext on BuildContext {
 abstract final class AppTheme {
   static ThemeData darkPastel() => of(Brightness.dark);
 
-  static ThemeData of(Brightness brightness) {
+  static ThemeData of(Brightness brightness, {bool private = false}) {
     final light = brightness == Brightness.light;
-    final p = light ? Palette.light : Palette.dark;
+    final p = Palette.of(brightness, private: private);
     final scheme = (light ? ColorScheme.light : ColorScheme.dark)(
       primary: p.periwinkle,
-      onPrimary: light ? Colors.white : p.background,
+      onPrimary: p.onAccent,
       secondary: p.sage,
       onSecondary: p.background,
       tertiary: p.honey,

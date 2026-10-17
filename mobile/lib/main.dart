@@ -57,29 +57,32 @@ class JobSummitApp extends ConsumerWidget {
   const JobSummitApp({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) => MaterialApp(
-        title: 'JobSummit',
-        debugShowCheckedModeBanner: false,
-        theme: AppTheme.of(Brightness.light),
-        darkTheme: AppTheme.of(Brightness.dark),
-        themeMode: ref.watch(themeModeProvider),
-        builder: (context, child) => _PaletteScope(brightness: Theme.of(context).brightness, child: child!),
-        // The one place the app knows about the optional Private workspace.
-        home: XpCelebrations(
-          child: UpdateGate(
-            child:
-                ref.watch(workspaceProvider).shown == Workspace.private ? const PrivateShell() : const HomeShell(),
-          ),
-        ),
-      );
+  Widget build(BuildContext context, WidgetRef ref) {
+    // Switching workspace swaps the whole palette (and the screens).
+    final private = ref.watch(workspaceProvider).shown == Workspace.private;
+    return MaterialApp(
+      title: 'JobSummit',
+      debugShowCheckedModeBanner: false,
+      theme: AppTheme.of(Brightness.light, private: private),
+      darkTheme: AppTheme.of(Brightness.dark, private: private),
+      themeMode: ref.watch(themeModeProvider),
+      builder: (context, child) =>
+          _PaletteScope(brightness: Theme.of(context).brightness, private: private, child: child!),
+      // The one place the app knows about the optional Private workspace.
+      home: XpCelebrations(
+        child: UpdateGate(child: private ? const PrivateShell() : const HomeShell()),
+      ),
+    );
+  }
 }
 
 /// Points [AppPalette] at the light or dark colours before anything below builds,
 /// and repaints every screen (keeping its state) when that changes.
 class _PaletteScope extends StatefulWidget {
-  const _PaletteScope({required this.brightness, required this.child});
+  const _PaletteScope({required this.brightness, required this.private, required this.child});
 
   final Brightness brightness;
+  final bool private;
   final Widget child;
 
   @override
@@ -87,7 +90,7 @@ class _PaletteScope extends StatefulWidget {
 }
 
 class _PaletteScopeState extends State<_PaletteScope> {
-  Brightness? _applied;
+  (Brightness, bool)? _applied;
 
   static void _rebuildAll(Element element) {
     element.markNeedsBuild();
@@ -97,10 +100,10 @@ class _PaletteScopeState extends State<_PaletteScope> {
   @override
   Widget build(BuildContext context) {
     final b = widget.brightness;
-    if (_applied != b) {
+    if (_applied != (b, widget.private)) {
       final first = _applied == null;
-      _applied = b;
-      AppPalette.use(b);
+      _applied = (b, widget.private);
+      AppPalette.use(b, private: widget.private);
       final light = b == Brightness.light;
       SystemChrome.setSystemUIOverlayStyle(SystemUiOverlayStyle(
         statusBarColor: Colors.transparent,

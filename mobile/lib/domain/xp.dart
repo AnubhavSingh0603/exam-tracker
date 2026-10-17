@@ -86,7 +86,8 @@ class XpState {
     this.earned = const {},
     this.streakBefore,
     this.activeBefore,
-  });
+    int? bestStreak,
+  }) : _bestStreak = bestStreak;
 
   final int xp;
 
@@ -105,6 +106,10 @@ class XpState {
   /// also takes back today's streak day.
   final int? streakBefore;
   final DateTime? activeBefore;
+
+  /// The longest streak so far (the profile shows it).
+  int get bestStreak => (_bestStreak ?? 0) > streak ? _bestStreak! : streak;
+  final int? _bestStreak;
 
   int get level => levelFor(xp);
   String get levelTitle => levelName(level);
@@ -158,6 +163,7 @@ class XpState {
             },
       streakBefore: firstToday ? streak : streakBefore,
       activeBefore: firstToday ? lastActiveDay : activeBefore,
+      bestStreak: newStreak > bestStreak ? newStreak : bestStreak,
     );
     return (state: next, gained: action.points, levelUp: next.level > level, streakUp: newStreak > streak);
   }
@@ -187,6 +193,7 @@ class XpState {
       earned: {...earned}..remove(key),
       streakBefore: streakBefore,
       activeBefore: activeBefore,
+      bestStreak: _bestStreak,
     );
     return (state: next, lost: e.points);
   }
@@ -202,6 +209,7 @@ class XpState {
         earned: things,
         streakBefore: streakBefore,
         activeBefore: activeBefore,
+        bestStreak: bestStreak,
       );
 
   Map<String, Object?> toJson() => {
@@ -213,6 +221,7 @@ class XpState {
         'earned': {for (final e in earned.entries) e.key: e.value.toJson()},
         'streak_before': streakBefore,
         'active_before': activeBefore?.toIso8601String(),
+        'best_streak': bestStreak,
       };
 
   factory XpState.fromJson(Map<String, dynamic> j) => XpState(
@@ -227,5 +236,6 @@ class XpState {
         },
         streakBefore: (j['streak_before'] as num?)?.toInt(),
         activeBefore: DateTime.tryParse(j['active_before'] as String? ?? ''),
+        bestStreak: (j['best_streak'] as num?)?.toInt(),
       );
 }

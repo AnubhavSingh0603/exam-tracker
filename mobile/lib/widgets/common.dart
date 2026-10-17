@@ -4,6 +4,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../providers/account_providers.dart';
 import '../providers/backup_providers.dart';
 import '../providers/providers.dart';
+import '../providers/workspace_providers.dart';
+import '../screens/profile_screen.dart';
 import '../screens/settings_screen.dart';
 import '../services/auth_service.dart';
 import '../theme/app_theme.dart';
@@ -27,12 +29,14 @@ class MutedNote extends StatelessWidget {
       Text(message, style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: AppPalette.textMuted));
 }
 
-/// Big screen title with the account button on the right.
+/// Big screen title with the XP badge and account button on the right. Today and
+/// Private Roles also carry the Govt | Private switch above it.
 class ScreenHeader extends StatelessWidget {
-  const ScreenHeader({super.key, required this.title, this.subtitle});
+  const ScreenHeader({super.key, required this.title, this.subtitle, this.workspaceSwitch = false});
 
   final String title;
   final String? subtitle;
+  final bool workspaceSwitch;
 
   @override
   Widget build(BuildContext context) {
@@ -44,7 +48,7 @@ class ScreenHeader extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const WorkspaceSwitch(),
+              if (workspaceSwitch) const WorkspaceSwitch(),
               Semantics(header: true, child: Text(title, style: text.headlineSmall)),
               if (subtitle != null) ...[
                 const SizedBox(height: 2),
@@ -96,10 +100,13 @@ class AccountAvatarButton extends ConsumerWidget {
     final backup = ref.watch(backupControllerProvider);
     final attention = backup.phase == BackupPhase.needsPermission || backup.phase == BackupPhase.error;
     final text = Theme.of(context).textTheme;
+    // Govt: your profile (character sheet). Private has its own Profile tab: Settings.
+    final private = ref.watch(workspaceProvider).shown == Workspace.private;
     return IconButton(
-      tooltip: 'Account and settings',
-      onPressed: () =>
-          Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => const SettingsScreen())),
+      tooltip: private ? 'Account and settings' : 'Your profile',
+      onPressed: () => private
+          ? Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => const SettingsScreen()))
+          : ProfileScreen.open(context),
       icon: Badge(
         isLabelVisible: attention,
         smallSize: 9,

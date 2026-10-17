@@ -7,7 +7,6 @@ import '../domain/xp.dart';
 import '../providers/xp_providers.dart';
 import '../services/fx.dart';
 import '../theme/app_theme.dart';
-import 'app_card.dart';
 import 'motion.dart';
 
 // -----------------------------------------------------------------------------
@@ -419,7 +418,7 @@ class _XpSheet extends ConsumerWidget {
   }
 }
 
-/// A ring that fills (in mint) once you've done one useful thing today.
+/// A ring that fills once you've done one useful thing today (the XP sheet).
 class DailyRing extends StatelessWidget {
   const DailyRing({super.key, required this.done, this.size = 64});
 
@@ -453,58 +452,4 @@ class DailyRing extends StatelessWidget {
           ),
         ),
       );
-}
-
-/// Today's tile: the daily ring, the streak and the level bar, so progress is in view.
-class TodayProgress extends ConsumerWidget {
-  const TodayProgress({super.key});
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final xp = ref.watch(xpProvider);
-    final now = DateTime.now();
-    final done = xp.doneToday(now);
-    final streak = xp.streakOn(now);
-    final text = Theme.of(context).textTheme;
-    return AppCard(
-      accent: done ? AppPalette.sage : AppPalette.periwinkle,
-      onTap: () => showXpSheet(context),
-      padding: const EdgeInsets.all(14),
-      child: Row(
-          children: [
-            DailyRing(done: done, size: 52),
-            const SizedBox(width: 14),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(done ? 'Today’s step: done!' : 'Today’s step: one useful thing', style: text.titleMedium),
-                  const SizedBox(height: 2),
-                  Row(
-                    children: [
-                      Text('Level ${xp.level} · ${xp.levelTitle}', style: text.bodySmall),
-                      if (streak > 0) ...[
-                        const SizedBox(width: 10),
-                        Icon(Icons.local_fire_department_rounded, size: 15, color: AppPalette.terracotta),
-                        Text(' ${_days(streak)}', style: text.bodySmall),
-                      ],
-                    ],
-                  ),
-                  const SizedBox(height: 6),
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(999),
-                    child: LinearProgressIndicator(
-                      value: xp.levelProgress.clamp(0, 1),
-                      minHeight: 8,
-                      color: AppPalette.periwinkle,
-                      backgroundColor: AppPalette.surfaceVariant,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-      ),
-    );
-  }
 }

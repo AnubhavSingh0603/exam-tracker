@@ -18,7 +18,7 @@ void main() {
       child: MaterialApp(
         theme: AppTheme.of(Brightness.light),
         home: const XpCelebrations(
-          child: Scaffold(body: Column(children: [XpBadge(), TodayProgress()])),
+          child: Scaffold(body: Column(children: [XpBadge()])),
         ),
       ),
     ));
@@ -26,13 +26,11 @@ void main() {
     return c;
   }
 
-  testWidgets('a useful action pops "+XP" and fills today’s ring', (tester) async {
+  testWidgets('a useful action pops "+XP"', (tester) async {
     final c = await pump(tester);
-    expect(find.text('Today’s step: one useful thing'), findsOneWidget);
     await c.read(xpProvider.notifier).award(XpAction.savedIds);
     await tester.pump(const Duration(milliseconds: 400));
     expect(find.textContaining('+10 XP · Saved your IDs'), findsOneWidget);
-    expect(find.text('Today’s step: done!'), findsOneWidget);
     await tester.pumpAndSettle();
     expect(find.textContaining('+10 XP'), findsNothing); // the pop goes away by itself
   });

@@ -8,10 +8,12 @@ import '../providers/account_providers.dart';
 import '../providers/jobs_providers.dart';
 import '../providers/providers.dart';
 import '../theme/app_theme.dart';
+import '../widgets/app_card.dart';
 import '../widgets/common.dart';
 import '../widgets/job_card.dart';
 import '../widgets/motion.dart';
 import '../widgets/one_line.dart';
+import '../widgets/pill_toggle.dart';
 import 'hidden_jobs_screen.dart';
 
 enum _View { forYou, nearMiss, notForMe }
@@ -26,6 +28,7 @@ class JobsScreen extends ConsumerStatefulWidget {
 }
 
 class _JobsScreenState extends ConsumerState<JobsScreen> {
+  bool _explore = false;
   _View _view = _View.forYou;
   JobSort _sort = JobSort.bestMatch;
   String _query = '';
@@ -84,6 +87,17 @@ class _JobsScreenState extends ConsumerState<JobsScreen> {
             top: 12,
           ),
           padSliver(
+            Align(
+              alignment: Alignment.centerLeft,
+              child: PillToggle<bool>(
+                options: const [(false, 'For you'), (true, 'Explore')],
+                selected: _explore,
+                onChanged: (v) => setState(() => _explore = v),
+              ),
+            ),
+            top: 10,
+          ),
+          padSliver(
             TextField(
               controller: _search,
               onChanged: (v) => setState(() => _query = v.trim()),
@@ -106,6 +120,9 @@ class _JobsScreenState extends ConsumerState<JobsScreen> {
             ),
             top: 14,
           ),
+          if (_explore)
+            ..._exploreTiles(context, ranked)
+          else ...[
           padSliver(
             SegmentedButton<_View>(
               showSelectedIcon: false,
@@ -225,10 +242,66 @@ class _JobsScreenState extends ConsumerState<JobsScreen> {
                 ),
               ),
           ],
-          const SliverToBoxAdapter(child: SizedBox(height: 32)),
+          ],
+          const SliverToBoxAdapter(child: SizedBox(height: 96)),
         ],
       ),
     );
+  }
+
+  /// Explore: every kind of job with how many are open; tap one to see them.
+  List<Widget> _exploreTiles(BuildContext context, List<RankedJob> ranked) {
+    final text = Theme.of(context).textTheme;
+    final counts = <JobCategory, int>{};
+    for (final r in ranked) {
+      final c = JobCategory.fromWire(r.item.category);
+      counts[c] = (counts[c] ?? 0) + 1;
+    }
+    final kinds = [for (final c in JobCategory.values) if ((counts[c] ?? 0) > 0) c];
+    if (kinds.isEmpty) {
+      return [padSliver(const MutedNote('No open jobs to browse right now.'), top: 16)];
+    }
+    return [
+      SliverPadding(
+        padding: const EdgeInsets.fromLTRB(16, 14, 16, 0),
+        sliver: SliverGrid.count(
+          crossAxisCount: 2,
+          mainAxisSpacing: 10,
+          crossAxisSpacing: 10,
+          childAspectRatio: 1.25,
+          children: [
+            for (final c in kinds)
+              AppCard(
+                onTap: () {
+                  ref.read(jobsCategoryFilterProvider.notifier).show(c);
+                  setState(() {
+                    _explore = false;
+                    _view = _View.forYou;
+                  });
+                },
+                padding: const EdgeInsets.all(14),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Container(
+                      width: 40,
+                      height: 40,
+                      decoration: BoxDecoration(
+                        color: categoryColor(c).withValues(alpha: AppPalette.current.isLight ? 0.13 : 0.2),
+                        borderRadius: BorderRadius.circular(13),
+                      ),
+                      child: Icon(_categoryIcon(c), size: 22, color: categoryColor(c)),
+                    ),
+                    const Spacer(),
+                    Text(c.label, style: text.titleSmall, maxLines: 1, overflow: TextOverflow.ellipsis),
+                    Text('${counts[c]} open', style: text.labelSmall),
+                  ],
+                ),
+              ),
+          ],
+        ),
+      ),
+    ];
   }
 
   List<Widget> _notForMe(BuildContext context, List<JobDecision> rejected) {
@@ -265,6 +338,21 @@ class _JobsScreenState extends ConsumerState<JobsScreen> {
     ];
   }
 }
+
+IconData _categoryIcon(JobCategory c) => switch (c) {
+      JobCategory.railway => Icons.train_rounded,
+      JobCategory.bank => Icons.account_balance_rounded,
+      JobCategory.ssc => Icons.badge_rounded,
+      JobCategory.upsc => Icons.workspace_premium_rounded,
+      JobCategory.psu => Icons.factory_rounded,
+      JobCategory.research => Icons.science_rounded,
+      JobCategory.defence => Icons.shield_rounded,
+      JobCategory.state => Icons.location_city_rounded,
+      JobCategory.teaching => Icons.school_rounded,
+      JobCategory.medical => Icons.local_hospital_rounded,
+      JobCategory.court => Icons.gavel_rounded,
+      JobCategory.other => Icons.work_outline_rounded,
+    };
 
 class _FilterChip extends StatelessWidget {
   const _FilterChip({required this.label, required this.selected, required this.onTap, this.color});

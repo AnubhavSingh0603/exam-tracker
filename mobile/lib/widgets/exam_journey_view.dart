@@ -3,10 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../domain/delivery_track.dart';
 import '../domain/lifecycle.dart';
-import '../domain/urgency.dart';
 import '../models/tracked_application.dart';
-import '../models/vault_entry.dart';
-import '../providers/pin_providers.dart';
 import '../providers/providers.dart';
 import '../services/calendar_sync_service.dart';
 import '../services/fx.dart';
@@ -14,34 +11,30 @@ import '../theme/app_theme.dart';
 import '../utils/system_actions.dart';
 import 'app_card.dart';
 import 'app_icons.dart';
-import 'common.dart';
 import 'credential_drawer.dart';
 import 'dashboard_check_sheet.dart';
 import 'exam_delivery_tracker.dart';
 import 'pills.dart';
-import 'pin_dialog.dart';
 
 enum _SyncState { idle, syncing, done }
 
-enum _Panel { none, progress, credentials }
-
 enum _MenuAction { admitCardLive, examScheduled, examDone, backToApplied, editLinks, delete }
 
-/// A tracked exam: name, where it is now and the one next step, copyable
-/// Reg/Roll numbers, Candidate login + Official site, and (tap the card) its
-/// delivery-style progress track.
-class TrackedApplicationCard extends ConsumerStatefulWidget {
-  const TrackedApplicationCard({super.key, required this.app, required this.now});
+/// The Exam journey page's content (one tracked exam): where it is now and the
+/// one next step, its delivery-style track, your IDs, Candidate login + Official
+/// site + calendar, and every notice found for it. The ⋮ menu updates its status
+/// and links, or deletes it.
+class ExamJourneyView extends ConsumerStatefulWidget {
+  const ExamJourneyView({super.key, required this.app, required this.now});
 
   final TrackedApplication app;
   final DateTime now;
 
   @override
-  ConsumerState<TrackedApplicationCard> createState() => _TrackedApplicationCardState();
+  ConsumerState<ExamJourneyView> createState() => _ExamJourneyViewState();
 }
 
-class _TrackedApplicationCardState extends ConsumerState<TrackedApplicationCard> {
-  _Panel _panel = _Panel.none;
+class _ExamJourneyViewState extends ConsumerState<ExamJourneyView> {
   _SyncState _sync = _SyncState.idle;
 
   TrackedApplication get app => widget.app;
@@ -53,14 +46,12 @@ class _TrackedApplicationCardState extends ConsumerState<TrackedApplicationCard>
   }
 
   @override
-  void didUpdateWidget(TrackedApplicationCard old) {
+  void didUpdateWidget(ExamJourneyView old) {
     super.didUpdateWidget(old);
     if (_sync != _SyncState.syncing) {
       _sync = app.calendarSynced ? _SyncState.done : _SyncState.idle;
     }
   }
-
-  void _toggle(_Panel panel) => setState(() => _panel = _panel == panel ? _Panel.none : panel);
 
   Future<void> _syncToCalendar() async {
     setState(() => _sync = _SyncState.syncing);
@@ -198,164 +189,118 @@ class _TrackedApplicationCardState extends ConsumerState<TrackedApplicationCard>
     return DateTime(date.year, date.month, date.day, time.hour, time.minute);
   }
 
-  @override
-  Widget build(BuildContext context) {
-    final text = Theme.of(context).textTheme;
-    final colors = context.urgencyColors;
-    final focus = app.focusDateAt(widget.now);
-    final track = buildDeliveryTrack(app, widget.now);
-    final vault = ref.watch(vaultEntryProvider(app.id)).dataOrNull;
-    final hasPassword = ref.watch(hasPasswordProvider(app.id)).dataOrNull ?? false;
-    final idsLocked = !(ref.watch(pinLockProvider).dataOrNull?.unlocked(DateTime.now()) ?? true);
-    // With IDs saved, the login button becomes the quick "Check dashboard".
-    final hasIds = hasPassword || !(vault?.isEmpty ?? true);
-
-    return AppCard(
-      // Tapping the card opens (or closes) its progress track.
-      onTap: () => _toggle(_Panel.progress),
-      accent: colors.of(urgencyFor(focus, widget.now)),
-      padding: const EdgeInsets.fromLTRB(16, 12, 8, 12),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(
-                child: Padding(
-                  padding: const EdgeInsets.only(top: 4),
-                  child: Text(app.postName, style: text.titleMedium),
-                ),
-              ),
-              const SizedBox(width: 8),
-              Padding(
-                padding: const EdgeInsets.only(top: 4),
-                child: _DatePill(app: app, now: widget.now),
-              ),
-              PopupMenuButton<_MenuAction>(
-                tooltip: 'Update status, links or delete',
-                onSelected: _onMenu,
-                itemBuilder: (_) => [
-                  if (app.status != ApplicationStatus.admitCardLive)
-                    const PopupMenuItem(value: _MenuAction.admitCardLive, child: Text('Admit card is out')),
-                  const PopupMenuItem(value: _MenuAction.examScheduled, child: Text('Set exam date')),
-                  if (!app.examOver(widget.now))
-                    const PopupMenuItem(value: _MenuAction.examDone, child: Text('Exam is done')),
-                  if (app.status != ApplicationStatus.applied)
-                    const PopupMenuItem(value: _MenuAction.backToApplied, child: Text('Back to “Applied”')),
-                  const PopupMenuItem(value: _MenuAction.editLinks, child: Text('Edit links')),
-                  const PopupMenuDivider(),
-                  PopupMenuItem(
-                    value: _MenuAction.delete,
-                    child: Row(
-                      children: [
-                        DuoIcon(AppIcon.delete, size: 20, color: Theme.of(context).colorScheme.error),
-                        const SizedBox(width: 8),
-                        Text('Delete', style: TextStyle(color: Theme.of(context).colorScheme.error)),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
-          Padding(
-            padding: const EdgeInsets.only(right: 8),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+  Widget _menu(BuildContext context) => PopupMenuButton<_MenuAction>(
+        tooltip: 'Update status, links or delete',
+        onSelected: _onMenu,
+        itemBuilder: (_) => [
+          if (app.status != ApplicationStatus.admitCardLive)
+            const PopupMenuItem(value: _MenuAction.admitCardLive, child: Text('Admit card is out')),
+          const PopupMenuItem(value: _MenuAction.examScheduled, child: Text('Set exam date')),
+          if (!app.examOver(widget.now)) const PopupMenuItem(value: _MenuAction.examDone, child: Text('Exam is done')),
+          if (app.status != ApplicationStatus.applied)
+            const PopupMenuItem(value: _MenuAction.backToApplied, child: Text('Back to “Applied”')),
+          const PopupMenuItem(value: _MenuAction.editLinks, child: Text('Edit links')),
+          const PopupMenuDivider(),
+          PopupMenuItem(
+            value: _MenuAction.delete,
+            child: Row(
               children: [
-                if (app.examName != app.postName) Text(app.examName, style: text.bodySmall),
-                const SizedBox(height: 10),
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  crossAxisAlignment: WrapCrossAlignment.center,
-                  children: [
-                    _StatusBadge(app: app, track: track),
-                    if ((app.totalSeats ?? 0) > 0) // 0 = the notice didn't say
-                      SeatPill(
-                        total: app.totalSeats!,
-                        ur: app.urSeats ?? 0,
-                        quota: app.quotaSeats ?? 0,
-                        category: app.category,
-                      ),
-                    ..._quickCopyChips(context, vault,
-                        locked: idsLocked, onUnlock: () => ensureUnlocked(context, ref)),
-                  ],
-                ),
-                // The one next step, without opening the track.
-                if (_panel != _Panel.progress) ...[
-                  const SizedBox(height: 10),
-                  _NowLine(track: track, onAction: _onTrackAction),
-                ],
-                if (app.updates.isNotEmpty) ...[
-                  const SizedBox(height: 8),
-                  _LatestNotice(update: app.updates.first),
-                ],
-                const SizedBox(height: 12),
-                // Side by side when they fit, else one under the other: labels never break.
-                OverflowBar(
-                  spacing: 8,
-                  overflowSpacing: 6,
-                  children: [
-                    // With the track open, its card has the login (or a better step).
-                    if (_panel != _Panel.progress)
-                      _LinkButton(
-                        icon: AppIcon.login,
-                        label: hasIds ? 'Dashboard' : 'Login',
-                        url: app.loginUrl,
-                        onPressed: hasIds
-                            ? () => showDashboardCheck(
-                                  context,
-                                  ref,
-                                  app,
-                                  onAdmitCardOut: () => _onMenu(_MenuAction.admitCardLive),
-                                  onExamDone: () => _onMenu(_MenuAction.examDone),
-                                )
-                            : null,
-                      ),
-                    _LinkButton(icon: AppIcon.applyOnline, label: 'Official site', url: app.officialUrl),
-                  ],
-                ),
-                const SizedBox(height: 6),
-                Wrap(
-                  spacing: 4,
-                  runSpacing: 4,
-                  crossAxisAlignment: WrapCrossAlignment.center,
-                  children: [
-                    _SyncButton(state: _sync, onPressed: _syncToCalendar),
-                    _PanelToggle(
-                      icon: AppIcon.timeline,
-                      label: 'Progress',
-                      open: _panel == _Panel.progress,
-                      onPressed: () => _toggle(_Panel.progress),
-                    ),
-                    _PanelToggle(
-                      icon: AppIcon.idVault,
-                      label: 'IDs',
-                      open: _panel == _Panel.credentials,
-                      onPressed: () => _toggle(_Panel.credentials),
-                    ),
-                  ],
-                ),
-                Fold(
-                  child: switch (_panel) {
-                    _Panel.progress => Padding(
-                        padding: const EdgeInsets.only(top: 14),
-                        child: ExamDeliveryTracker(app: app, now: widget.now, onTrackNextTier: _trackNextTier),
-                      ),
-                    _Panel.credentials => Padding(
-                        padding: const EdgeInsets.only(top: 12),
-                        child: CredentialDrawer(app: app),
-                      ),
-                    _Panel.none => null,
-                  },
-                ),
+                DuoIcon(AppIcon.delete, size: 20, color: Theme.of(context).colorScheme.error),
+                const SizedBox(width: 8),
+                Text('Delete', style: TextStyle(color: Theme.of(context).colorScheme.error)),
               ],
             ),
           ),
         ],
-      ),
+      );
+
+  @override
+  Widget build(BuildContext context) {
+    final text = Theme.of(context).textTheme;
+    final track = buildDeliveryTrack(app, widget.now);
+    final vault = ref.watch(vaultEntryProvider(app.id)).dataOrNull;
+    final hasPassword = ref.watch(hasPasswordProvider(app.id)).dataOrNull ?? false;
+    // With IDs saved, the login button becomes the quick "Check dashboard".
+    final hasIds = hasPassword || !(vault?.isEmpty ?? true);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        // Where it is now, and the one next step.
+        AppCard(
+          padding: const EdgeInsets.fromLTRB(16, 10, 4, 14),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Expanded(
+                    child: Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      children: [
+                        _StatusBadge(app: app, track: track),
+                        _DatePill(app: app, now: widget.now),
+                      ],
+                    ),
+                  ),
+                  _menu(context),
+                ],
+              ),
+              const SizedBox(height: 10),
+              Padding(
+                padding: const EdgeInsets.only(right: 12),
+                child: _NowLine(track: track, onAction: _onTrackAction),
+              ),
+              if ((app.totalSeats ?? 0) > 0) ...[
+                // 0 = the notice didn't say
+                const SizedBox(height: 10),
+                SeatPill(
+                  total: app.totalSeats!,
+                  ur: app.urSeats ?? 0,
+                  quota: app.quotaSeats ?? 0,
+                  category: app.category,
+                ),
+              ],
+            ],
+          ),
+        ),
+        const SizedBox(height: 14),
+        AppCard(child: ExamDeliveryTracker(app: app, now: widget.now, onTrackNextTier: _trackNextTier)),
+        const SizedBox(height: 14),
+        AppCard(child: CredentialDrawer(app: app)),
+        const SizedBox(height: 14),
+        // Side by side when they fit, else one under the other: labels never break.
+        OverflowBar(
+          spacing: 8,
+          overflowSpacing: 8,
+          children: [
+            _LinkButton(
+              icon: AppIcon.login,
+              label: hasIds ? 'Dashboard' : 'Login',
+              url: app.loginUrl,
+              onPressed: hasIds
+                  ? () => showDashboardCheck(
+                        context,
+                        ref,
+                        app,
+                        onAdmitCardOut: () => _onMenu(_MenuAction.admitCardLive),
+                        onExamDone: () => _onMenu(_MenuAction.examDone),
+                      )
+                  : null,
+            ),
+            _LinkButton(icon: AppIcon.applyOnline, label: 'Official site', url: app.officialUrl),
+            _SyncButton(state: _sync, onPressed: _syncToCalendar),
+          ],
+        ),
+        if (app.updates.isNotEmpty) ...[
+          const SizedBox(height: 22),
+          Text('News for this exam', style: text.titleMedium),
+          const SizedBox(height: 6),
+          for (final u in app.updates.take(12)) _LatestNotice(update: u),
+        ],
+      ],
     );
   }
 }
@@ -498,40 +443,6 @@ class _LinkButton extends StatelessWidget {
   }
 }
 
-/// One tap copies the Registration / Roll number, right on the card. With the PIN
-/// lock on, one "Show IDs" chip until the PIN is entered.
-List<Widget> _quickCopyChips(BuildContext context, VaultEntry? vault,
-    {required bool locked, required VoidCallback onUnlock}) {
-  final reg = vault?.registrationId;
-  final roll = vault?.rollNumber;
-  if (locked && ((reg ?? '').isNotEmpty || (roll ?? '').isNotEmpty)) {
-    return [
-      ActionChip(
-        avatar: const Icon(Icons.lock_outline_rounded, size: 16),
-        label: const Text('Show IDs'),
-        tooltip: 'Enter your PIN to show Reg and Roll numbers',
-        onPressed: onUnlock,
-      ),
-    ];
-  }
-  return [
-    if (reg != null && reg.isNotEmpty)
-      ActionChip(
-        avatar: const DuoIcon(AppIcon.copy, size: 16),
-        label: Text('Reg $reg'),
-        tooltip: 'Copy registration number',
-        onPressed: () => copyToClipboard(context, 'Registration number', reg),
-      ),
-    if (roll != null && roll.isNotEmpty)
-      ActionChip(
-        avatar: const DuoIcon(AppIcon.copy, size: 16),
-        label: Text('Roll $roll'),
-        tooltip: 'Copy roll number',
-        onPressed: () => copyToClipboard(context, 'Roll number', roll),
-      ),
-  ];
-}
-
 /// The exam watcher's newest notice, tappable.
 class _LatestNotice extends StatelessWidget {
   const _LatestNotice({required this.update});
@@ -563,22 +474,6 @@ class _LatestNotice extends StatelessWidget {
       ),
     );
   }
-}
-
-class _PanelToggle extends StatelessWidget {
-  const _PanelToggle({required this.icon, required this.label, required this.open, required this.onPressed});
-
-  final Object icon;
-  final String label;
-  final bool open;
-  final VoidCallback onPressed;
-
-  @override
-  Widget build(BuildContext context) => TextButton.icon(
-        onPressed: onPressed,
-        icon: glyph(open ? Icons.expand_less_rounded : icon, size: 18),
-        label: Text(open ? 'Hide' : label, maxLines: 1, softWrap: false),
-      );
 }
 
 class _SyncButton extends StatelessWidget {
