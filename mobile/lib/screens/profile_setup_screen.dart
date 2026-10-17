@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../domain/branches.dart';
+import '../domain/subjects.dart';
 import '../domain/qualification_taxonomy.dart';
 import '../domain/urgency.dart';
 import '../models/user_profile.dart';
@@ -51,26 +51,34 @@ class _ProfileSetupScreenState extends ConsumerState<ProfileSetupScreen> {
   late bool _pwbd = widget.initial?.isPwbd ?? false;
   late bool _exsm = widget.initial?.isExServiceman ?? false;
   late int _exsmYears = widget.initial?.exServicemanServiceYears ?? 0;
-  late String? _branch = widget.initial?.branch;
-  late final Set<String> _alsoBranches = {...?widget.initial?.alsoBranches};
+  // Subjects per degree group (engineering, science, ITI…), kept for every group
+  // so taking a degree off and on again doesn't lose the picks.
+  late final Map<String, Set<String>> _subjects = {
+    for (final g in kSubjectGroups)
+      g.key: {...?widget.initial?.subjects.where((c) => c.group == g.key).firstOrNull?.subjects},
+  };
+  late final Map<String, TextEditingController> _subjectText = {
+    for (final g in kSubjectGroups)
+      g.key: TextEditingController(
+          text: widget.initial?.subjects.where((c) => c.group == g.key).firstOrNull?.custom ?? ''),
+  };
   bool _saving = false;
   String? _error;
 
   bool get _isOthers => _degree == kOthersDegreeCode;
 
-  /// A B.Tech, M.Tech or Diploma among the degrees picked: ask for the branch.
-  bool get _hasBranchDegree => {if (_degree != null) _degree!, ..._otherDegrees}.any(kEngineeringDegrees.contains);
-
-  void _pickBranch(Branch? b) => setState(() {
-        _branch = b?.key;
-        _alsoBranches
-          ..clear()
-          ..addAll([for (final o in b?.usuallyAlso ?? const <Branch>{}) o.key]);
-      });
+  /// Groups with subjects to pick for the degrees chosen so far.
+  List<SubjectGroup> get _subjectGroups => groupsForDegrees([
+        if (_degree != null && !_isOthers) _degree!,
+        ..._otherDegrees,
+      ]);
 
   @override
   void dispose() {
     _othersText.dispose();
+    for (final c in _subjectText.values) {
+      c.dispose();
+    }
     super.dispose();
   }
 
@@ -131,12 +139,10 @@ class _ProfileSetupScreenState extends ConsumerState<ProfileSetupScreen> {
             isPwbd: _pwbd,
             isExServiceman: _exsm,
             exServicemanServiceYears: _exsm ? _exsmYears : 0,
-            branch: _hasBranchDegree ? _branch : null,
-            alsoBranches: [
-              if (_hasBranchDegree && _branch != null)
-                for (final b in Branch.values)
-                  if (_alsoBranches.contains(b.key) && b.key != _branch) b.key,
-            ],
+            subjects: [
+              for (final g in _subjectGroups)
+                SubjectChoice(group: g.key, subjects: {..._subjects[g.key]!}, custom: _subjectText[g.key]!.text.trim()),
+            ].where((c) => !c.isEmpty).toList(),
           ));
       Fx.done();
       if (!mounted) return;
@@ -261,60 +267,27 @@ class _ProfileSetupScreenState extends ConsumerState<ProfileSetupScreen> {
                 ),
               ),
               Fold(
-                child: _hasBranchDegree
-                    ? _Section(
-                        title: 'Your engineering branch',
-                        subtitle: 'Jobs that name only other branches are hidden (you can still see them under '
-                            'Hidden jobs). Jobs for any branch stay, and ones that don’t say get a “Check branch” tag.',
+                child: _subjectGroups.isEmpty
+                    ? null
+                    : _Section(
+                        title: 'Branches & subjects',
+                        subtitle: 'Optional. Pick what you studied: jobs that ask only for other branches or '
+                            'subjects are hidden (you can still see them under Hidden jobs). Jobs open to any '
+                            'subject stay, and ones that don’t say get a “Check” tag. Leave a list empty to '
+                            'skip it.',
                         child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
-                            Wrap(
-                              spacing: 8,
-                              runSpacing: 8,
-                              children: [
-                                ChoiceChip(
-                                  label: const Text('Don’t filter'),
-                                  selected: _branch == null,
-                                  showCheckmark: false,
-                                  selectedColor: colors.info.withValues(alpha: 0.22),
-                                  onSelected: (_) => _pickBranch(null),
-                                ),
-                                for (final b in Branch.values)
-                                  ChoiceChip(
-                                    label: Text(b.label),
-                                    selected: _branch == b.key,
-                                    showCheckmark: false,
-                                    selectedColor: colors.info.withValues(alpha: 0.22),
-                                    onSelected: (_) => _pickBranch(b),
-                                  ),
-                              ],
-                            ),
-                            if (_branch != null) ...[
-                              const SizedBox(height: 16),
-                              Text('Also show jobs for', style: text.titleSmall),
-                              const SizedBox(height: 4),
-                              Text('Branches you can usually apply for too.', style: text.bodySmall),
-                              const SizedBox(height: 8),
-                              Wrap(
-                                spacing: 8,
-                                runSpacing: 8,
-                                children: [
-                                  for (final b in Branch.values)
-                                    if (b.key != _branch)
-                                      FilterChip(
-                                        label: Text(b.label),
-                                        selected: _alsoBranches.contains(b.key),
-                                        onSelected: (on) => setState(
-                                            () => on ? _alsoBranches.add(b.key) : _alsoBranches.remove(b.key)),
-                                      ),
-                                ],
+                            for (final g in _subjectGroups)
+                              _SubjectPicker(
+                                group: g,
+                                picked: _subjects[g.key]!,
+                                custom: _subjectText[g.key]!,
+                                onChanged: () => setState(() {}),
                               ),
-                            ],
                           ],
                         ),
-                      )
-                    : null,
+                      ),
               ),
               _Section(
                 title: 'Work experience',
@@ -551,6 +524,96 @@ class _Section extends StatelessWidget {
           ],
           const SizedBox(height: 10),
           child,
+        ],
+      ),
+    );
+  }
+}
+
+/// One degree group's branches or subjects: tick any number, see related ones
+/// (offered, never ticked for you), or type what isn't listed.
+class _SubjectPicker extends StatelessWidget {
+  const _SubjectPicker({required this.group, required this.picked, required this.custom, required this.onChanged});
+
+  final SubjectGroup group;
+  final Set<String> picked;
+  final TextEditingController custom;
+  final VoidCallback onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final text = Theme.of(context).textTheme;
+    final related = [
+      for (final s in group.subjects)
+        if (!picked.contains(s.key) &&
+            group.subjects.any((p) => picked.contains(p.key) && p.related.contains(s.key)))
+          s,
+    ];
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(group.label, style: text.titleSmall),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              for (final s in group.subjects)
+                FilterChip(
+                  label: Text(s.label),
+                  selected: picked.contains(s.key),
+                  onSelected: (on) {
+                    on ? picked.add(s.key) : picked.remove(s.key);
+                    onChanged();
+                  },
+                ),
+            ],
+          ),
+          if (related.isNotEmpty) ...[
+            const SizedBox(height: 10),
+            Text('Often accepted too', style: text.bodySmall),
+            const SizedBox(height: 6),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                for (final s in related)
+                  ActionChip(
+                    avatar: const Icon(Icons.add_rounded, size: 18),
+                    label: Text(s.label),
+                    onPressed: () {
+                      picked.add(s.key);
+                      onChanged();
+                    },
+                  ),
+              ],
+            ),
+          ],
+          const SizedBox(height: 10),
+          TextField(
+            controller: custom,
+            textCapitalization: TextCapitalization.words,
+            decoration: InputDecoration(
+              labelText: 'Not listed? Type it',
+              hintText: 'Separate with commas',
+              helperText: 'Matched against the job’s eligibility text',
+              border: const OutlineInputBorder(),
+              isDense: true,
+              suffixIcon: custom.text.isEmpty
+                  ? null
+                  : IconButton(
+                      tooltip: 'Clear',
+                      icon: const Icon(Icons.close_rounded),
+                      onPressed: () {
+                        custom.clear();
+                        onChanged();
+                      },
+                    ),
+            ),
+            onChanged: (_) => onChanged(),
+          ),
         ],
       ),
     );

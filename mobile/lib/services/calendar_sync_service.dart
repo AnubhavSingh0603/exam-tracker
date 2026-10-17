@@ -1,4 +1,5 @@
 import 'package:device_calendar/device_calendar.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:timezone/timezone.dart' as tz;
 
 import '../config/env.dart';
@@ -50,6 +51,22 @@ class _EventSpec {
 /// Writes deadlines and exam dates into the device calendar (CalendarContract)
 /// with three native reminders, and keeps the event IDs so re-syncing updates
 /// the same events instead of duplicating them.
+/// Settings › "Add my exams to the calendar". Off by default: the per-exam
+/// Calendar button still works either way.
+abstract final class CalendarAutoSync {
+  static const _key = 'calendar.auto';
+
+  static Future<bool> enabled() async {
+    try {
+      return (await SharedPreferences.getInstance()).getBool(_key) ?? false;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  static Future<void> setEnabled(bool on) async => (await SharedPreferences.getInstance()).setBool(_key, on);
+}
+
 class CalendarSyncService {
   CalendarSyncService(this._db, {DeviceCalendarPlugin? plugin, tz.Location? location})
       : _plugin = plugin ?? DeviceCalendarPlugin(),
@@ -138,6 +155,18 @@ class CalendarSyncService {
   Future<bool> hasPermission() async {
     final has = await _plugin.hasPermissions();
     return has.isSuccess && (has.data ?? false);
+  }
+
+  /// Adds every active exam that isn't in the calendar yet; returns how many
+  /// exams got events. Never asks for permission, so it's safe at start-up.
+  Future<int> syncAll(Iterable<TrackedApplication> apps, {DateTime? now}) async {
+    if (!await hasPermission()) return 0;
+    var exams = 0;
+    for (final app in apps) {
+      if (app.archived || app.calendarSynced) continue;
+      if (await syncExamToCalendar(app, now: now) is CalendarSyncSuccess) exams++;
+    }
+    return exams;
   }
 
   /// A deadline event for a job not applied to yet: a 30-minute block ending at the

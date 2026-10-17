@@ -3,10 +3,10 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../domain/branches.dart';
 import '../domain/eligibility.dart';
 import '../domain/relevance.dart';
 import '../domain/requirements.dart';
+import '../domain/subjects.dart';
 import '../models/feed.dart';
 import '../models/job_preferences.dart';
 import '../models/tracked_application.dart';
@@ -172,7 +172,7 @@ final effectiveJobPreferencesProvider = Provider<JobPreferences>((ref) {
   final fromProfile = qualificationsFromProfile(profile);
   return prefs.copyWith(
     qualifications: {...prefs.qualifications, ...fromProfile},
-    branches: branchesFromProfile(profile),
+    subjects: subjectsFromProfile(profile),
     degreesHeld: profile == null ? const {} : profileDegreesHeld(profile),
   );
 });

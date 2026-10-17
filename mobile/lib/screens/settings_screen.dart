@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:package_info_plus/package_info_plus.dart';
@@ -5,7 +6,7 @@ import 'package:permission_handler/permission_handler.dart';
 import 'package:self_update/self_update.dart';
 
 import '../config/env.dart';
-import '../domain/branches.dart';
+import '../domain/subjects.dart';
 import '../domain/requirements.dart';
 import '../models/job_preferences.dart';
 import '../models/user_profile.dart';
@@ -254,8 +255,7 @@ class _ProfileTab extends ConsumerWidget {
       children: [
         _Section(
           title: 'Your profile',
-          note:
-              'Used on this phone to decide which jobs you qualify for and how many seats you can compete for.',
+          note: 'Used on this phone to decide which jobs you qualify for and how many seats you can compete for.',
           children: [
             if (profile == null)
               const MutedNote('No profile yet.')
@@ -264,7 +264,8 @@ class _ProfileTab extends ConsumerWidget {
               _Fact('Age', '${ageOn(profile.dateOfBirth, now)} years'),
               _Fact('Category', profile.category.label),
               _Fact('Qualification', profile.qualificationLabel),
-              if (branchSummary(profile) case final branch?) _Fact('Branch', branch),
+              for (final c in subjectsFromProfile(profile).values)
+                _Fact(subjectGroup(c.group)!.label, subjectSummary(c)),
               _Fact('Experience', experienceLabel(profile.experienceYears)),
               if (profile.isPwbd) const _Fact('PwBD', 'Yes'),
               if (profile.isExServiceman)
@@ -309,8 +310,7 @@ class _Fact extends StatelessWidget {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          SizedBox(
-              width: 120, child: Text(label, style: text.bodyMedium?.copyWith(color: AppPalette.textMuted))),
+          SizedBox(width: 120, child: Text(label, style: text.bodyMedium?.copyWith(color: AppPalette.textMuted))),
           Expanded(child: Text(value, style: text.bodyMedium)),
         ],
       ),
@@ -340,8 +340,7 @@ class _JobsTab extends ConsumerWidget {
     final decisions = ref.watch(decisionsProvider).dataOrNull ?? const <JobDecision>[];
     final applied = decisions.where((d) => d.applied).length;
     void save(JobPreferences p) => ref.read(jobPreferencesProvider.notifier).save(p);
-    Set<T> toggle<T>(Set<T> set, T value) =>
-        set.contains(value) ? ({...set}..remove(value)) : {...set, value};
+    Set<T> toggle<T>(Set<T> set, T value) => set.contains(value) ? ({...set}..remove(value)) : {...set, value};
 
     return ListView(
       padding: const EdgeInsets.all(16),
@@ -530,7 +529,8 @@ class _SettingsTab extends ConsumerWidget {
             SegmentedButton<ThemeMode>(
               showSelectedIcon: false,
               segments: const [
-                ButtonSegment(value: ThemeMode.system, icon: Icon(Icons.brightness_auto_rounded), label: OneLine('Phone')),
+                ButtonSegment(
+                    value: ThemeMode.system, icon: Icon(Icons.brightness_auto_rounded), label: OneLine('Phone')),
                 ButtonSegment(value: ThemeMode.light, icon: Icon(Icons.light_mode_rounded), label: OneLine('Light')),
                 ButtonSegment(value: ThemeMode.dark, icon: Icon(Icons.dark_mode_rounded), label: OneLine('Dark')),
               ],
@@ -586,47 +586,53 @@ class _FxSwitchesState extends State<_FxSwitches> {
 }
 
 List<Widget> _alertSections(BuildContext context) => [
-          const _Section(
-            title: 'Last-day reminders',
-            note: 'When a job that fits you closes within 24 hours: a notification every few hours and '
-                'a calendar event with a reminder every 4 hours. Applying, or swiping it left, removes them.',
-            children: [_LastDaySwitch()],
+      const _Section(
+        title: 'Last-day reminders',
+        note: 'When a job that fits you closes within 24 hours: a notification every few hours and '
+            'a calendar event with a reminder every 4 hours. Applying, or swiping it left, removes them.',
+        children: [_LastDaySwitch()],
+      ),
+      const _Section(
+        title: 'Calendar',
+        note: 'Your tracked exams’ last dates and exam days go into your phone’s calendar, with reminders 7 days, '
+            '2 days and 3 hours before. New exams are added as you track them, and dates update when they change.',
+        children: [_CalendarAutoSwitch()],
+      ),
+      _Section(
+        title: 'Exam updates',
+        note: 'Every few hours the app checks job sites and exam websites for admit cards, exam dates, '
+            'answer keys and results for the exams you applied to.',
+        children: [
+          FilledButton.tonal(
+            onPressed: () => allowBackgroundChecks(context),
+            child: const Text('Allow background checks'),
           ),
-          _Section(
-            title: 'Exam updates',
-            note: 'Every few hours the app checks job sites and exam websites for admit cards, exam dates, '
-                'answer keys and results for the exams you applied to.',
-            children: [
-              FilledButton.tonal(
-                onPressed: () => allowBackgroundChecks(context),
-                child: const Text('Allow background checks'),
-              ),
-              const SizedBox(height: 8),
-              FutureBuilder<bool>(
-                future: isSamsungPhone(),
-                builder: (context, snap) => snap.data == true
-                    ? TextButton(
-                        onPressed: () => showSamsungSleepTip(context),
-                        child: const Text('Samsung: keep the app awake'),
-                      )
-                    : const SizedBox.shrink(),
-              ),
-            ],
+          const SizedBox(height: 8),
+          FutureBuilder<bool>(
+            future: isSamsungPhone(),
+            builder: (context, snap) => snap.data == true
+                ? TextButton(
+                    onPressed: () => showSamsungSleepTip(context),
+                    child: const Text('Samsung: keep the app awake'),
+                  )
+                : const SizedBox.shrink(),
           ),
-          const _Section(
-            title: 'Notifications',
-            note: 'Turn them on in Android settings if you said no earlier.',
-            children: [
-              OutlinedButton(onPressed: openAppSettings, child: Text('Open app settings')),
-            ],
-          ),
-          const _Section(
-            title: 'Calendar reminders',
-            note: 'Use “Calendar” on an exam in My exams. Reminders come 7 days, 2 days and '
-                '3 hours before, from your phone’s Calendar app, so they arrive even if this app is asleep.',
-            children: [],
-          ),
-        ];
+        ],
+      ),
+      const _Section(
+        title: 'Notifications',
+        note: 'Turn them on in Android settings if you said no earlier.',
+        children: [
+          OutlinedButton(onPressed: openAppSettings, child: Text('Open app settings')),
+        ],
+      ),
+      const _Section(
+        title: 'Calendar reminders',
+        note: 'Use “Calendar” on an exam in My exams. Reminders come 7 days, 2 days and '
+            '3 hours before, from your phone’s Calendar app, so they arrive even if this app is asleep.',
+        children: [],
+      ),
+    ];
 
 // -----------------------------------------------------------------------------
 // About
@@ -696,14 +702,16 @@ class _AboutTab extends ConsumerWidget {
               title: const Text('Privacy policy'),
               onTap: () => openExternal(context, kPrivacyPolicy),
             ),
-            ListTile(
-              contentPadding: EdgeInsets.zero,
-              leading: const Icon(Icons.health_and_safety_outlined),
-              title: const Text('Self-check'),
-              subtitle: const Text('Test sign-in, saving, the job list and reminders'),
-              onTap: () => Navigator.of(context)
-                  .push(MaterialPageRoute<void>(builder: (_) => const SelfCheckScreen())),
-            ),
+            // Test builds only: a tool for finding faults, not part of the app.
+            if (kDebugMode)
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: const Icon(Icons.health_and_safety_outlined),
+                title: const Text('Self-check'),
+                subtitle: const Text('Test sign-in, saving, the job list and reminders'),
+                onTap: () =>
+                    Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => const SelfCheckScreen())),
+              ),
             ListTile(
               contentPadding: EdgeInsets.zero,
               leading: const Icon(Icons.bug_report_outlined),
@@ -753,6 +761,59 @@ class _LastDaySwitchState extends ConsumerState<_LastDaySwitch> {
         value: _on ?? true,
         onChanged: _on == null ? null : _set,
         title: const Text('Remind me before jobs close'),
+      );
+}
+
+class _CalendarAutoSwitch extends ConsumerStatefulWidget {
+  const _CalendarAutoSwitch();
+
+  @override
+  ConsumerState<_CalendarAutoSwitch> createState() => _CalendarAutoSwitchState();
+}
+
+class _CalendarAutoSwitchState extends ConsumerState<_CalendarAutoSwitch> {
+  bool? _on;
+
+  @override
+  void initState() {
+    super.initState();
+    CalendarAutoSync.enabled().then((v) {
+      if (mounted) setState(() => _on = v);
+    });
+  }
+
+  Future<void> _set(bool on) async {
+    setState(() => _on = on);
+    final calendar = ref.read(calendarSyncProvider);
+    if (on && !await calendar.ensurePermission()) {
+      if (!mounted) return;
+      setState(() => _on = false);
+      showErrorSnack(context, 'Calendar access is off. Allow it in Settings → Apps → JobSummit → Permissions.');
+      return;
+    }
+    await CalendarAutoSync.setEnabled(on);
+    if (!on) {
+      if (mounted) showCalmSnack(context, 'New exams won’t be added. Events already in your calendar stay.');
+      return;
+    }
+    final apps = ref.read(trackedAppsProvider).dataOrNull ?? const [];
+    final added = await calendar.syncAll(apps);
+    await ref.read(trackedAppsProvider.notifier).reload();
+    if (!mounted) return;
+    Fx.done();
+    showCalmSnack(
+        context,
+        added == 0
+            ? 'On. Exams you track from now on go into your calendar.'
+            : 'Added $added exam${added == 1 ? '' : 's'} to your calendar, with reminders.');
+  }
+
+  @override
+  Widget build(BuildContext context) => SwitchListTile(
+        contentPadding: EdgeInsets.zero,
+        value: _on ?? false,
+        onChanged: _on == null ? null : _set,
+        title: const Text('Add my exams to the calendar'),
       );
 }
 

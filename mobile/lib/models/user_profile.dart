@@ -79,8 +79,7 @@ class UserProfileData {
     this.isPwbd = false,
     this.isExServiceman = false,
     this.exServicemanServiceYears = 0,
-    this.branch,
-    this.alsoBranches = const [],
+    this.subjects = const [],
   });
 
   final String displayName;
@@ -105,12 +104,9 @@ class UserProfileData {
   final bool isExServiceman;
   final int exServicemanServiceYears;
 
-  /// Engineering branch (`Branch.key`) for a B.Tech, M.Tech or Diploma; null = not
-  /// set, and jobs aren't filtered by branch.
-  final String? branch;
-
-  /// Other branches whose jobs you can apply for too (ECE: Electrical, Instrumentation…).
-  final List<String> alsoBranches;
+  /// Branches, subjects, trades or specialisations per degree group (engineering,
+  /// science, ITI…). A group with none picked doesn't filter jobs.
+  final List<SubjectChoice> subjects;
 
   bool get isOthers => degreeTitle == kOthersDegreeCode;
 
@@ -143,8 +139,7 @@ class UserProfileData {
         'is_pwbd': isPwbd,
         'is_ex_serviceman': isExServiceman,
         'ex_serviceman_service_years': isExServiceman ? exServicemanServiceYears : 0,
-        if (branch != null) 'branch': branch,
-        if (branch != null && alsoBranches.isNotEmpty) 'also_branches': alsoBranches,
+        if (subjects.any((c) => !c.isEmpty)) 'subjects': [for (final c in subjects) if (!c.isEmpty) c.toJson()],
       };
 
   factory UserProfileData.fromJson(Map<String, dynamic> j) => UserProfileData(
@@ -159,7 +154,47 @@ class UserProfileData {
         isPwbd: j['is_pwbd'] as bool? ?? false,
         isExServiceman: j['is_ex_serviceman'] as bool? ?? false,
         exServicemanServiceYears: (j['ex_serviceman_service_years'] as num?)?.toInt() ?? 0,
-        branch: j['branch'] as String?,
-        alsoBranches: [for (final b in (j['also_branches'] as List<dynamic>? ?? const [])) b.toString()],
+        subjects: [
+          for (final c in (j['subjects'] as List<dynamic>? ?? const []))
+            if (c is Map<String, dynamic>) SubjectChoice.fromJson(c),
+          // 0.14.0 saved one engineering branch plus extras.
+          if (j['subjects'] == null && j['branch'] is String)
+            SubjectChoice(group: 'engineering', subjects: {
+              j['branch'] as String,
+              for (final b in (j['also_branches'] as List<dynamic>? ?? const [])) b.toString(),
+            }),
+        ],
+      );
+}
+
+/// The branches or subjects picked for one degree group (`SubjectGroup.key`),
+/// plus anything typed that isn't in the list.
+@immutable
+class SubjectChoice {
+  const SubjectChoice({required this.group, this.subjects = const {}, this.custom = ''});
+
+  final String group;
+  final Set<String> subjects;
+
+  /// Comma-separated, e.g. "Food Processing, Textile Design".
+  final String custom;
+
+  List<String> get customTerms => [
+        for (final t in custom.split(RegExp('[,;/]')))
+          if (t.trim().length >= 2) t.trim(),
+      ];
+
+  bool get isEmpty => subjects.isEmpty && customTerms.isEmpty;
+
+  Map<String, Object?> toJson() => {
+        'group': group,
+        'subjects': subjects.toList(),
+        if (custom.trim().isNotEmpty) 'custom': custom.trim(),
+      };
+
+  factory SubjectChoice.fromJson(Map<String, dynamic> j) => SubjectChoice(
+        group: j['group'] as String? ?? '',
+        subjects: {for (final s in (j['subjects'] as List<dynamic>? ?? const [])) s.toString()},
+        custom: j['custom'] as String? ?? '',
       );
 }

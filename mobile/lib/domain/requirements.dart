@@ -4,7 +4,7 @@ import '../models/feed.dart';
 import '../models/job_preferences.dart';
 import '../models/jobs_data.dart';
 import '../models/user_profile.dart';
-import 'branches.dart';
+import 'subjects.dart';
 
 /// Professional qualifications a post can need on top of a degree. The pipeline's
 /// "open to any graduate" flag, or a post with no degree listed, lets these through
@@ -32,15 +32,15 @@ enum Profession {
 /// What a post's name and qualification text ask for beyond the degree.
 @immutable
 class ExtraRequirements {
-  const ExtraRequirements({this.professions = const {}, this.languages = const [], this.branch});
+  const ExtraRequirements({this.professions = const {}, this.languages = const [], this.subjects});
 
   final Set<Profession> professions;
 
   /// Each set is one requirement, met by any language in it ("Marathi or Hindi").
   final List<Set<String>> languages;
 
-  /// The engineering branches the post asks for; null when it isn't an engineering post.
-  final BranchNeed? branch;
+  /// The branches or subjects the post asks for, per degree group.
+  final PostSubjects? subjects;
 
   bool get teachingDegree => professions.contains(Profession.teaching);
   bool get tet => professions.contains(Profession.tet);
@@ -188,7 +188,7 @@ ExtraRequirements requirementsOf(PublishedPost post) {
         if (rule.applies(post.postName, text)) rule.profession,
     },
     languages: text.isEmpty ? const [] : _requiredLanguages(text),
-    branch: branchNeedOf(post),
+    subjects: subjectsOf(post),
   );
 }
 
@@ -201,27 +201,23 @@ String? unmetRequirement(ExtraRequirements r, JobPreferences prefs) {
   for (final group in r.languages) {
     if (group.intersection(prefs.languages).isEmpty) return 'Needs ${group.join(' or ')}';
   }
-  if (_branchVerdict(r, prefs) == BranchVerdict.other) return 'Needs ${r.branch!.namedLabel}';
+  final fit = subjectFit(r.subjects, prefs);
+  if (fit?.verdict == SubjectVerdict.other) return fit!.reason;
   return null;
 }
 
-/// How this post's branch fits yours; null when the branch rule doesn't apply (no
-/// branch set, not an engineering post, or another degree you hold lets you in).
-BranchVerdict? _branchVerdict(ExtraRequirements r, JobPreferences prefs) {
-  final need = r.branch;
-  if (need == null || prefs.branches.isEmpty || otherRouteOpen(need, prefs.degreesHeld)) return null;
-  return need.verdictFor({...prefs.branches.map(Branch.fromKey).nonNulls});
-}
-
-/// Whether any of the posts you'd see in this job doesn't say which branch it
-/// wants: shown, with a "Check branch" chip.
-bool branchUnclear(FeedItem item, JobPreferences prefs) {
-  if (prefs.branches.isEmpty) return false;
+/// What to check on a job you'd see when one of its posts doesn't say which
+/// branch or subject it wants ("branch", "subject", "trade"), or null.
+String? subjectUnclear(FeedItem item, JobPreferences prefs) {
+  if (prefs.subjects.isEmpty) return null;
   final published = {for (final p in item.job?.posts ?? const <PublishedPost>[]) p.id: p};
-  return (item.posts.isEmpty ? [item.bestPost] : item.posts).any((post) {
+  for (final post in item.posts.isEmpty ? [item.bestPost] : item.posts) {
     final p = published[post.postDetailId];
-    return p != null && _branchVerdict(requirementsOf(p), prefs) == BranchVerdict.unclear;
-  });
+    if (p == null) continue;
+    final fit = subjectFit(requirementsOf(p).subjects, prefs);
+    if (fit?.verdict == SubjectVerdict.unclear) return fit!.noun;
+  }
+  return null;
 }
 
 /// Why none of this job's posts suit you, or null if at least one does. Every post

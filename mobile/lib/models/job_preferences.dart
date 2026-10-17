@@ -3,6 +3,8 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'user_profile.dart';
+
 /// The pipeline's job groups (`category` in jobs.json).
 enum JobCategory {
   railway('railway', 'Railway'),
@@ -67,7 +69,7 @@ class JobPreferences {
     this.hiddenTypes = const {},
     this.qualifications = const {},
     this.savedAt,
-    this.branches = const {},
+    this.subjects = const {},
     this.degreesHeld = const {},
   });
 
@@ -90,9 +92,9 @@ class JobPreferences {
   final Set<String> qualifications;
   final DateTime? savedAt;
 
-  /// Engineering branches (`Branch.key`) whose posts you can apply for; empty = no
-  /// branch filter. From the profile, never saved here.
-  final Set<String> branches;
+  /// Branches and subjects picked per degree group (`SubjectGroup.key`); empty =
+  /// no subject filter. From the profile, never saved here.
+  final Map<String, SubjectChoice> subjects;
 
   /// Every degree code the profile holds (an M.Tech holds the B.Tech too). From the
   /// profile, never saved here.
@@ -109,7 +111,7 @@ class JobPreferences {
     Set<String>? hiddenTypes,
     Set<String>? qualifications,
     DateTime? savedAt,
-    Set<String>? branches,
+    Map<String, SubjectChoice>? subjects,
     Set<String>? degreesHeld,
   }) =>
       JobPreferences(
@@ -121,7 +123,7 @@ class JobPreferences {
         hiddenTypes: hiddenTypes ?? this.hiddenTypes,
         qualifications: qualifications ?? this.qualifications,
         savedAt: savedAt ?? this.savedAt,
-        branches: branches ?? this.branches,
+        subjects: subjects ?? this.subjects,
         degreesHeld: degreesHeld ?? this.degreesHeld,
       );
 

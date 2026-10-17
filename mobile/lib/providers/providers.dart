@@ -71,7 +71,22 @@ class TrackedAppsNotifier extends AsyncNotifier<List<TrackedApplication>> {
   void _changed() => ref.read(backupControllerProvider.notifier).markDirty();
 
   @override
-  Future<List<TrackedApplication>> build() => _db.listApplications();
+  Future<List<TrackedApplication>> build() async {
+    final apps = await _db.listApplications();
+    unawaited(_addToCalendar(apps)); // exams restored from a backup, or added before the switch
+    return apps;
+  }
+
+  /// With "Add my exams to the calendar" on, exams not in the calendar yet get
+  /// their deadline and exam date events.
+  Future<void> _addToCalendar(Iterable<TrackedApplication> apps) async {
+    try {
+      if (!await CalendarAutoSync.enabled()) return;
+      if (await ref.read(calendarSyncProvider).syncAll(apps) > 0) await reload();
+    } catch (_) {
+      // No calendar or permission taken away: the exam is tracked all the same.
+    }
+  }
 
   Future<void> reload() async => state = AsyncData(await _db.listApplications());
 
@@ -105,6 +120,7 @@ class TrackedAppsNotifier extends AsyncNotifier<List<TrackedApplication>> {
     if (timeline != null) await _db.saveTimeline(item.jobPostId, jsonEncode(timeline));
     await reload();
     _changed();
+    unawaited(_addToCalendar([app]));
     return app;
   }
 
@@ -138,6 +154,7 @@ class TrackedAppsNotifier extends AsyncNotifier<List<TrackedApplication>> {
     _changed();
     unawaited(ref.read(xpProvider.notifier).award(XpAction.addedExam, key: xpExamKey(examName: examName)));
     unawaited(checkForUpdates(force: true)); // its admit card may already be out
+    unawaited(_addToCalendar([app]));
     return app;
   }
 

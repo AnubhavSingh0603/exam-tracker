@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../domain/branches.dart';
+import '../domain/subjects.dart';
 import '../models/tracked_application.dart';
 import '../models/user_profile.dart';
 import '../providers/account_providers.dart';
@@ -61,7 +61,7 @@ class ProfileScreen extends ConsumerWidget {
         ? const <String>[]
         : [
             profile.qualificationLabel,
-            if (branchSummary(profile) case final branch?) branch,
+            for (final c in subjectsFromProfile(profile).values) subjectSummary(c),
             profile.category.label,
             'Age ${ageOn(profile.dateOfBirth, now)}',
             if (profile.isPwbd) 'PwBD',
