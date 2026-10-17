@@ -67,6 +67,8 @@ class JobPreferences {
     this.hiddenTypes = const {},
     this.qualifications = const {},
     this.savedAt,
+    this.branches = const {},
+    this.degreesHeld = const {},
   });
 
   final Set<JobCategory> preferred;
@@ -88,6 +90,14 @@ class JobPreferences {
   final Set<String> qualifications;
   final DateTime? savedAt;
 
+  /// Engineering branches (`Branch.key`) whose posts you can apply for; empty = no
+  /// branch filter. From the profile, never saved here.
+  final Set<String> branches;
+
+  /// Every degree code the profile holds (an M.Tech holds the B.Tech too). From the
+  /// profile, never saved here.
+  final Set<String> degreesHeld;
+
   static const defaults = JobPreferences();
 
   JobPreferences copyWith({
@@ -99,6 +109,8 @@ class JobPreferences {
     Set<String>? hiddenTypes,
     Set<String>? qualifications,
     DateTime? savedAt,
+    Set<String>? branches,
+    Set<String>? degreesHeld,
   }) =>
       JobPreferences(
         preferred: preferred ?? this.preferred,
@@ -109,6 +121,8 @@ class JobPreferences {
         hiddenTypes: hiddenTypes ?? this.hiddenTypes,
         qualifications: qualifications ?? this.qualifications,
         savedAt: savedAt ?? this.savedAt,
+        branches: branches ?? this.branches,
+        degreesHeld: degreesHeld ?? this.degreesHeld,
       );
 
   Map<String, dynamic> toJson() => {

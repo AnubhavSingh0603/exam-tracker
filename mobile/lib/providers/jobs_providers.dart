@@ -3,6 +3,8 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../domain/branches.dart';
+import '../domain/eligibility.dart';
 import '../domain/relevance.dart';
 import '../domain/requirements.dart';
 import '../models/feed.dart';
@@ -166,8 +168,13 @@ String? _myLevel(Ref ref) => ref.watch(profileProvider).dataOrNull?.qualificatio
 /// shows (a B.Ed or MBBS degree, "GNM" typed under Others) switched on.
 final effectiveJobPreferencesProvider = Provider<JobPreferences>((ref) {
   final prefs = ref.watch(jobPreferencesProvider).dataOrNull ?? JobPreferences.defaults;
-  final fromProfile = qualificationsFromProfile(ref.watch(profileProvider).dataOrNull);
-  return fromProfile.isEmpty ? prefs : prefs.copyWith(qualifications: {...prefs.qualifications, ...fromProfile});
+  final profile = ref.watch(profileProvider).dataOrNull;
+  final fromProfile = qualificationsFromProfile(profile);
+  return prefs.copyWith(
+    qualifications: {...prefs.qualifications, ...fromProfile},
+    branches: branchesFromProfile(profile),
+    degreesHeld: profile == null ? const {} : profileDegreesHeld(profile),
+  );
 });
 
 /// Ranked with your preferences and history (Jobs tab adds its own sort and filter).

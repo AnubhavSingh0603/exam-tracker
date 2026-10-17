@@ -5,6 +5,7 @@ import 'package:permission_handler/permission_handler.dart';
 import 'package:self_update/self_update.dart';
 
 import '../config/env.dart';
+import '../domain/branches.dart';
 import '../domain/requirements.dart';
 import '../models/job_preferences.dart';
 import '../models/user_profile.dart';
@@ -31,6 +32,7 @@ import '../widgets/samsung_sleep_tip.dart';
 import '../widgets/share_app.dart';
 import '../widgets/update_dialog.dart';
 import 'home_shell.dart';
+import 'self_check_screen.dart';
 
 enum SettingsTab {
   account('Account'),
@@ -262,6 +264,7 @@ class _ProfileTab extends ConsumerWidget {
               _Fact('Age', '${ageOn(profile.dateOfBirth, now)} years'),
               _Fact('Category', profile.category.label),
               _Fact('Qualification', profile.qualificationLabel),
+              if (branchSummary(profile) case final branch?) _Fact('Branch', branch),
               _Fact('Experience', experienceLabel(profile.experienceYears)),
               if (profile.isPwbd) const _Fact('PwBD', 'Yes'),
               if (profile.isExServiceman)
@@ -692,6 +695,14 @@ class _AboutTab extends ConsumerWidget {
               leading: const Icon(Icons.privacy_tip_outlined),
               title: const Text('Privacy policy'),
               onTap: () => openExternal(context, kPrivacyPolicy),
+            ),
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: const Icon(Icons.health_and_safety_outlined),
+              title: const Text('Self-check'),
+              subtitle: const Text('Test sign-in, saving, the job list and reminders'),
+              onTap: () => Navigator.of(context)
+                  .push(MaterialPageRoute<void>(builder: (_) => const SelfCheckScreen())),
             ),
             ListTile(
               contentPadding: EdgeInsets.zero,

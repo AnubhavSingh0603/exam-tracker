@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../domain/branches.dart';
 import '../domain/qualification_taxonomy.dart';
 import '../domain/urgency.dart';
 import '../models/user_profile.dart';
@@ -50,10 +51,22 @@ class _ProfileSetupScreenState extends ConsumerState<ProfileSetupScreen> {
   late bool _pwbd = widget.initial?.isPwbd ?? false;
   late bool _exsm = widget.initial?.isExServiceman ?? false;
   late int _exsmYears = widget.initial?.exServicemanServiceYears ?? 0;
+  late String? _branch = widget.initial?.branch;
+  late final Set<String> _alsoBranches = {...?widget.initial?.alsoBranches};
   bool _saving = false;
   String? _error;
 
   bool get _isOthers => _degree == kOthersDegreeCode;
+
+  /// A B.Tech, M.Tech or Diploma among the degrees picked: ask for the branch.
+  bool get _hasBranchDegree => {if (_degree != null) _degree!, ..._otherDegrees}.any(kEngineeringDegrees.contains);
+
+  void _pickBranch(Branch? b) => setState(() {
+        _branch = b?.key;
+        _alsoBranches
+          ..clear()
+          ..addAll([for (final o in b?.usuallyAlso ?? const <Branch>{}) o.key]);
+      });
 
   @override
   void dispose() {
@@ -118,6 +131,12 @@ class _ProfileSetupScreenState extends ConsumerState<ProfileSetupScreen> {
             isPwbd: _pwbd,
             isExServiceman: _exsm,
             exServicemanServiceYears: _exsm ? _exsmYears : 0,
+            branch: _hasBranchDegree ? _branch : null,
+            alsoBranches: [
+              if (_hasBranchDegree && _branch != null)
+                for (final b in Branch.values)
+                  if (_alsoBranches.contains(b.key) && b.key != _branch) b.key,
+            ],
           ));
       Fx.done();
       if (!mounted) return;
@@ -240,6 +259,62 @@ class _ProfileSetupScreenState extends ConsumerState<ProfileSetupScreen> {
                         ),
                   ],
                 ),
+              ),
+              Fold(
+                child: _hasBranchDegree
+                    ? _Section(
+                        title: 'Your engineering branch',
+                        subtitle: 'Jobs that name only other branches are hidden (you can still see them under '
+                            'Hidden jobs). Jobs for any branch stay, and ones that don’t say get a “Check branch” tag.',
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Wrap(
+                              spacing: 8,
+                              runSpacing: 8,
+                              children: [
+                                ChoiceChip(
+                                  label: const Text('Don’t filter'),
+                                  selected: _branch == null,
+                                  showCheckmark: false,
+                                  selectedColor: colors.info.withValues(alpha: 0.22),
+                                  onSelected: (_) => _pickBranch(null),
+                                ),
+                                for (final b in Branch.values)
+                                  ChoiceChip(
+                                    label: Text(b.label),
+                                    selected: _branch == b.key,
+                                    showCheckmark: false,
+                                    selectedColor: colors.info.withValues(alpha: 0.22),
+                                    onSelected: (_) => _pickBranch(b),
+                                  ),
+                              ],
+                            ),
+                            if (_branch != null) ...[
+                              const SizedBox(height: 16),
+                              Text('Also show jobs for', style: text.titleSmall),
+                              const SizedBox(height: 4),
+                              Text('Branches you can usually apply for too.', style: text.bodySmall),
+                              const SizedBox(height: 8),
+                              Wrap(
+                                spacing: 8,
+                                runSpacing: 8,
+                                children: [
+                                  for (final b in Branch.values)
+                                    if (b.key != _branch)
+                                      FilterChip(
+                                        label: Text(b.label),
+                                        selected: _alsoBranches.contains(b.key),
+                                        onSelected: (on) => setState(
+                                            () => on ? _alsoBranches.add(b.key) : _alsoBranches.remove(b.key)),
+                                      ),
+                                ],
+                              ),
+                            ],
+                          ],
+                        ),
+                      )
+                    : null,
               ),
               _Section(
                 title: 'Work experience',

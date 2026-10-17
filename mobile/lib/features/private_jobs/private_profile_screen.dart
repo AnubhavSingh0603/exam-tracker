@@ -298,6 +298,8 @@ class _LinkedInReviewState extends ConsumerState<_LinkedInReview> {
             isPwbd: govt.isPwbd,
             isExServiceman: govt.isExServiceman,
             exServicemanServiceYears: govt.exServicemanServiceYears,
+            branch: govt.branch,
+            alsoBranches: govt.alsoBranches,
           ));
     }
     if (mounted) Navigator.of(context).pop(next);

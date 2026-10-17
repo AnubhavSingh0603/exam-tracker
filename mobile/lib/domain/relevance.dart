@@ -273,6 +273,7 @@ RankedJob rankJob(FeedItem item, JobPreferences prefs, Affinity affinity) {
     score += affinity.score(features);
     if (affinity.strongestLike(features) != null) reasons.add('Like jobs you applied to');
   }
+  if (branchUnclear(item, prefs)) reasons.add('Check branch');
   return RankedJob(item, score, reasons);
 }
 
