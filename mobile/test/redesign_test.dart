@@ -6,19 +6,25 @@ import 'package:exam_tracker/models/exam_timeline.dart';
 import 'package:exam_tracker/models/feed.dart';
 import 'package:exam_tracker/models/tracked_application.dart';
 import 'package:exam_tracker/screens/my_exams_screen.dart';
+import 'package:exam_tracker/services/auth_service.dart';
 import 'package:exam_tracker/theme/app_theme.dart';
 import 'package:exam_tracker/widgets/pill_toggle.dart';
 import 'package:exam_tracker/widgets/summit_backdrop.dart';
+import 'package:exam_tracker/widgets/summit_trail.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 final now = DateTime(2026, 10, 17, 10); // a Saturday morning
 
 TrackedApplication exam(String id,
-        {Map<String, dynamic> t = const {}, TrackerStatus? watcher, bool archived = false, DateTime? examAt}) =>
+        {String? name,
+        Map<String, dynamic> t = const {},
+        TrackerStatus? watcher,
+        bool archived = false,
+        DateTime? examAt}) =>
     TrackedApplication(
       id: id,
-      examName: 'Exam $id',
+      examName: name ?? 'Exam $id',
       postName: 'Post $id',
       status: ApplicationStatus.applied,
       examAt: examAt,
@@ -177,5 +183,78 @@ void main() {
     expect(picked, isNull); // already selected
     await tester.tap(find.text('Focus'));
     expect(picked, 'b');
+  });
+
+  group('Summit trail on My exams', () {
+    test('every stop and the whole trail sit on the paper mountain', () {
+      for (final s in SummitScene.stops) {
+        expect(SummitScene.onMountain(s), isTrue, reason: 'stop $s');
+      }
+      for (final metric in SummitScene.trail().computeMetrics()) {
+        for (var d = 0.0; d < metric.length; d += 2) {
+          final p = metric.getTangentForOffset(d)!.position;
+          expect(SummitScene.onMountain(p), isTrue, reason: 'trail at $p');
+        }
+      }
+      expect(kTrailStops, kLanes); // the stops are the lanes
+    });
+
+    test('the summit and every stop are in view on My exams, on small and big phones', () {
+      for (final (width, inset) in [(320.0, 24.0), (412.0, 40.0)]) {
+        for (final s in SummitScene.stops) {
+          final p = SummitScene.place(s, width: width, topInset: inset, visible: SummitHeights.exams);
+          expect(p.dy, greaterThan(inset + 20), reason: 'stop $s under the status bar ($width)');
+          expect(p.dy, lessThan(inset + SummitHeights.exams), reason: 'stop $s below the mountain ($width)');
+          expect(p.dx, inInclusiveRange(0, width));
+        }
+      }
+    });
+
+    test('short badge names', () {
+      expect(SummitTrail.shortName(exam('x', name: 'SSC CGL 2026')), 'SSC CGL');
+      expect(SummitTrail.shortName(exam('x', name: 'IBPS PO XV')), 'IBPS PO');
+      expect(SummitTrail.shortName(exam('x', name: 'RRB NTPC (Graduate) 2026')), 'RRB NTPC');
+      expect(SummitTrail.shortName(exam('x', name: 'My custom exam')), 'MY');
+    });
+
+    testWidgets('one badge per stop: a single exam opens its journey, several open their lane', (tester) async {
+      AppPalette.use(Brightness.dark);
+      TrackedApplication? opened;
+      int? lane;
+      await tester.pumpWidget(MaterialApp(
+        home: Scaffold(
+          body: SizedBox(
+            width: 384,
+            height: 700,
+            child: SummitTrail(
+              show: true,
+              height: SummitHeights.exams,
+              climbers: [
+                (exam('a', name: 'SSC CGL 2026'), 0),
+                (exam('b', name: 'RRB NTPC'), 0),
+                (exam('c', name: 'UPSC CSE'), 1),
+              ],
+              lane: 0,
+              onStop: (i) => lane = i,
+              onClimber: (a) => opened = a,
+            ),
+          ),
+        ),
+      ));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('UPSC'));
+      expect(opened?.id, 'c');
+      await tester.tap(find.text('SSC CGL +1'));
+      expect(lane, 0);
+    });
+  });
+
+  test('a failed sign-in says what went wrong, briefly, and pauses updates meanwhile', () {
+    expect(GoogleAccountService.describe(StateError('Cannot use ref\n after dispose')),
+        'Bad state: Cannot use ref after dispose');
+    final long = GoogleAccountService.describe(Exception('x' * 300));
+    expect(long.length, lessThanOrEqualTo(111));
+    expect(long, endsWith('…'));
+    expect(GoogleAccountService.signingIn, isFalse);
   });
 }

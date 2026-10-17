@@ -41,6 +41,16 @@ class AuthException implements Exception {
 /// one-time step per phone, then [restore] silently brings it back on every start.
 class GoogleAccountService {
   static bool _ready = false;
+
+  /// True while Google's account picker is up: the app is in the background then,
+  /// and must not install an update or pop a dialog over the sign-in.
+  static bool signingIn = false;
+
+  /// What went wrong, short enough for a message ("PlatformException: …").
+  static String describe(Object e) {
+    final text = e.toString().replaceAll(RegExp(r'\s+'), ' ').trim();
+    return text.length <= 110 ? text : '${text.substring(0, 110)}…';
+  }
   GoogleSignInAccount? _account;
 
   static const _emailKey = 'account.email';

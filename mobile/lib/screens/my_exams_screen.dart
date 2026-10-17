@@ -16,6 +16,7 @@ import '../widgets/dashboard_check_sheet.dart';
 import '../widgets/motion.dart';
 import '../widgets/one_line.dart';
 import '../widgets/pills.dart';
+import '../widgets/summit_backdrop.dart';
 import 'exam_journey_screen.dart';
 
 /// Where an exam belongs in the old three-way split: archived if put away,
@@ -43,7 +44,7 @@ const _laneEmpty = [
   'Admit card out: these exams are coming up (or on now).',
   'Exam written: waiting for the answer key.',
   'Answer key out: waiting for the result.',
-  'Results out, or a next stage to track.',
+  'Results out, or a next stage to track. Done with one? Swipe it left to archive it.',
 ];
 
 /// The last stage an exam has reached: Applied (waiting for the admit card),
@@ -64,8 +65,19 @@ int laneOf(TrackedApplication app, DateTime now) {
   };
 }
 
-/// Your exams as lanes, one per stage: swipe sideways between stages, tap an exam
-/// for its journey page, swipe one left to archive it.
+/// Which lane My exams shows: the lane strip and the Summit trail's stops both set it.
+class ExamLaneNotifier extends Notifier<int> {
+  @override
+  int build() => 0;
+
+  void show(int lane) => state = lane.clamp(0, kLanes.length - 1);
+}
+
+final examLaneProvider = NotifierProvider<ExamLaneNotifier, int>(ExamLaneNotifier.new);
+
+/// Your exams on the Summit trail (drawn on the mountain above, by the shell) and
+/// as lanes, one per stage: swipe sideways between stages, tap an exam for its
+/// journey page, swipe one left to archive it.
 class MyExamsScreen extends ConsumerStatefulWidget {
   const MyExamsScreen({super.key});
 
@@ -75,7 +87,6 @@ class MyExamsScreen extends ConsumerStatefulWidget {
 
 class _MyExamsScreenState extends ConsumerState<MyExamsScreen> {
   final _pages = PageController(viewportFraction: 0.9);
-  int _lane = 0;
 
   @override
   void dispose() {
@@ -83,8 +94,8 @@ class _MyExamsScreenState extends ConsumerState<MyExamsScreen> {
     super.dispose();
   }
 
-  void _show(int lane) {
-    setState(() => _lane = lane);
+  void _turnTo(int lane) {
+    if (!_pages.hasClients || _pages.page?.round() == lane) return;
     if (motionOff(context)) {
       _pages.jumpToPage(lane);
     } else {
@@ -112,24 +123,41 @@ class _MyExamsScreenState extends ConsumerState<MyExamsScreen> {
           (a.focusDateAt(now) ?? DateTime(9999)).compareTo(b.focusDateAt(now) ?? DateTime(9999)));
     }
     final active = apps.length - archived;
+    final lane = ref.watch(examLaneProvider);
+    // A stop tapped on the trail turns the lanes too.
+    ref.listen(examLaneProvider, (_, next) => _turnTo(next));
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-          child: ScreenHeader(
-            title: 'My exams',
-            subtitle: active == 1 ? '1 exam you applied to' : '$active exams you applied to',
+        // The trail's mountain fills this space (the shell draws it, with the climbers).
+        SizedBox(
+          height: SummitHeights.exams + 6,
+          child: Align(
+            alignment: Alignment.topLeft,
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+              child: ScreenHeader(
+                title: 'My exams',
+                subtitle: active == 1 ? '1 exam you applied to' : '$active exams you applied to',
+              ),
+            ),
           ),
         ),
         Padding(
-          padding: const EdgeInsets.fromLTRB(16, 18, 16, 0),
+          padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
           child: Row(
             children: [
               for (var i = 0; i < kLanes.length; i++) ...[
                 if (i > 0) const SizedBox(width: 4),
-                Expanded(child: _LaneChip(label: _laneChips[i], count: lanes[i].length, selected: i == _lane, onTap: () => _show(i))),
+                Expanded(
+                  child: _LaneChip(
+                    label: _laneChips[i],
+                    count: lanes[i].length,
+                    selected: i == lane,
+                    onTap: () => ref.read(examLaneProvider.notifier).show(i),
+                  ),
+                ),
               ],
             ],
           ),
@@ -138,13 +166,13 @@ class _MyExamsScreenState extends ConsumerState<MyExamsScreen> {
           padding: const EdgeInsets.fromLTRB(8, 4, 8, 0),
           child: Row(
             children: [
-              if (archived > 0)
-                TextButton.icon(
-                  onPressed: () => Navigator.of(context)
-                      .push(MaterialPageRoute<void>(builder: (_) => const _ArchivedExamsScreen())),
-                  icon: const DuoIcon(AppIcon.archive, size: 18),
-                  label: Text('Archived $archived'),
-                ),
+              // Always there, so archived exams are easy to find again.
+              OutlinedButton.icon(
+                onPressed: () => Navigator.of(context)
+                    .push(MaterialPageRoute<void>(builder: (_) => const _ArchivedExamsScreen())),
+                icon: const DuoIcon(AppIcon.archive, size: 18),
+                label: Text(archived == 0 ? 'Archived' : 'Archived $archived', maxLines: 1, softWrap: false),
+              ),
               const Spacer(),
               const AddExamButton(),
             ],
@@ -157,7 +185,7 @@ class _MyExamsScreenState extends ConsumerState<MyExamsScreen> {
                   controller: _pages,
                   padEnds: false,
                   itemCount: kLanes.length,
-                  onPageChanged: (i) => setState(() => _lane = i),
+                  onPageChanged: ref.read(examLaneProvider.notifier).show,
                   itemBuilder: (context, i) => _Lane(
                     index: i,
                     apps: lanes[i],
@@ -358,7 +386,7 @@ class _ArchivedExamsScreen extends ConsumerWidget {
         padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
         children: [
           if (apps.isEmpty)
-            const MutedNote('Nothing archived.')
+            const MutedNote('Nothing archived yet. Swipe an exam left in My exams to put it here.')
           else ...[
             const Padding(padding: EdgeInsets.only(bottom: 10), child: MutedNote('Swipe one left to bring it back.')),
             for (final app in apps) ...[

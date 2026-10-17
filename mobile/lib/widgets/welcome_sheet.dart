@@ -22,10 +22,18 @@ Future<bool> showWelcomeSheet(BuildContext context) async =>
 
 /// Shared by the welcome sheet and the account menu: sign in, then sync once.
 /// Returns a short message for the user, or null when they cancelled.
-Future<String?> signInAndRestore(WidgetRef ref) async {
-  await ref.read(googleAccountProvider.notifier).signIn(); // throws AuthException
-  final outcome = await ref.read(backupControllerProvider.notifier).sync();
-  final backup = ref.read(backupControllerProvider);
+///
+/// Works on the app-wide [container], not a screen's ref: the screen behind
+/// Google's account picker can be rebuilt while it is open.
+Future<String?> signInAndRestore(ProviderContainer container) async {
+  GoogleAccountService.signingIn = true;
+  try {
+    await container.read(googleAccountProvider.notifier).signIn(); // throws AuthException
+  } finally {
+    GoogleAccountService.signingIn = false;
+  }
+  final outcome = await container.read(backupControllerProvider.notifier).sync();
+  final backup = container.read(backupControllerProvider);
   if (outcome == null) {
     return switch (backup.phase) {
       BackupPhase.offline => 'Signed in. The backup will run when you’re back online.',
@@ -66,12 +74,16 @@ class _WelcomeSheetState extends ConsumerState<_WelcomeSheet> {
       _error = null;
     });
     try {
-      final message = await signInAndRestore(ref);
+      final message = await signInAndRestore(ProviderScope.containerOf(context, listen: false));
       if (mounted) setState(() => _done = message ?? 'Signed in.');
     } on AuthException catch (e) {
       if (mounted && !e.cancelled) setState(() => _error = e.message);
-    } catch (_) {
-      if (mounted) setState(() => _error = 'Couldn’t sign in right now. You can try later from the menu.');
+    } catch (e) {
+      debugPrint('Sign-in failed: $e');
+      if (mounted) {
+        setState(() => _error =
+            'Couldn’t sign in right now (${GoogleAccountService.describe(e)}). You can try later from the menu.');
+      }
     } finally {
       if (mounted) setState(() => _busy = false);
     }

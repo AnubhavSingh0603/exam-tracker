@@ -6,6 +6,7 @@ import 'package:package_info_plus/package_info_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../providers/providers.dart';
+import '../services/auth_service.dart';
 import '../services/auto_update.dart';
 import '../utils/system_actions.dart';
 import 'update_dialog.dart';
@@ -47,6 +48,9 @@ class _UpdateGateState extends ConsumerState<UpdateGate> with WidgetsBindingObse
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
+    // Google's account picker sends the app to the background: no installs or
+    // update dialogs in the middle of signing in.
+    if (GoogleAccountService.signingIn) return;
     switch (state) {
       case AppLifecycleState.resumed:
         _check();

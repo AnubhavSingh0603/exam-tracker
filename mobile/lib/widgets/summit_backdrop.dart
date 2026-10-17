@@ -4,13 +4,13 @@ import '../theme/app_theme.dart';
 import 'motion.dart';
 
 /// How much of the mountain each screen shows below the status bar: all of it
-/// (with the moon or sun) on Today, half on Jobs, a strip on My exams, none on
-/// Agenda. Switching tabs slides it between these.
+/// with the moon or sun on Today, half on Jobs, the whole climb (with your exams on
+/// its trail) on My exams, none on Agenda. Switching tabs slides it between these.
 abstract final class SummitHeights {
   static const full = 236.0;
   static const today = full;
   static const jobs = 150.0;
-  static const exams = 92.0;
+  static const exams = 214.0;
   static const agenda = 0.0;
 
   static const privateRoles = 206.0;
@@ -24,15 +24,54 @@ abstract final class SummitHeights {
   static const privateTabs = [privateRoles, privateApplications, privateProfile];
 }
 
+/// Where things sit on the scene: points in its 348 × 300 design space, placed on
+/// a screen [width] wide with [visible] px of mountain under a [topInset] status
+/// bar (the scene is bottom-aligned, so a shorter view shows its lower part).
+abstract final class SummitScene {
+  /// The trail's stops, foot to summit: Applied, Admit card, Exam, Answer key,
+  /// Result (at the peak). A switchback across the paper layers.
+  static const stops = [
+    Offset(36, 262),
+    Offset(132, 238),
+    Offset(244, 212),
+    Offset(140, 152),
+    Offset(180, 98),
+  ];
+
+  static Offset place(Offset design, {required double width, required double topInset, required double visible}) {
+    final scene = topInset + SummitHeights.full;
+    return Offset(design.dx * width / 348, topInset + visible - scene + design.dy * scene / 300);
+  }
+
+  /// The trail in design space: a smooth line through the stops, each bend
+  /// leaning towards the next stop (so it stays on the mountain).
+  static Path trail() {
+    final trail = Path()..moveTo(stops.first.dx, stops.first.dy);
+    for (var i = 1; i < stops.length; i++) {
+      final a = stops[i - 1], b = stops[i];
+      trail.quadraticBezierTo(a.dx + (b.dx - a.dx) * 0.7, a.dy, b.dx, b.dy);
+    }
+    return trail;
+  }
+
+  /// Everything under the ridge lines (the far, middle and front layers together).
+  static bool onMountain(Offset design) =>
+      SummitPainter.farPath().contains(design) ||
+      SummitPainter.midPath().contains(design) ||
+      SummitPainter.frontPath().contains(design);
+}
+
 /// The paper-cut Summit behind the screens: a moon (dark) or sun (light) over three
 /// layers of paper mountains with soft shadows, and paper waves above the bottom
 /// bar. [height] is how much shows under the status bar; a new value slides the
 /// mountains up out of sight or back down (instantly with "Remove animations").
+/// [orb] shows the moon or sun (Today); it fades on the other tabs.
 class SummitBackdrop extends StatelessWidget {
-  const SummitBackdrop({super.key, required this.height, this.waves = true});
+  const SummitBackdrop({super.key, required this.height, this.waves = true, this.orb = true});
 
   final double height;
   final bool waves;
+  final bool orb;
 
   static const duration = Duration(milliseconds: 520);
 
@@ -40,19 +79,26 @@ class SummitBackdrop extends StatelessWidget {
   Widget build(BuildContext context) {
     final top = MediaQuery.paddingOf(context).top;
     final colors = SummitColors.of(AppPalette.current);
+    final still = motionOff(context);
     return Stack(
       children: [
         TweenAnimationBuilder<double>(
-          tween: Tween(end: height),
-          duration: motionOff(context) ? Duration.zero : duration,
-          curve: Curves.easeInOutCubic,
-          builder: (context, h, _) => Positioned(
-            top: 0,
-            left: 0,
-            right: 0,
-            height: h <= 0.5 ? 0 : top + h,
-            child: ClipRect(
-              child: CustomPaint(painter: SummitPainter(colors, sceneHeight: top + SummitHeights.full)),
+          tween: Tween(end: orb ? 1 : 0),
+          duration: still ? Duration.zero : duration,
+          builder: (context, orbShown, _) => TweenAnimationBuilder<double>(
+            tween: Tween(end: height),
+            duration: still ? Duration.zero : duration,
+            curve: Curves.easeInOutCubic,
+            builder: (context, h, _) => Positioned(
+              top: 0,
+              left: 0,
+              right: 0,
+              height: h <= 0.5 ? 0 : top + h,
+              child: ClipRect(
+                child: CustomPaint(
+                  painter: SummitPainter(colors, sceneHeight: top + SummitHeights.full, orb: orbShown),
+                ),
+              ),
             ),
           ),
         ),
@@ -130,12 +176,15 @@ class SummitColors {
 /// Drawn in a 348 × 300 design space stretched to the scene, bottom-aligned in the
 /// visible box: a shorter box shows only the lower part (the sky leaves first).
 class SummitPainter extends CustomPainter {
-  SummitPainter(this.c, {required this.sceneHeight});
+  SummitPainter(this.c, {required this.sceneHeight, this.orb = 1});
 
   final SummitColors c;
   final double sceneHeight;
 
-  static Path _far() => Path()
+  /// 0..1: how much the moon or sun shows.
+  final double orb;
+
+  static Path farPath() => Path()
     ..moveTo(0, 190)
     ..lineTo(60, 130)
     ..lineTo(110, 170)
@@ -147,14 +196,14 @@ class SummitPainter extends CustomPainter {
     ..lineTo(0, 300)
     ..close();
 
-  static Path _snow() => Path()
+  static Path snowPath() => Path()
     ..moveTo(180, 96)
     ..lineTo(196, 112)
     ..lineTo(188, 112)
     ..lineTo(176, 104)
     ..close();
 
-  static Path _mid() => Path()
+  static Path midPath() => Path()
     ..moveTo(0, 232)
     ..cubicTo(40, 200, 70, 184, 100, 196)
     ..cubicTo(130, 208, 160, 162, 200, 160)
@@ -164,7 +213,7 @@ class SummitPainter extends CustomPainter {
     ..lineTo(0, 300)
     ..close();
 
-  static Path _front() => Path()
+  static Path frontPath() => Path()
     ..moveTo(0, 270)
     ..cubicTo(60, 244, 120, 288, 180, 264)
     ..cubicTo(240, 240, 300, 278, 348, 258)
@@ -185,8 +234,11 @@ class SummitPainter extends CustomPainter {
     canvas.drawRect(const Rect.fromLTWH(0, 0, 348, 300), Paint()..color = c.sky);
     final night = c.stars != null;
     // Low on the right, rising from behind the far ridge: clear of the title and avatar.
-    canvas.drawCircle(const Offset(236, 112), 46, Paint()..color = c.orb.withValues(alpha: night ? 0.10 : 0.18));
-    canvas.drawCircle(const Offset(236, 112), 32, Paint()..color = c.orb);
+    if (orb > 0) {
+      canvas.drawCircle(
+          const Offset(236, 112), 46, Paint()..color = c.orb.withValues(alpha: (night ? 0.10 : 0.18) * orb));
+      canvas.drawCircle(const Offset(236, 112), 32, Paint()..color = c.orb.withValues(alpha: orb));
+    }
     if (night) {
       final star = Paint()..color = c.stars!.withValues(alpha: 0.8);
       for (final s in _stars) {
@@ -200,15 +252,15 @@ class SummitPainter extends CustomPainter {
       canvas.drawPath(p, Paint()..color = color);
     }
 
-    layer(_far(), c.far, 7);
-    canvas.drawPath(_snow(), Paint()..color = c.snow);
-    layer(_mid(), c.mid, 7);
-    layer(_front(), c.front, 6);
+    layer(farPath(), c.far, 7);
+    canvas.drawPath(snowPath(), Paint()..color = c.snow);
+    layer(midPath(), c.mid, 7);
+    layer(frontPath(), c.front, 6);
     canvas.restore();
   }
 
   @override
-  bool shouldRepaint(SummitPainter old) => old.c != c || old.sceneHeight != sceneHeight;
+  bool shouldRepaint(SummitPainter old) => old.c != c || old.sceneHeight != sceneHeight || old.orb != orb;
 }
 
 class _WavesPainter extends CustomPainter {

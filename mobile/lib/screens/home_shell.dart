@@ -23,8 +23,10 @@ import '../widgets/app_icons.dart';
 import '../widgets/motion.dart';
 import '../widgets/samsung_sleep_tip.dart';
 import '../widgets/summit_backdrop.dart';
+import '../widgets/summit_trail.dart';
 import '../widgets/welcome_sheet.dart';
 import 'agenda_screen.dart';
+import 'exam_journey_screen.dart';
 import 'jobs_screen.dart';
 import 'my_exams_screen.dart';
 import 'profile_setup_screen.dart';
@@ -49,12 +51,23 @@ class HomeShell extends ConsumerWidget {
         backgroundColor: AppPalette.background,
         body: Stack(
           children: [
-            Positioned.fill(child: SummitBackdrop(height: SummitHeights.govtTabs[tab])),
+            Positioned.fill(child: SummitBackdrop(height: SummitHeights.govtTabs[tab], orb: tab == 0)),
             SafeArea(
               bottom: false,
               child: TabSwitcher(
                 index: tab,
                 children: const [TodayScreen(), JobsScreen(), MyExamsScreen(), AgendaScreen()],
+              ),
+            ),
+            // My exams: the Summit trail on the mountain, your exams climbing it.
+            Positioned.fill(
+              child: SummitTrail(
+                show: tab == 2,
+                height: SummitHeights.govtTabs[tab],
+                climbers: [for (final a in active) (a, laneOf(a, now))],
+                lane: ref.watch(examLaneProvider),
+                onStop: ref.read(examLaneProvider.notifier).show,
+                onClimber: (app) => ExamJourneyScreen.open(context, app),
               ),
             ),
           ],
@@ -108,13 +121,18 @@ class HomeShell extends ConsumerWidget {
 // -----------------------------------------------------------------------------
 
 Future<void> signInWithGoogle(BuildContext context, WidgetRef ref) async {
+  final container = ProviderScope.containerOf(context, listen: false);
   try {
-    final message = await signInAndRestore(ref);
+    final message = await signInAndRestore(container);
     if (message != null && context.mounted) showCalmSnack(context, message);
   } on AuthException catch (e) {
     if (!e.cancelled && context.mounted) showCalmSnack(context, e.message);
-  } catch (_) {
-    if (context.mounted) showErrorSnack(context, 'Couldn’t sign in right now. Try again in a moment.');
+  } catch (e) {
+    // Say what it was, so it can be fixed.
+    debugPrint('Sign-in failed: $e');
+    if (context.mounted) {
+      showErrorSnack(context, 'Couldn’t sign in right now (${GoogleAccountService.describe(e)}). Try again in a moment.');
+    }
   }
 }
 
