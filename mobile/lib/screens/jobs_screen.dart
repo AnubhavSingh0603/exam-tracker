@@ -13,7 +13,6 @@ import '../widgets/common.dart';
 import '../widgets/job_card.dart';
 import '../widgets/motion.dart';
 import '../widgets/one_line.dart';
-import '../widgets/pill_toggle.dart';
 import 'hidden_jobs_screen.dart';
 
 enum _View { forYou, nearMiss, notForMe }
@@ -28,7 +27,8 @@ class JobsScreen extends ConsumerStatefulWidget {
 }
 
 class _JobsScreenState extends ConsumerState<JobsScreen> {
-  bool _explore = false;
+  /// Opens on the kinds of jobs (Explore); a tile, or a search, opens the list.
+  bool _explore = true;
   _View _view = _View.forYou;
   JobSort _sort = JobSort.bestMatch;
   String _query = '';
@@ -74,7 +74,15 @@ class _JobsScreenState extends ConsumerState<JobsScreen> {
     final nearMissCount = ref.watch(rankedNearMissProvider).length;
     final forYouCount = ref.watch(rankedJobsProvider).length;
 
-    return RefreshIndicator(
+    final browsing = _explore && _query.isEmpty;
+
+    return PopScope(
+      // Back from the list returns to the tiles.
+      canPop: browsing,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop) _backToKinds();
+      },
+      child: RefreshIndicator(
       onRefresh: () => ref.read(feedProvider.notifier).refresh(),
       child: CustomScrollView(
         physics: const AlwaysScrollableScrollPhysics(),
@@ -85,17 +93,6 @@ class _JobsScreenState extends ConsumerState<JobsScreen> {
               subtitle: forYouCount == 1 ? '1 open job fits you' : '$forYouCount open jobs fit you',
             ),
             top: 12,
-          ),
-          padSliver(
-            Align(
-              alignment: Alignment.centerLeft,
-              child: PillToggle<bool>(
-                options: const [(false, 'For you'), (true, 'Explore')],
-                selected: _explore,
-                onChanged: (v) => setState(() => _explore = v),
-              ),
-            ),
-            top: 10,
           ),
           padSliver(
             TextField(
@@ -120,9 +117,21 @@ class _JobsScreenState extends ConsumerState<JobsScreen> {
             ),
             top: 14,
           ),
-          if (_explore)
+          if (browsing)
             ..._exploreTiles(context, ranked)
           else ...[
+          padSliver(
+            Align(
+              alignment: Alignment.centerLeft,
+              child: TextButton.icon(
+                onPressed: _backToKinds,
+                icon: const Icon(Icons.chevron_left_rounded),
+                label: const Text('All kinds'),
+                style: TextButton.styleFrom(padding: const EdgeInsets.only(right: 12), visualDensity: VisualDensity.compact),
+              ),
+            ),
+            top: 8,
+          ),
           padSliver(
             SegmentedButton<_View>(
               showSelectedIcon: false,
@@ -246,7 +255,25 @@ class _JobsScreenState extends ConsumerState<JobsScreen> {
           const SliverToBoxAdapter(child: SizedBox(height: 96)),
         ],
       ),
+      ),
     );
+  }
+
+  void _openList(JobCategory? category) {
+    ref.read(jobsCategoryFilterProvider.notifier).show(category);
+    setState(() {
+      _explore = false;
+      _view = _View.forYou;
+    });
+  }
+
+  void _backToKinds() {
+    ref.read(jobsCategoryFilterProvider.notifier).show(null);
+    setState(() {
+      _explore = true;
+      _query = '';
+      _search.clear();
+    });
   }
 
   /// Explore: every kind of job with how many are open; tap one to see them.
@@ -262,8 +289,39 @@ class _JobsScreenState extends ConsumerState<JobsScreen> {
       return [padSliver(const MutedNote('No open jobs to browse right now.'), top: 16)];
     }
     return [
+      padSliver(
+        AppCard(
+          onTap: () => _openList(null),
+          padding: const EdgeInsets.all(14),
+          child: Row(
+            children: [
+              Container(
+                width: 40,
+                height: 40,
+                decoration: BoxDecoration(
+                  color: AppPalette.periwinkle.withValues(alpha: AppPalette.current.isLight ? 0.13 : 0.2),
+                  borderRadius: BorderRadius.circular(13),
+                ),
+                child: Icon(Icons.auto_awesome_rounded, size: 22, color: AppPalette.periwinkle),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('All jobs that fit you', style: text.titleSmall),
+                    Text('${ranked.length} open · best matches first', style: text.labelSmall),
+                  ],
+                ),
+              ),
+              Icon(Icons.chevron_right_rounded, color: AppPalette.textMuted),
+            ],
+          ),
+        ),
+        top: 14,
+      ),
       SliverPadding(
-        padding: const EdgeInsets.fromLTRB(16, 14, 16, 0),
+        padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
         sliver: SliverGrid.count(
           crossAxisCount: 2,
           mainAxisSpacing: 10,
@@ -272,13 +330,7 @@ class _JobsScreenState extends ConsumerState<JobsScreen> {
           children: [
             for (final c in kinds)
               AppCard(
-                onTap: () {
-                  ref.read(jobsCategoryFilterProvider.notifier).show(c);
-                  setState(() {
-                    _explore = false;
-                    _view = _View.forYou;
-                  });
-                },
+                onTap: () => _openList(c),
                 padding: const EdgeInsets.all(14),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
