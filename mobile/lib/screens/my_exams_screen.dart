@@ -10,6 +10,7 @@ import '../utils/system_actions.dart';
 import '../widgets/add_exam_sheet.dart';
 import '../widgets/app_icons.dart';
 import '../widgets/common.dart';
+import '../widgets/progress_map.dart';
 import '../widgets/tracked_application_card.dart';
 
 /// Three tabs: everything still in progress, exams whose result is out, and the
@@ -74,7 +75,14 @@ class MyExamsScreen extends ConsumerWidget {
             child: TabBarView(
               children: [
                 for (final t in ExamTab.values)
-                  _StageList(tab: t, apps: byTab[t]!, loading: all.isLoading, error: all.hasError),
+                  _StageList(
+                    tab: t,
+                    apps: byTab[t]!,
+                    loading: all.isLoading,
+                    error: all.hasError,
+                    // The climb shows every exam not put away, finished ones at the flag.
+                    mapApps: t == ExamTab.tracked ? [...byTab[ExamTab.tracked]!, ...byTab[ExamTab.resultsOut]!] : const [],
+                  ),
               ],
             ),
           ),
@@ -85,7 +93,15 @@ class MyExamsScreen extends ConsumerWidget {
 }
 
 class _StageList extends ConsumerWidget {
-  const _StageList({required this.tab, required this.apps, required this.loading, required this.error});
+  const _StageList({
+    required this.tab,
+    required this.apps,
+    required this.loading,
+    required this.error,
+    this.mapApps = const [],
+  });
+
+  final List<TrackedApplication> mapApps;
 
   final ExamTab tab;
   final List<TrackedApplication> apps;
@@ -118,6 +134,10 @@ class _StageList extends ConsumerWidget {
         physics: const AlwaysScrollableScrollPhysics(),
         padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
         children: [
+          if (mapApps.isNotEmpty) ...[
+            ProgressMap(apps: mapApps, now: now),
+            const SizedBox(height: 4),
+          ],
           if (tab == ExamTab.tracked)
             const Align(alignment: Alignment.centerRight, child: AddExamButton()),
           if (error)
