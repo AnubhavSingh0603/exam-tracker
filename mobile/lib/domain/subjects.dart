@@ -107,9 +107,15 @@ final _any = _re(r'any\s+(?:branch|discipline|stream|subject|speciali[sz]ation|t
     r'(?:is\s+)?no\s+bar|irrespective\s+of\s+(?:branch|discipline|subject|stream)');
 final _generic = _re(r'engineering|technology|engg|science|arts|commerce|humanities');
 final _vague = _re(r'relevant|related|allied|concerned|appropriate|respective|specified|equivalent|etc');
+// "Mechanical/Civil (preferred)": the whole list may be a wish, not a rule.
+final _preferred = _re(r'preferr|preferabl|desirabl');
 final _optionalBefore = _re(r'(?:preferabl\w*|desirabl\w*)\W+(?:[\w.]+\W+){0,2}$');
 final _optionalAfter = _re(r'^\W*(?:[\w.&]+\W+){0,4}?(?:preferred|preferable|desirable)');
 final _diploma = _re('diploma');
+// "…or allied disciplines", "relevant branch", "such as", "etc.": the list may go on.
+final _openEnded = _re(r'(?:relevant|related|allied|similar|concerned|appropriate|specified|other|cognate)\s+'
+    r'(?:[\w/-]+\s+){0,2}?(?:disciplines?|branch(?:es)?|fields?|subjects?|streams?|engineering|trades?'
+    r'|speciali[sz]ations?|areas?)|(?<![a-z])etc(?![a-z])|such as|e\.\s?g\.');
 
 final engineering = SubjectGroup(
   key: 'engineering',
@@ -138,7 +144,7 @@ final engineering = SubjectGroup(
         related: ['geo', 'agriculture']),
     Subject('mechanical', 'Mechanical',
         r'mechanical|(?<![a-z])mech(?![a-z])|mechatronic|automobile|production|manufacturing'
-            r'|industrial(?!\s+electronic)|thermal|marine engineering',
+            r'|industrial engineering|thermal|marine engineering',
         related: ['aero', 'metallurgy']),
     Subject('chemical', 'Chemical', r'chemical|petroleum|petrochemical|polymer|plastic', related: ['metallurgy']),
     Subject('metallurgy', 'Metallurgy / Materials', r'metallurg|materials?\s+(?:science|engineering)',
@@ -191,7 +197,8 @@ final science = SubjectGroup(
   label: 'B.Sc / M.Sc subjects',
   noun: 'subject',
   degrees: {'B_SC', 'M_SC'},
-  degreeWords: r'b\.?\s?sc\.?|m\.?\s?sc\.?|bachelor of science|master of science',
+  degreeWords: r'b\.?\s?sc\.?|m\.?\s?sc\.?|bachelor of science|master of science|degree in science|science graduate'
+      r'|graduate in science',
   subjects: const [
     Subject('physics', 'Physics', r'physics', related: ['electronics', 'mathematics']),
     Subject('chemistry', 'Chemistry', r'chemistry|chemical science', related: ['biochemistry']),
@@ -340,12 +347,23 @@ enum SubjectVerdict {
 @immutable
 class SubjectNeed {
   const SubjectNeed(this.group,
-      {this.named = const {}, this.unknown = const [], this.any = false, this.bare = false, this.texts = const []});
+      {this.named = const {},
+      this.hints = const {},
+      this.unknown = const [],
+      this.any = false,
+      this.bare = false,
+      this.openEnded = false,
+      this.texts = const []});
 
   final SubjectGroup group;
 
-  /// Subject keys the post names.
+  /// Subject keys the eligibility (streams or qualification text) names.
   final Set<String> named;
+
+  /// Subject keys only the post's title or its free text names ("Assistant
+  /// Engineer (Civil)", "B.Sc Chemistry with Physics or Maths"): a hint that
+  /// keeps a job, never enough to hide one.
+  final Set<String> hints;
 
   /// Streams naming something outside the list ("Railway Engineering" → "Railway").
   final List<String> unknown;
@@ -354,17 +372,31 @@ class SubjectNeed {
   /// Just the degree ("B.Tech"), with nothing else named.
   final bool bare;
 
+  /// "…or allied disciplines", "relevant field", "such as", "etc.": the list
+  /// may not be complete.
+  final bool openEnded;
+
   /// What the post says for this group, for subjects you typed yourself.
   final List<String> texts;
 
+  /// Only a clear, specific "other subjects only" hides a job ([SubjectVerdict.other]);
+  /// anything you might be eligible for stays, as [SubjectVerdict.unclear].
   SubjectVerdict verdictFor(SubjectChoice mine) {
-    if (named.intersection(mine.subjects).isNotEmpty) return SubjectVerdict.match;
+    if ({...named, ...hints}.intersection(mine.subjects).isNotEmpty) return SubjectVerdict.match;
     if (mine.customTerms.any((t) => customTextMatches(t, texts))) return SubjectVerdict.match;
     if (any) return SubjectVerdict.any;
-    if (named.isNotEmpty || unknown.isNotEmpty) return SubjectVerdict.other;
-    if (bare) return SubjectVerdict.any;
-    return SubjectVerdict.unclear;
+    if (named.isEmpty) {
+      return bare && hints.isEmpty && unknown.isEmpty ? SubjectVerdict.any : SubjectVerdict.unclear;
+    }
+    // A list that may go on, a stream we can't read, or a subject close to yours:
+    // you could be eligible.
+    if (openEnded || unknown.isNotEmpty || named.any((n) => _near(n, mine.subjects))) return SubjectVerdict.unclear;
+    return SubjectVerdict.other;
   }
+
+  /// Whether [key] is related to one of [mine], either way round.
+  bool _near(String key, Set<String> mine) => mine.any((m) =>
+      (group.subject(m)?.related.contains(key) ?? false) || (group.subject(key)?.related.contains(m) ?? false));
 
   /// "Civil / Mechanical", for "Needs …".
   String get namedLabel => named.isNotEmpty
@@ -404,7 +436,7 @@ PostSubjects? subjectsOf(PublishedPost post) {
     }
     // Streams are per degree; the qualification text mixes them, so it's read
     // only when no stream says.
-    final named = {...g.subjectsIn(post.postName), if (streams.isEmpty) ...g.subjectsIn(qualification)};
+    final named = {if (streams.isEmpty) ...g.subjectsIn(qualification)};
     final unknown = <String>[];
     var any = _any.hasMatch(qualification);
     var bare = false;
@@ -432,9 +464,11 @@ PostSubjects? subjectsOf(PublishedPost post) {
     }
     needs[g.key] = SubjectNeed(g,
         named: named,
+        hints: {...g.subjectsIn(post.postName), ...g.subjectsIn(qualification)}.difference(named),
         unknown: unknown,
         any: any,
         bare: bare,
+        openEnded: [qualification, ...streams].any((t) => _openEnded.hasMatch(t) || _preferred.hasMatch(t)),
         texts: [...streams, if (streams.isEmpty) qualification, post.postName]);
   }
   return PostSubjects(needs, allowed);

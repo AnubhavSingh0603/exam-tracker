@@ -99,7 +99,8 @@ void main() {
     test('a subject you typed yourself', () {
       final p = post('Officer', streams: ['B.E./B.Tech Railway Engineering']);
       expect(verdict(engineering, p, {}, custom: 'Railway Engineering'), SubjectVerdict.match);
-      expect(verdict(engineering, p, {'civil'}), SubjectVerdict.other);
+      // A stream the app can't read never hides a job.
+      expect(verdict(engineering, p, {'civil'}), SubjectVerdict.unclear);
     });
 
     test('any subject, or the degree in general', () {
@@ -111,15 +112,54 @@ void main() {
     });
 
     test('does not say: unclear', () {
-      final p = post('JRF', text: 'B.Tech/M.Tech in relevant discipline.', streams: ['B.Tech/B.E. Relevant Discipline']);
+      final p =
+          post('JRF', text: 'B.Tech/M.Tech in relevant discipline.', streams: ['B.Tech/B.E. Relevant Discipline']);
       expect(verdict(engineering, p, {'textile'}), SubjectVerdict.unclear);
     });
 
-    test('streams decide per degree: the B.Tech branch is not an M.Sc subject', () {
+    test('streams decide per degree', () {
       final p = post('Scientist',
           text: 'B.Tech Electronics or M.Sc Physics', streams: ['B.Tech Electronics', 'M.Sc Physics'], degrees: ['B_TECH', 'M_SC']);
-      expect(verdict(science, p, {'electronics'}), SubjectVerdict.other);
+      expect(verdict(science, p, {'zoology'}), SubjectVerdict.other);
       expect(verdict(engineering, p, {'electronics'}), SubjectVerdict.match);
+    });
+  });
+
+  group('hidden only when clearly not for you', () {
+    SubjectVerdict? ece(PublishedPost p) => verdict(engineering, p, {'electronics'});
+
+    test('a specific list of unrelated branches hides', () {
+      expect(ece(post('Asst. Engineer (Mechanical)', streams: ['B.E./B.Tech Mechanical Engineering'])),
+          SubjectVerdict.other);
+      expect(ece(post('Dy. Engineer (Civil)', streams: ['B.E./B.Tech Civil Engineering'])), SubjectVerdict.other);
+    });
+
+    test('a branch close to yours that you did not tick stays', () {
+      expect(ece(post('AE (Electrical)', streams: ['B.E./B.Tech Electrical Engineering'])), SubjectVerdict.unclear);
+    });
+
+    test('open-ended or "preferred" lists stay', () {
+      expect(
+          ece(post('JE - Works',
+              text: 'Three-year Diploma or relevant Degree in Civil or specified engineering discipline.',
+              streams: ['Three-year Diploma in Civil Engineering'],
+              degrees: ['DIPLOMA', 'B_TECH'])),
+          SubjectVerdict.unclear);
+      expect(ece(post('Marketing', streams: ['B.E./B.Tech in Civil, Mechanical, or Structural Engineering (preferred)'])),
+          SubjectVerdict.unclear);
+      expect(ece(post('Officer', text: 'B.E. in Mechanical, Production etc.', streams: ['B.E. Mechanical'])),
+          SubjectVerdict.unclear);
+      expect(
+          verdict(science, post('Forest Officer', text: 'Bachelor degree with specified science/forestry subjects.',
+              streams: ['B.Sc. Botany', 'B.Sc. Forestry'], degrees: ['B_SC']), {'physics'}),
+          SubjectVerdict.unclear);
+    });
+
+    test('a branch only in the title, or a subject only in the text, keeps the job', () {
+      expect(ece(post('Assistant Engineer (Civil)', streams: ['B.Tech'])), SubjectVerdict.unclear);
+      final lab = post('Lab Assistant',
+          text: 'B.Sc. Chemistry with Physics, Mathematics or Biology.', streams: ['B.Sc. Chemistry'], degrees: ['B_SC']);
+      expect(verdict(science, lab, {'physics'}), SubjectVerdict.match);
     });
 
     test('no rule for posts open to any graduate, or medical PG diplomas under DIPLOMA', () {
